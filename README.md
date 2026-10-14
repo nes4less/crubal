@@ -24,7 +24,7 @@ The chapters follow the stack from the bottom. Each refers only to the chapters 
 | 8 | [Provenance and logs](08-provenance.md) | draft |
 | 9 | [Intake and evidence](09-intake.md) | draft |
 | 10 | [Migrations](10-migrations.md) | draft |
-| 11 | Packages | not written |
+| 11 | [Packages](11-packages.md) | draft |
 | 12 | Views | stub until designed |
 | 13 | Conformance | summary below |
 

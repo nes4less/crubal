@@ -1,6 +1,7 @@
 // The package every reader case is written under.
 package: test /2026-10-14
-owner: test.example
+  owner: test.example
+  crubal: 2
 
 kind: item
   levels: group, product, unit

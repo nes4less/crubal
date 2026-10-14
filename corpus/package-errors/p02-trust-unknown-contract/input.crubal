@@ -1,0 +1,7 @@
+// Every trust entry names a real contract, origin, party or person.
+package: test /2026-10-14
+  owner: test.example
+trust:
+  person
+  test:noSuchContract
+  reported

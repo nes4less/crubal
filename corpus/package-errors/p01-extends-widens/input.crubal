@@ -1,0 +1,10 @@
+// An extending package may add values to a facet, never change its definition.
+package: base /2026-10-01
+  owner: base.example
+format{DVD|Blu-ray}
+
+package: mine /2026-10-14
+  owner: mine.example
+  extends: base /2026-10-01
+facet: base:format
+  type: text

@@ -1,0 +1,1 @@
+6 test:noSuchContract is not a contract of this package

@@ -1,0 +1,1 @@
+9 mine changes base:format's type; an extending package may only add to it

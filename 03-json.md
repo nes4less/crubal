@@ -204,10 +204,17 @@ chapter 8.5). A write that removes a value has
 **Border wrapper.** Data crossing a border travels in a wrapper, the only place a version appears:
 
 ```json
-{ "crubal": "2", "package": "me /2026-10-13", "records": [ … ] }
+{
+  "crubal": "2",
+  "package": "mediaencyclopedia.com/me /2026-10-13",
+  "prefixes": { "me": "mediaencyclopedia.com/me", "wd": "https://www.wikidata.org/entity/" },
+  "records": [ … ]
+}
 ```
 
-The wrapper MAY also carry `intake`, `log` and `observations` arrays.
+`prefixes` maps every prefix the data uses to its full identity (chapter 11.1), so a receiver resolves
+`me:videoCodec` without knowing the sender's nicknames. The wrapper MAY also carry `intake`, `log` and
+`observations` arrays.
 
 ## 3.9 Canonical form
 

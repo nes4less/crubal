@@ -1,0 +1,5 @@
+// crubal names the core; a package can't take it.
+package: test /2026-10-14
+  owner: test.example
+  prefixes:
+    crubal: https://example.org/not-the-core

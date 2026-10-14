@@ -40,7 +40,8 @@ corpus/
 break), or a record, an `intake.json` and the `expected.json` record after it lands. Intake cases add a
 `contract.crubal`, an `answer.json` and `expected-intake.json`; evidence cases add `observations.json` and
 `expected-validation.json`. Migration cases add a `recipe.crubal` and expect the restamped data plus its
-`review` queue; `store-errors/` holds recipes a publish must refuse. `exchange/` cases add `run.crubal` (which contract runs on
+`review` queue; `store-errors/` holds recipes a publish must refuse. `package-errors/` holds packages a
+publish must refuse (chapter 11.5). `exchange/` cases add `run.crubal` (which contract runs on
 which record), an optional `answer.json` (what the other side sent back) and `expected-run.json`.
 
 ## Passing a case

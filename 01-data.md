@@ -51,7 +51,10 @@ prefix  = lower *( lower / digit / "-" )
 name    = ( ALPHA / "_" ) *( ALPHA / DIGIT / "_" )
 ```
 
-- A bare key belongs to the document's own package. Any other owner's key MUST carry that owner's prefix.
+- A bare key belongs to the document's own package. Any other package's key MUST carry a prefix.
+- **A prefix is a local nickname.** Each package (and each border wrapper) maps its prefixes to full package
+  identities, `domain/name` (chapter 11.1). Two keys are the same key when their prefixes map to the same
+  identity and their names are equal; readers MUST compare after resolving, never by the nickname.
 - Keys are case-sensitive and MUST be in Unicode NFC. Other spellings (aliases) are folded away before
   storage (chapter 4); stored data never holds an alias.
 - A key never begins with `$`, so `$` is free for the JSON form's tags (chapter 3).
