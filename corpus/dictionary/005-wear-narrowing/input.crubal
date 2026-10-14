@@ -1,0 +1,14 @@
+// A record wearing OpticalDisc: values outside the class's narrowing break its must rule.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-3 [origin: reported, via: L-1]
+  crubal:wears: OpticalDisc
+  format: 4K
+  videoCodec: HEVC
+
+product: P-4 [origin: reported, via: L-1]
+  crubal:wears: DvdOnly
+  title: Christmas Vacation
+  format: Blu-ray

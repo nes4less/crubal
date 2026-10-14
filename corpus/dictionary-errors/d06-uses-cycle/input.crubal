@@ -1,0 +1,12 @@
+// uses must not form a cycle.
+title$
+
+class: A
+  uses: B
+  facets:
+    title
+
+class: B
+  uses: A
+  facets:
+    title

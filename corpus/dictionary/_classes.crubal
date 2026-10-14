@@ -1,0 +1,22 @@
+// Classes the class cases use.
+class: VideoRelease
+  for: item
+  facets:
+    !title
+    format
+    releaseDate
+    runtime
+
+class: OpticalDisc
+  for: item
+  uses: VideoRelease
+  facets:
+    format{DVD|Blu-ray|4K}
+    videoCodec
+    unit::discCondition
+
+class: DvdOnly
+  for: item
+  uses: OpticalDisc
+  facets:
+    format{DVD}

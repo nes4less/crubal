@@ -1,0 +1,2 @@
+// Resolve DvdOnly from _classes.crubal: the meet of everything it uses, own lines last.
+resolve: DvdOnly

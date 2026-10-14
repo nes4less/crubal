@@ -1,0 +1,4 @@
+// A class line names a facet; it never defines one.
+class: Lonely
+  facets:
+    mystery$

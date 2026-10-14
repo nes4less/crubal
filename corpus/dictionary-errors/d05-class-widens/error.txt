@@ -1,0 +1,1 @@
+6 the class line format{DVD|HD-DVD} widens format: HD-DVD is not one of its values

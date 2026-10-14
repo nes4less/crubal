@@ -1,0 +1,11 @@
+{
+  "class": "DvdOnly",
+  "resolved": [
+    { "facet": "title", "required": true },
+    { "facet": "format", "values": ["DVD"] },
+    { "facet": "releaseDate" },
+    { "facet": "runtime" },
+    { "facet": "videoCodec" },
+    { "facet": "discCondition", "level": "unit" }
+  ]
+}

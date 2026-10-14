@@ -1,0 +1,6 @@
+// A class line can only narrow: HD-DVD is not in the dictionary's format list.
+format{DVD|Blu-ray|4K}
+
+class: Widening
+  facets:
+    format{DVD|HD-DVD}

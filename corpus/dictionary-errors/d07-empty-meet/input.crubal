@@ -1,0 +1,15 @@
+// Two used classes that allow no common format.
+format{DVD|Blu-ray|LP}
+
+class: Disc
+  facets:
+    format{DVD|Blu-ray}
+
+class: Vinyl
+  facets:
+    format{LP}
+
+class: Both
+  uses: Disc, Vinyl
+  facets:
+    format

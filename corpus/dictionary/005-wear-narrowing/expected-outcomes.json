@@ -1,0 +1,7 @@
+[
+  { "record": "P-3", "address": "title", "outcome": "incomplete", "cites": { "rule": "VideoRelease: !title" } },
+  { "record": "P-3", "address": "format", "outcome": "absorbed" },
+  { "record": "P-3", "address": "videoCodec", "outcome": "absorbed" },
+  { "record": "P-4", "address": "title", "outcome": "absorbed" },
+  { "record": "P-4", "address": "format", "outcome": "contradiction", "cites": { "rule": "DvdOnly: format{DVD}" } }
+]

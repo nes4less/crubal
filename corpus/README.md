@@ -19,11 +19,13 @@ corpus/
       error.txt      line number, then a short description of the error
   dictionary/        cases every Dictionary-level implementation must pass
     _facets.crubal   the definitions the data cases use
+    _classes.crubal  the classes the class cases use
     001-…/
       input.crubal   definitions or data in
       long.crubal    (definition cases) the same definitions in the long form
       expected.json  the definitions (JSON, chapter 4.6) or the folded data it must read to
-      expected-outcomes.json  (check cases) the outcome for each address (chapter 4.9)
+      expected-outcomes.json  (check cases) the outcome for each address (chapters 4.9, 5.5)
+    a `resolve: Class` input expects the resolved class lines (chapter 5.4)
   dictionary-errors/ definitions a package publish must refuse
 ```
 
