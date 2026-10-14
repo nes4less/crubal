@@ -21,7 +21,7 @@ The chapters follow the stack from the bottom. Each refers only to the chapters 
 | 5 | [Classes](05-classes.md) | draft |
 | 6 | [Rules](06-rules.md) | draft |
 | 7 | [Contracts](07-contracts.md) | draft |
-| 8 | Provenance and logs | not written |
+| 8 | [Provenance and logs](08-provenance.md) | draft |
 | 9 | Intake and evidence | not written |
 | 10 | Migrations | not written |
 | 11 | Packages | not written |

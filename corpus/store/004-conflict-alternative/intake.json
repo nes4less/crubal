@@ -1,0 +1,9 @@
+{
+  "intake": "I-2",
+  "contract": "catalogLookup",
+  "for": "P-1",
+  "outcomes": [
+    { "from": "Title", "to": "title", "outcome": "conflict", "value": "National Lampoon's Christmas Vacation" }
+  ],
+  "log": "L-4"
+}

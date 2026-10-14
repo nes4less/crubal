@@ -1,0 +1,8 @@
+// A person's title meets a catalog's: the trust order keeps the person's, and the catalog's is kept as an
+// alternative. The incoming intake is in intake.json.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation

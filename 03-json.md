@@ -61,6 +61,7 @@ JSON here is RFC 8259 JSON in UTF-8. A document MUST NOT contain duplicate membe
 | `values` | object: key → value (3.3) | yes; `{}` when the record has no values |
 | `parts` | array of part objects (3.6) | when there are parts |
 | `sources` | object: address → source (3.7) | in full form; left out in plain form |
+| `alternatives` · `suggestions` | object: address → array of values with sources (chapter 8.4) | when there are any; left out in plain form |
 
 A member not in this table MUST be refused. Packages extend records with facets, never with members.
 
@@ -129,7 +130,8 @@ lower-level record mirrors its parts by `$row` and holds only the values that va
 ```
 
 - `origin` is one of `observed`, `declared`, `derived`, `reported`. `via` is a log entry ID. Both are
-  required. `owner` is left out when it is the record's owner.
+  required. `owner` is left out when it is the record's owner. `adopted: true` marks a value made one's
+  own (chapter 8.2).
 - The address `*` is the record's default source. A more specific address wins: a list item over its list,
   a compound leaf over its compound, a value over `*`.
 - Every stored value MUST be covered by some source, `*` or more specific. An address that names nothing in
@@ -180,7 +182,8 @@ Each document type is a JSON object with a distinct identifying member.
 }
 ```
 
-`by` names exactly one of `person`, `contract` (with `run`) or `rule`. A write that removes a value has
+`by` names exactly one of `person`, `contract` (with `run`), `rule`, `migration` or `take` (with `from`,
+chapter 8.5). A write that removes a value has
 `"removed": true` in place of `value`.
 
 **Observation.** An evidence-backed claim made on one instance (chapter 9).
