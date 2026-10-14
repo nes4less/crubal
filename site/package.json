@@ -1,0 +1,13 @@
+{
+  "name": "crubal-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "serve": "node build.mjs && npx --yes serve dist"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "marked": "^14.1.0"
+  }
+}
