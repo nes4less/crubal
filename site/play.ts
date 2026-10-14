@@ -73,10 +73,18 @@ function render() {
 
 defsEl.value = DEFS;
 dataEl.value = DATA;
-for (const el of [defsEl, dataEl]) el.addEventListener("input", render);
+let edited = false;
+for (const el of [defsEl, dataEl])
+  el.addEventListener("input", () => {
+    // One "edited" event per visit: enough to know the playground is used, without tracking keystrokes.
+    if (!edited) (window as unknown as { va?: (e: string, d: object) => void }).va?.("event", { name: "playground_edit", data: { field: el.id } });
+    edited = true;
+    render();
+  });
 for (const b of document.querySelectorAll<HTMLButtonElement>("[data-mode]")) {
   b.addEventListener("click", () => {
     mode = b.dataset.mode as string;
+    (window as unknown as { va?: (e: string, d: object) => void }).va?.("event", { name: "playground_mode", data: { mode } });
     for (const x of document.querySelectorAll("[data-mode]")) x.setAttribute("aria-pressed", String(x === b));
     render();
   });

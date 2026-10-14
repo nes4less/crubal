@@ -1,7 +1,7 @@
 {
   "buildCommand": "cd packages/crubal && npm install && cd ../../site && npm install && npm run build",
   "outputDirectory": "site/dist",
-  "installCommand": "true",
+  "installCommand": "npm install",
   "framework": null,
   "cleanUrls": true,
   "trailingSlash": true
