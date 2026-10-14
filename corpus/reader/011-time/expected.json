@@ -1,0 +1,16 @@
+{
+  "crubal": "2",
+  "package": "test /2026-10-14",
+  "records": [
+    {
+      "id": "P-11", "kind": "item", "level": "product", "owner": "test.example",
+      "values": {
+        "auctionEnds": "2026-10-14T18:00-05:00",
+        "releaseDate": "2026-11-02T14:30Z",
+        "opens": { "$value": "09:00", "zone": "America/Chicago" },
+        "doorsOpen": "2026-12-31T19:30"
+      },
+      "sources": { "*": { "origin": "declared", "via": "L-1" } }
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+[
+  { "record": "P-8", "address": "ends", "outcome": "contradiction", "cites": { "type": "ends" } },
+  { "record": "P-8", "address": "lastCall", "outcome": "contradiction", "cites": { "type": "lastCall" } },
+  { "record": "P-9", "address": "ends", "outcome": "absorbed", "flag": "precision" },
+  { "record": "P-9", "address": "lastCall", "outcome": "contradiction", "cites": { "type": "lastCall" } },
+  { "record": "P-9", "address": "wallClock", "outcome": "contradiction", "cites": { "type": "wallClock" } },
+  { "record": "P-10", "address": "ends", "outcome": "absorbed" },
+  { "record": "P-10", "address": "lastCall", "outcome": "absorbed" },
+  { "record": "P-10", "address": "wallClock", "outcome": "absorbed" }
+]

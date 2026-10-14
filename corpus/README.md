@@ -36,6 +36,8 @@ corpus/
   rules-errors/      rule sets a package publish must refuse
 ```
 
+A `rules/` case MAY hold a `now.txt`: the moment `now` means in its conditions (chapter 6.3).
+
 `rules/` results are compared by kind: for every result kind a case lists (`complete`, `filled`, `derived`,
 `flagged`, `incomplete`, `refused`, `held`, `completeness`), the set of (record, address) pairs of that kind
 must match exactly, and each listed field must be equal. Kinds a case doesn't list aren't compared.

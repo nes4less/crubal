@@ -5,9 +5,9 @@
 import { CrubalError, type Node, readTree } from "./tree.ts";
 import { readList, splitTop } from "./lex.ts";
 
-export const TYPES = ["text", "number", "date", "yes-no", "choice", "link", "image", "compound"] as const;
+export const TYPES = ["text", "number", "date", "time", "yes-no", "choice", "link", "image", "compound"] as const;
 export type FacetType = (typeof TYPES)[number];
-export type Precision = "year" | "month" | "day" | "any";
+export type Precision = "year" | "month" | "day" | "hour" | "minute" | "second" | "any";
 
 export type ChoiceValue = { value: string; aliases: string[] };
 
@@ -35,8 +35,10 @@ export type Facet = {
   accepts: string[];
   range?: { min: string; max: string; step?: string };
   places?: number;
-  // date
+  // date, time
   precision?: Precision;
+  /** date: `local` for wall-clock dates with no offset (1.4.5). */
+  zone?: string;
   // yes-no
   words?: [string, string];
   // choice
@@ -122,7 +124,10 @@ export function blank(key: string, type: FacetType): Facet {
 }
 
 const KEY = /^(?:[a-z][a-z0-9-]*:)?[A-Za-z_]\w*/;
-const PRECISION: { [mark: string]: Precision } = { y: "year", ym: "month", ymd: "day", any: "any", "": "any" };
+const PRECISION: { [mark: string]: Precision } = {
+  y: "year", ym: "month", ymd: "day", ymdh: "hour", ymdhm: "minute", ymdhms: "second", any: "any", "": "any",
+  hm: "minute", hms: "second",
+};
 
 /** Tokens of a shorthand line: split on spaces outside quotes, braces and parentheses. */
 export function tokens(s: string, line: number): string[] {
@@ -253,8 +258,9 @@ function parseLine(text: string, line: number): Parsed {
     if (unit) facet.unit = unit[0];
     rest = rest.slice(1 + (unit?.[0].length ?? 0));
   } else if (mark === "@") {
-    facet.type = "date";
-    const p = rest.slice(1).match(/^(ymd|ym|y|any)?/)?.[0] ?? "";
+    // The letters run y, m, d, h, m, s: `@ymdhm` is a date with a time to the minute, `@hm` a time of day.
+    const p = rest.slice(1).match(/^(ymdhms|ymdhm|ymdh|ymd|ym|y|hms|hm|any)?/)?.[0] ?? "";
+    facet.type = p.startsWith("h") ? "time" : "date";
     facet.precision = PRECISION[p];
     rest = rest.slice(1 + p.length);
   } else if (mark === "?") {
@@ -369,6 +375,10 @@ function applySetting(f: Facet, name: string, value: string, line: number) {
       return;
     case "agree-by":
       f.agreeBy = v;
+      return;
+    case "zone":
+      if (v !== "local") throw new CrubalError(`zone is "local" or absent, not ${v}`, line);
+      f.zone = v;
       return;
     case "state":
       if (v !== "candidate" && v !== "active" && v !== "retired") throw new CrubalError(`unknown state ${v}`, line);

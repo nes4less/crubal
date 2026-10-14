@@ -212,6 +212,8 @@ function runRulesCase(folder: string, caseDir: string, name: string, shared: Dic
     checkPackage(dict);
     checkRules(rules, dict);
     const engine = new Engine(dict, rules);
+    const nowFile = join(caseDir, "now.txt");
+    if (existsSync(nowFile)) engine.now = readFileSync(nowFile, "utf8").trim();
     const altFile = join(caseDir, "alternatives.json");
     const alts = existsSync(altFile) ? (JSON.parse(readFileSync(altFile, "utf8")) as { [id: string]: Json }) : {};
     const last = new Map<string, Result[]>();

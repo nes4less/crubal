@@ -43,3 +43,9 @@ facet: aliasesSeen
   type: text
   pick: any
   ordered: yes
+
+// Dates with a time, times of day.
+auctionEnds@ymdhm
+opens@hm qualifiers: zone
+zone$
+doorsOpen@ymdhm zone: local

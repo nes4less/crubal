@@ -94,10 +94,26 @@ NOT use one as a unit.
 
 ### 1.4.5 Date
 
-A calendar date at one of three precisions: year (`1997`), month (`1997-10`) or day (`1997-10-03`),
-proleptic Gregorian. The precision is part of the value: `1997` and `1997-01` are different values. A facet
-says which precisions it accepts (chapter 4). Envelope times are RFC 3339 date-times in UTC and are not facet
-values.
+A calendar date, proleptic Gregorian, at one of six precisions: year (`1997`), month (`1997-10`), day
+(`1997-10-03`), and with a time of day, hour (`2026-11-02T14Z`), minute (`2026-11-02T14:30Z`) or second
+(`2026-11-02T14:30:15Z`). The precision is part of the value: `1997` and `1997-01` are different values. A
+facet says which precisions it accepts (chapter 4).
+
+- **A date with a time is a moment** and MUST carry its UTC offset: `Z`, or `+hh:mm` / `-hh:mm`
+  (`2026-10-14T18:00-05:00`). Canonical form writes a zero offset as `Z`. Two moments compare by the instant
+  they name, whatever their offsets.
+- **Local wall-clock dates** ("doors at 7pm, wherever the venue is") carry no offset, and are allowed only
+  under a facet with `zone: local`. They compare only with other local dates; comparing one with a moment is
+  undetermined (chapter 6.3.1).
+
+Envelope times are RFC 3339 date-times in UTC and are not facet values.
+
+### 1.4.5a Time of day
+
+A time of day with no date, on a 24-hour clock, at minute (`14:30`) or second (`14:30:15`) precision. When a
+zone matters, it is a qualifier holding an IANA time zone name: `22:30 [zone: America/Chicago]`. Two times
+of day compare as clock times, and only when their zones are the same or both absent. How long something
+lasts is not a time of day; it is a quantity (`90min`, chapter 1.4.3).
 
 ### 1.4.6 Yes-no
 
@@ -243,6 +259,6 @@ not an error to read, and it is an error to write a source to.
 
 Two values are equal when they have the same shape and, by shape: text and choice exactly; numbers, quantity
 amounts and money amounts by numeric value, with the same unit or currency; dates with the same precision and
-fields; links with the same target string; images by `sha256` when both have one, otherwise by location;
+fields, and moments by the instant they name; times of day by clock time and zone; links with the same target string; images by `sha256` when both have one, otherwise by location;
 compounds pair by pair; lists item by item, in order for an ordered list and as sets otherwise. Qualifiers
 take part in equality. Sources never do.

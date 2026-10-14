@@ -200,6 +200,8 @@ function emptyOf(v: Json | undefined): boolean {
 export class Engine {
   readonly dict: Dictionary;
   readonly rules: Rule[];
+  /** The moment `now` means in conditions; unset means the clock's. */
+  now?: string;
   private store = new Map<string, Stored>();
   private order: string[] = [];
 
@@ -272,7 +274,7 @@ export class Engine {
     for (const r of this.rules) {
       if (r.strength !== "must" || r.produces || !this.applies(r, rec)) continue;
       const vals = this.effective(rec);
-      if (r.when && evaluate(r.when, vals, this.states(rec, held)) !== true) continue;
+      if (r.when && evaluate(r.when, vals, this.states(rec, held), this.now) !== true) continue;
       if (r.thenText.endsWith(" is unique")) {
         const key = r.thenText.replace(/ is unique$/, "");
         if (this.uniqueClash(r, rec)) {
@@ -284,7 +286,7 @@ export class Engine {
       }
       const path = this.pathOf(r.then) as string;
       if (emptyOf(vals[path])) continue; // an empty value is incompleteness, reported below
-      if (r.then && evaluate(r.then, vals, this.states(rec, held)) === false) {
+      if (r.then && evaluate(r.then, vals, this.states(rec, held), this.now) === false) {
         if (touched.has(path)) return [{ record: rec.id, result: "refused", address: path, rule: r.name }];
         held.add(path);
         results.push({ record: rec.id, result: "held", address: path, rule: r.name });
@@ -303,7 +305,7 @@ export class Engine {
       if (!gate) continue;
       const key = gate[1] as string;
       if (held.has(key) || rec.values[key] !== undefined || !this.storesAt(key, rec)) continue;
-      if (r.when && evaluate(r.when, visible(), this.states(rec, held)) !== true) continue;
+      if (r.when && evaluate(r.when, visible(), this.states(rec, held), this.now) !== true) continue;
       rec.values[key] = { $empty: "n/a" };
       produced.add(key);
       results.push({ record: rec.id, result: "filled", address: key, value: { $empty: "n/a" }, rule: r.name });
@@ -315,7 +317,7 @@ export class Engine {
       const { key, kind, right } = r.produces;
       if (!this.storesAt(key, rec)) continue;
       const vals = visible();
-      if (r.when && evaluate(r.when, vals, this.states(rec, held)) !== true) continue;
+      if (r.when && evaluate(r.when, vals, this.states(rec, held), this.now) !== true) continue;
       const current = rec.values[key];
       const mine = produced.has(key);
       if (kind === "fill") {
@@ -340,9 +342,9 @@ export class Engine {
     const vals = visible();
     for (const r of this.rules) {
       if (r.produces || !this.applies(r, rec)) continue;
-      if (r.when && evaluate(r.when, vals, this.states(rec, held)) !== true) continue;
+      if (r.when && evaluate(r.when, vals, this.states(rec, held), this.now) !== true) continue;
       if (r.thenText.endsWith(" is unique")) continue;
-      const truth = r.then ? evaluate(r.then, vals, this.states(rec, held)) : true;
+      const truth = r.then ? evaluate(r.then, vals, this.states(rec, held), this.now) : true;
       const path = this.pathOf(r.then);
       const needsValue = path !== undefined && emptyOf(vals[path]);
       if (r.strength === "must" && (truth === "undetermined" || (truth === false && needsValue))) {
@@ -449,7 +451,7 @@ export class Engine {
     const out: Result[] = [];
     const measure = (worn: string[], values: JsonObject): string | null => {
       const asked = resolve(this.dict, worn.filter((w) => this.dict.classes.has(w))).filter(
-        (l) => !l.when || evaluate(parseCondition(l.when), values) === true,
+        (l) => !l.when || evaluate(parseCondition(l.when), values, undefined, this.now) === true,
       );
       if (!asked.length) return null;
       const had = asked.filter((l) => !emptyOf(values[l.facet])).length;

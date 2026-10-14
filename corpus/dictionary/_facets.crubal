@@ -11,3 +11,8 @@ languages$*2
 // For the class cases.
 videoCodec{MPEG-2|H.264|VC-1|HEVC|AV1}
 discCondition{NM|VG|G|F|P} ranked
+
+// Times.
+ends@ymdhm
+lastCall@hm
+wallClock@ymdhm zone: local

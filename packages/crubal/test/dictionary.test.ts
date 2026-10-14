@@ -57,3 +57,21 @@ test("units convert within a dimension only", () => {
   assert.equal(convert("1.5", "h", "min"), "90");
   assert.equal(convert("1", "h", "kg"), null);
 });
+
+test("before and after compare moments by instant, and refuse to compare across kinds", () => {
+  const at = (cond: string, values: Record<string, string>, now?: string) => evaluate(parseCondition(cond), values, undefined, now);
+  assert.equal(at("t before now", { t: "2026-10-14T08:00-05:00" }, "2026-10-14T12:00Z"), false); // 13:00Z
+  assert.equal(at("t before now", { t: "2026-10-14T06:00-05:00" }, "2026-10-14T12:00Z"), true); // 11:00Z
+  assert.equal(at("d before now", { d: "2026-10-13" }, "2026-10-14T00:30+05:00"), false); // that moment is 2026-10-13 UTC
+  assert.equal(at("w before now", { w: "2026-10-14T08:00" }, "2026-10-14T12:00Z"), "undetermined"); // local vs moment
+  assert.equal(at("o after 09:00", { o: "22:30" }), true);
+  assert.equal(at("o after 2026-10-14T09:00Z", { o: "22:30" }), "undetermined"); // a time of day vs a moment
+});
+
+test("time facets: marks, offsets, and the 24-hour clock", () => {
+  const d = readDefinitions("ends@ymdhm\nopens@hm\nwall@ymdh zone: local\n");
+  assert.equal(d.facets.get("ends")?.type, "date");
+  assert.equal(d.facets.get("ends")?.precision, "minute");
+  assert.equal(d.facets.get("opens")?.type, "time");
+  assert.equal(d.facets.get("wall")?.zone, "local");
+});

@@ -1,0 +1,29 @@
+// "now" is supplied by the caller (now.txt), so results are reproducible. Moments compare by instant:
+// A-3's 08:00-05:00 is 13:00Z, after now, though its text sorts before it.
+auctionEnds@ymdhm
+auctionStatus{open|closed}
+
+rule: endedAuctionsClose
+  when: auctionEnds before now
+  then: auctionStatus is closed
+  strength: should
+  because: an auction past its end should be closed
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: A-1 [origin: declared, via: L-1]
+  title: Ended
+  auctionEnds: 2026-10-01T12:00Z
+  auctionStatus: open
+
+product: A-2 [origin: declared, via: L-1]
+  title: Later
+  auctionEnds: 2026-12-01T12:00Z
+  auctionStatus: open
+
+product: A-3 [origin: declared, via: L-1]
+  title: Later today
+  auctionEnds: 2026-10-14T08:00-05:00
+  auctionStatus: open

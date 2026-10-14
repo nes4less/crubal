@@ -50,7 +50,7 @@ test      = path " is " value                      ; equals
           / path " in " values                     ; one of: "in DVD, Blu-ray"
           / path " in " number ".." number         ; inside a range, ends included
           / path " has" [ " " value ]              ; has a value · the list holds this item
-          / path ( " before " / " after " ) value  ; dates
+          / path ( " before " / " after " ) value  ; dates, moments, times of day, or now
           / path ( " over " / " under " ) value    ; numbers, quantities, money, ranked choices
           / path " is unique"                      ; global (6.6); in "then" only
           / path " shown to " audience             ; visibility (chapter 12.4); in "then" only
@@ -63,6 +63,9 @@ aggregate = combine " of " address                 ; "worst of parts[*].conditio
 - **Addresses** are chapter 1.10's, plus the wildcard `[*]` for every row or part, and the level prefix
   (`unit::condition`) to read a lower level from above.
 - **Values** are written as in the text form (chapter 2), read by the facet at the path.
+- **`now`** is the moment the rule is evaluated, supplied by the caller so results stay reproducible:
+  `when: auctionEnds before now`. Moments compare by instant; a local date or time of day compared with a
+  moment is undetermined; a plain date compared with a moment compares by the moment's UTC date.
 - **Aggregates** use the combine rules (chapter 4.4), `count`, and `least` and `most` (the smallest and
   largest number, quantity, money or date; for ranked choices, use `best` and `worst`). `over` and `under` on a ranked choice
   compare positions in the list: earlier is higher.
@@ -216,6 +219,6 @@ Conditions are stored as their text (6.3), so there is one grammar for them, not
 
 ## 6.11 Open
 
-- `now` in conditions (dates relative to today), and events versus current values.
+- Events versus current values.
 - Which rules a store compiles into its database and which it checks in the application is an
   implementation choice; the results MUST be the same.

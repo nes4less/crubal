@@ -327,15 +327,29 @@ export function foldRecord(r: Record, dict: Dictionary): Record {
 export type Outcome = { [key: string]: Json };
 
 const NUMBER = /^-?(0|[1-9]\d*)(\.\d+)?$/;
-const DATE = /^\d{4}(-\d{2}(-\d{2})?)?$/;
+const DATE = /^(\d{4})(?:-(\d{2})(?:-(\d{2})(?:T(\d{2})(?::(\d{2})(?::(\d{2}))?)?(Z|[+-]\d{2}:\d{2})?)?)?)?$/;
+const TIME = /^(\d{2}):(\d{2})(?::(\d{2}))?$/;
+const RANK = { year: 0, month: 1, day: 2, hour: 3, minute: 4, second: 5 } as const;
+
+/** A date's precision and whether it is well formed (1.4.5): real calendar parts and clock parts. */
+export function dateParts(d: string): { precision: keyof typeof RANK; offset: string | null } | null {
+  const m = d.match(DATE);
+  if (!m) return null;
+  const [, , mo, dd, hh, mi, ss, off] = m;
+  if (mo && (Number(mo) < 1 || Number(mo) > 12)) return null;
+  if (dd && (Number(dd) < 1 || Number(dd) > 31)) return null;
+  if (hh && Number(hh) > 23) return null;
+  if (mi && Number(mi) > 59) return null;
+  if (ss && Number(ss) > 59) return null;
+  const precision = ss ? "second" : mi ? "minute" : hh ? "hour" : dd ? "day" : mo ? "month" : "year";
+  return { precision, offset: off ?? null };
+}
 
 function core(v: Json): Json {
   return isObj(v) && "$value" in v ? (v.$value as Json) : v;
 }
 
-function precisionOf(d: string): "year" | "month" | "day" {
-  return d.length === 4 ? "year" : d.length === 7 ? "month" : "day";
-}
+
 
 /** Check one scalar against its facet: an outcome and an optional flag. */
 export function checkScalar(f: Facet, v: Json): { outcome: string; flag?: string } {
@@ -352,10 +366,18 @@ export function checkScalar(f: Facet, v: Json): { outcome: string; flag?: string
       return { outcome: "absorbed" };
     }
     case "date": {
-      if (typeof c !== "string" || !DATE.test(c)) return { outcome: "contradiction" };
+      const parts = typeof c === "string" ? dateParts(c) : null;
+      if (!parts) return { outcome: "contradiction" };
+      const timed = RANK[parts.precision] >= RANK.hour;
+      // A moment carries its offset; a local wall-clock date never does (1.4.5).
+      if (timed && (f.zone === "local" ? parts.offset !== null : parts.offset === null)) return { outcome: "contradiction" };
       const want = f.precision ?? "any";
-      const rank = { year: 0, month: 1, day: 2 };
-      if (want !== "any" && rank[precisionOf(c)] < rank[want]) return { outcome: "absorbed", flag: "precision" };
+      if (want !== "any" && RANK[parts.precision] < RANK[want as keyof typeof RANK]) return { outcome: "absorbed", flag: "precision" };
+      return { outcome: "absorbed" };
+    }
+    case "time": {
+      const m = typeof c === "string" ? c.match(TIME) : null;
+      if (!m || Number(m[1]) > 23 || Number(m[2]) > 59 || (m[3] !== undefined && Number(m[3]) > 59)) return { outcome: "contradiction" };
       return { outcome: "absorbed" };
     }
     case "yes-no":

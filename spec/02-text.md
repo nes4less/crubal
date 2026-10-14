@@ -104,6 +104,8 @@ Without quotes, a value's spelling suggests its shape. The facet decides (chapte
 | `97min` · `2.4lb` | quantity | the number, then the unit spelling with no space; readers MAY accept one space |
 | `12.50USD` | money | the number, then an ISO 4217 code with no space |
 | `1997` · `1997-10` · `1997-10-03` | date | |
+| `2026-11-02T14:30Z` · `2026-10-14T18:00-05:00` | date with a time (a moment) | the offset is required, except under `zone: local` |
+| `14:30` · `14:30:15` | time of day | 24-hour; a zone goes in the detail: `[zone: America/Chicago]` |
 | `yes` · `no`, or the facet's words | yes-no | |
 | a URL | image, under an image facet | image fields go in the detail (2.6) |
 | anything else | text, choice, or raw for an unknown key | |

@@ -94,7 +94,38 @@ function valueAt(values: JsonObject, path: string): Json | undefined {
   return String(nums.reduce((a, b) => a + b, 0));
 }
 
-function test(e: Extract<Expr, { op: "test" }>, values: JsonObject, states?: StateOf): Truth {
+const MOMENT = /^(\d{4}-\d{2}-\d{2})T(\d{2})(?::(\d{2})(?::(\d{2}))?)?(Z|[+-]\d{2}:\d{2})?$/;
+
+/** The instant a moment names, in ms; null for a local date, a plain date or anything else. */
+function instant(s: string): number | null {
+  const m = s.match(MOMENT);
+  if (!m || !m[5]) return null;
+  return Date.parse(`${m[1]}T${m[2]}:${m[3] ?? "00"}:${m[4] ?? "00"}${m[5]}`);
+}
+
+/**
+ * Compare two temporal values (6.3): moments by instant; a plain date with a moment by the moment's UTC
+ * date; local dates only with local dates; times of day as clock times. Undetermined across kinds.
+ */
+function compareTime(a: string, b: string): number | "undetermined" {
+  const ia = instant(a);
+  const ib = instant(b);
+  if (ia !== null && ib !== null) return Math.sign(ia - ib);
+  const plain = /^\d{4}(-\d{2}(-\d{2})?)?$/;
+  // A plain date against a moment: compare the moment's UTC date, cut to the plain date's precision.
+  const cut = (ms: number, len: number) => new Date(ms).toISOString().slice(0, len);
+  if (ia !== null && plain.test(b)) return cmp(cut(ia, b.length), b);
+  if (ib !== null && plain.test(a)) return cmp(a, cut(ib, a.length));
+  const localA = MOMENT.test(a) && ia === null;
+  const localB = MOMENT.test(b) && ib === null;
+  if (ia !== null || ib !== null) return "undetermined"; // a moment against a local date or a time of day
+  if (localA !== localB) return "undetermined";
+  return cmp(a, b);
+}
+
+const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+function test(e: Extract<Expr, { op: "test" }>, values: JsonObject, states?: StateOf, now?: string): Truth {
   if (e.verb === "is" && STATES.has(e.arg)) return states ? states(e.path).has(e.arg) : false;
   // `caller may run listing`, `caller wears Staff` (chapter 7.6): what the caller is, not a value.
   if (e.verb === "may" || e.verb === "wears") return states ? states(e.path).has(`${e.verb}:${e.arg}`) : false;
@@ -125,19 +156,24 @@ function test(e: Extract<Expr, { op: "test" }>, values: JsonObject, states?: Sta
   const m = Number.parseFloat(e.arg);
   if (e.verb === "over") return n > m;
   if (e.verb === "under") return n < m;
-  if (e.verb === "before") return (items[0] ?? "") < e.arg;
-  if (e.verb === "after") return (items[0] ?? "") > e.arg;
+  if (e.verb === "before" || e.verb === "after") {
+    const other = e.arg === "now" ? (now ?? new Date().toISOString().replace(/\.\d{3}Z$/, "Z")) : unq(e.arg);
+    const c = compareTime(items[0] ?? "", other);
+    if (c === "undetermined") return c;
+    return e.verb === "before" ? c < 0 : c > 0;
+  }
   return "undetermined";
 }
 
-export function evaluate(e: Expr, values: JsonObject, states?: StateOf): Truth {
-  if (e.op === "test") return test(e, values, states);
+/** Evaluate a condition. `now` is the moment `now` means (6.3); the caller supplies it for reproducibility. */
+export function evaluate(e: Expr, values: JsonObject, states?: StateOf, now?: string): Truth {
+  if (e.op === "test") return test(e, values, states, now);
   if (e.op === "not") {
-    const a = evaluate(e.a, values, states);
+    const a = evaluate(e.a, values, states, now);
     return a === "undetermined" ? a : !a;
   }
-  const a = evaluate(e.a, values, states);
-  const b = evaluate(e.b, values, states);
+  const a = evaluate(e.a, values, states, now);
+  const b = evaluate(e.b, values, states, now);
   if (e.op === "and") {
     if (a === false || b === false) return false;
     return a === true && b === true ? true : "undetermined";

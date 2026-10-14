@@ -1,0 +1,19 @@
+// Checking moments and times of day: a moment needs its offset, a local date must not have one, a time
+// of day is 24-hour with two-digit parts, and a date less precise than wanted is flagged.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-8 [origin: reported, via: L-1]
+  ends: 2026-10-14T18:00
+  lastCall: 25:00
+
+product: P-9 [origin: reported, via: L-1]
+  ends: 2026-10-14
+  lastCall: 9:30
+  wallClock: 2026-12-31T19:30Z
+
+product: P-10 [origin: reported, via: L-1]
+  ends: 2026-10-14T18:00-05:00
+  lastCall: 22:30
+  wallClock: 2026-12-31T19:30

@@ -59,6 +59,9 @@ function scalar(f: Facet, p: Piece): Json {
     }
     case "image":
       return { $image: t };
+    case "date":
+      // Canonical form writes a zero offset as Z (1.4.5).
+      return /T\d{2}(:\d{2}){0,2}[+-]00:00$/.test(t) ? t.replace(/[+-]00:00$/, "Z") : t;
     default:
       return t;
   }

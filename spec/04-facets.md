@@ -45,7 +45,7 @@ A definition is a block under `facet: key`. Its settings:
 
 | Setting | Holds | Default |
 |---|---|---|
-| `type` | `text`, `number`, `date`, `yes-no`, `choice`, `link`, `image` or `compound` | required |
+| `type` | `text`, `number`, `date`, `time`, `yes-no`, `choice`, `link`, `image` or `compound` | required |
 | `label` | the name people see | the key, split at capitals |
 | `ask` | the short question beside the control | none |
 | `describe` | what the facet means: where it comes from, what it drives | none |
@@ -67,7 +67,9 @@ A definition is a block under `facet: key`. Its settings:
 | number | `accepts` | other units a value may arrive in; they are converted to `unit` by the units table on the way in, with the rounding the table states |
 | number | `range` | `1..600`, optionally `step 0.5` (a shortcut, 4.4) |
 | number | `places` | the most decimal places kept |
-| date | `precision` | `year`, `month`, `day`, or `any` (all three accepted) |
+| date | `precision` | `year`, `month`, `day`, `hour`, `minute`, `second`, or `any` (all accepted) |
+| date | `zone` | `local` when the date is wall-clock time with no offset (chapter 1.4.5) |
+| time | `precision` | `minute` (the default) or `second` |
 | yes-no | `words` | the two words when they aren't yes and no: `Sealed, Opened` |
 | choice | `values` | the list, in order, each with `~` spellings (4.3); ends in `...` when people may add to it (4.2.1) |
 | choice | `fixed` | `yes` when the list is fixed by definition (4.2.1) |
@@ -168,7 +170,8 @@ Read left to right:
 line     = [ "!" ] key type [ count ] *( " " tail )
 type     = "$" [ digits ]                      ; text, optional length
          / "#" [ unit ]                        ; number, optional unit or currency
-         / "@" ( "y" / "ym" / "ymd" / "any" )  ; date and its precision
+         / "@" ( "y" / "ym" / "ymd" / "ymdh" / "ymdhm" / "ymdhms" / "any" )   ; date, its precision
+         / "@" ( "hm" / "hms" )                ; time of day, its precision
          / "?"                                 ; yes-no
          / "{" choice *( "|" choice ) [ "|..." ] "}"   ; choice, optionally open
          / "&" target                          ; link
@@ -184,7 +187,8 @@ tail     = "~" key                             ; key alias
          / setting                             ; a bare word or "name: value" from 4.2
 ```
 
-- `!` is `required: yes`. `@` alone means `@any`.
+- `!` is `required: yes`. `@` alone means `@any`. The letters after `@` always run y, m, d, h, m, s, so the
+  second `m` is minutes: `@ymdhm` is a date with a time to the minute, `@hm` a time of day.
 - A choice value holding `|`, `~`, `{`, `}`, `(`, `)` or a space at either end is quoted with chapter 2's
   quoting: `{"A|B"|C}`.
 - Inside a compound's parentheses, children are separated by spaces and are themselves shorthand lines.
@@ -230,7 +234,7 @@ The long form's pairs as one object. Member names are the setting names; values 
 
 A package MUST be refused at publish when any definition breaks these:
 
-1. `type` is one of the eight types, and every setting is one its type allows (4.2).
+1. `type` is one of the nine types, and every setting is one its type allows (4.2).
 2. A choice facet has at least one value. A compound has at least one child.
 3. `identity` names a child of the compound, and that child is a link.
 4. `ordered` is set only when `pick` is not `1`.

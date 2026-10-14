@@ -78,7 +78,8 @@ never be mistaken for a compound.
 | number | string holding chapter 1.4.2's decimal | `"97"`, `"2.50"` |
 | quantity | `{"$qty": decimal string, "unit": string}` | `{"$qty": "97", "unit": "min"}` |
 | money | `{"$money": decimal string, "currency": ISO 4217 code}` | `{"$money": "12.50", "currency": "USD"}` |
-| date | string: `YYYY`, `YYYY-MM` or `YYYY-MM-DD` | `"1997-10"` |
+| date | string: `YYYY`, `YYYY-MM`, `YYYY-MM-DD`, or with a time `YYYY-MM-DDThh[:mm[:ss]]` and its offset (`Z` when zero) | `"1997-10"`, `"2026-11-02T14:30Z"` |
+| time of day | string: `hh:mm` or `hh:mm:ss` | `"14:30"` |
 | yes-no | `true` · `false` | `true` |
 | link | `{"$link": target}` | `{"$link": "wd:Q311319"}` |
 | image | `{"$image": location}` plus optional `sha256`, `w`, `h` (integers) and `type` | `{"$image": "https://…", "w": 1600}` |
