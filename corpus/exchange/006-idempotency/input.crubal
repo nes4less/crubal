@@ -1,0 +1,12 @@
+// A host acts at most once per contract, record and mapped-out payload (chapter 7.5). The second run sends
+// the same payload and is skipped; after the price changes, the third run acts.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-6 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: DVD
+
+unit: U-6 of P-6 [origin: observed, via: L-2]
+  price: 9.99USD

@@ -4,7 +4,7 @@
 
 import { createHash, createPublicKey, verify } from "node:crypto";
 import { serialize } from "./canonical.ts";
-import type { Dictionary, Facet } from "./defs.ts";
+import { type ClassLine, type Dictionary, type Facet, readClassLine } from "./defs.ts";
 import { checkScalar, foldKey, foldValue } from "./dictionary.ts";
 import { splitTop } from "./lex.ts";
 import type { Json, JsonObject, Record, Source } from "./model.ts";
@@ -51,7 +51,7 @@ export function verifyChain(entries: JsonObject[], keys?: Keys): { valid: boolea
 
 // ─── Receive contracts, as intake needs them (7.2, 7.3, 9.4) ─────────────────
 
-export type MapLine = { from: string; to: string; values: [string, string][]; literal?: boolean };
+export type MapLine = { from: string; to: string; values: [string, string][]; line: number; valueLines: number[] };
 
 export type Contract = {
   name: string;
@@ -65,14 +65,25 @@ export type Contract = {
   absorb: boolean;
   lands: string;
   line: number;
+  /** needs: an unnamed class (7.2) */
+  needs: ClassLine[];
+  gives: string[];
+  who?: string;
+  when?: string;
+  from?: string;
+  to?: string;
+  mode?: string;
+  undo?: string;
+  /** Every part as written, with its line, for the publish checks. */
   parts: { [k: string]: string };
+  partLines: { [k: string]: number };
 };
 
 function readMap(lines: ReturnType<typeof readTree>): MapLine[] {
   return lines.map((l) => {
     const [from, to] = splitArrow(l.text, l.line);
     const values = l.children.map((c) => splitArrow(c.text, c.line).map(unq) as [string, string]);
-    return { from, to, values };
+    return { from, to, values, line: l.line, valueLines: l.children.map((c) => c.line) };
   });
 }
 
@@ -100,11 +111,26 @@ export function readContracts(source: string): Contract[] {
       absorb: true,
       lands: "value",
       line: node.line,
+      needs: [],
+      gives: [],
       parts: {},
+      partLines: {},
     };
     for (const p of node.children) {
       if (!p.key) continue;
+      c.partLines[p.key] = p.line;
       const list = () => splitTop(p.value, ",", p.line).filter(Boolean);
+      if (p.key === "needs") {
+        c.needs = p.value ? splitTop(p.value, ",", p.line).map((t) => readClassLine(t, p.line)) : p.children.map((l) => readClassLine(l.text, l.line));
+        continue;
+      }
+      if (p.key === "gives") c.gives = list();
+      else if (p.key === "who") c.who = p.value;
+      else if (p.key === "when") c.when = p.value;
+      else if (p.key === "from") c.from = p.value;
+      else if (p.key === "to") c.to = p.value;
+      else if (p.key === "mode") c.mode = p.value;
+      else if (p.key === "undo") c.undo = p.value;
       if (p.key === "kind") c.kind = p.value;
       else if (p.key === "origin") c.origin = p.value;
       else if (p.key === "prefix") c.prefix = p.value;
@@ -114,7 +140,7 @@ export function readContracts(source: string): Contract[] {
       else if (p.key === "keep-raw") c.keepRaw = list();
       else if (p.key === "absorb") c.absorb = p.value !== "no";
       else if (p.key === "lands") c.lands = p.value;
-      else c.parts[p.key] = p.value;
+      if (!["kind", "origin", "prefix", "reads", "writes", "ignore", "keep-raw", "absorb", "lands", "gives", "who", "when", "from", "to", "mode", "undo"].includes(p.key)) c.parts[p.key] = p.value;
     }
     if (!c.origin) c.origin = c.kind === "form" ? "declared" : "reported";
     if (c.keepRaw.length && !c.prefix) throw new CrubalError(`${c.name} keeps raw fields, so it needs a prefix`, c.line);

@@ -1,0 +1,10 @@
+{
+  "_note": "TEST KEYS ONLY. Published on purpose; never use for real data.",
+  "keys": {
+    "distributor.example": {
+      "alg": "Ed25519",
+      "public": "kWeL0rARE3SW18w4jpif8vzRwW-j9j0d553EcmCStJA",
+      "private-test-only": "tWTNyvusLXiZZNRKAfwo8Ab4aFY3iitZpXSuwH7IEz8"
+    }
+  }
+}

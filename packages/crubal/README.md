@@ -3,7 +3,7 @@
 The CRUBAL reference implementation. Pure functions, JSON in and JSON out, so a compiled core can replace
 the internals later behind the same API.
 
-**Level reached: Store** (spec chapters 1–6 and 8–10).
+**Level reached: Exchange** (spec chapters 1–11).
 
 - **Reader:** the text form and JSON both ways, facet types, unknown keys kept exactly, plain-words refusals
   with line numbers.
@@ -19,7 +19,14 @@ the internals later behind the same API.
   matching parts before minting rows, evidence validation (independent witnesses, vetoes, version-split
   proposals), and migration recipes with restamping and a review queue.
 
-It passes `corpus/reader*`, `corpus/dictionary*`, `corpus/rules*` and `corpus/store*` (61 cases).
+- **Exchange:** contract publish checks (parts per kind, defined facets, real values in value maps,
+  credentials as names only), runs in steps (`who` with roles, needs, map out with nested paths, value maps
+  and literals, act once per payload), receive runs that compare with the record and land by trust or as
+  suggestions, offer and take where only the overlap flows and a person's values are never overridden,
+  border wrappers verified against the presenter's key and its log, and package checks (prefixes, trust
+  entries, extending without changing).
+
+It passes every corpus folder up to Exchange (75 cases).
 
 Store also checks Ed25519 signatures against the owner's published key, replays intake records from their
 kept bytes (deterministically, keeping earlier outcomes), reviews unknown and new values by key across all
@@ -28,7 +35,7 @@ the package's own trust order and facets' orders.
 
 ```sh
 npm test                                   # unit tests and the Reader corpus
-node bin/crubal.ts test ../../corpus --level store   # the corpus runner, case by case
+node bin/crubal.ts test ../../corpus --level exchange   # the corpus runner, case by case
 node bin/crubal.ts read data.crubal --defs facets.crubal
 node bin/crubal.ts print data.json --defs facets.crubal [--plain]
 ```
@@ -49,6 +56,8 @@ Needs Node 23.6 or later (it runs the TypeScript directly).
 | `src/rules.ts` | rules, shortcuts, rule-set checks and the write engine (6) |
 | `src/store.ts` | logs, receive contracts and intake, landing and trust, part matching, evidence (8, 9) |
 | `src/migrate.ts` | migration recipes, checks and restamping (10) |
+| `src/exchange.ts` | contract checks, runs, offer and take, borders (7, 8.5.1) |
+| `src/packages.ts` | package files: prefixes, trust entries, extending (11) |
 | `src/corpus.ts` | the conformance runner (13) |
 
-Next: the Exchange level (contracts, offer and take, signatures across owners).
+Next: the Views level (shapes, views, filters as sub-indexes, audiences and roles, projections).

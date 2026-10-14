@@ -1,0 +1,3 @@
+{ "id": "D-100", "kind": "item", "level": "product", "owner": "distributor.example",
+  "values": { "title": "Christmas Vacation", "format": "DVD", "runtime": { "$qty": "97", "unit": "min" }, "secretCost": "3.10" },
+  "sources": { "*": { "origin": "declared", "via": "L-1" }, "runtime": { "origin": "observed", "via": "L-2" } } }

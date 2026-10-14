@@ -1,0 +1,5 @@
+[
+  { "contract": "listing", "record": "U-6", "acted": true },
+  { "contract": "listing", "record": "U-6", "acted": false, "reason": "the same payload was already sent" },
+  { "contract": "listing", "record": "U-6", "acted": true, "payload": { "Title": "Christmas Vacation", "aspects": { "Format": "DVD" }, "price": { "value": "7.99", "currency": "USD" } } }
+]

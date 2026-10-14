@@ -1,0 +1,27 @@
+// "who" is a condition over the caller: here, the caller's roles must grant running the contract.
+kind: person
+  levels: person
+roles&role*
+
+role: lister
+  audience: staff
+  may:
+    run: guardedListing
+
+contract: guardedListing
+  kind: send
+  who: caller may run guardedListing
+  writes:
+    title -> Title
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-5 [origin: declared, via: L-1]
+  title: Christmas Vacation
+
+person: C-1 [origin: declared, via: L-1]
+  roles: &lister
+
+person: C-2 [origin: declared, via: L-1]

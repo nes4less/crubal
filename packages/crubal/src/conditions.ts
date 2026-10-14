@@ -17,7 +17,7 @@ export type Expr =
   | { op: "not"; a: Expr }
   | { op: "test"; path: string; verb: string; arg: string };
 
-const VERBS = [" is not ", " is ", " in ", " has", " before ", " after ", " over ", " under "];
+const VERBS = [" may ", " wears ", " is not ", " is ", " in ", " has", " before ", " after ", " over ", " under "];
 
 /** Split on a word outside parentheses and quotes. */
 function splitWord(s: string, word: string): string[] {
@@ -96,6 +96,8 @@ function valueAt(values: JsonObject, path: string): Json | undefined {
 
 function test(e: Extract<Expr, { op: "test" }>, values: JsonObject, states?: StateOf): Truth {
   if (e.verb === "is" && STATES.has(e.arg)) return states ? states(e.path).has(e.arg) : false;
+  // `caller may run listing`, `caller wears Staff` (chapter 7.6): what the caller is, not a value.
+  if (e.verb === "may" || e.verb === "wears") return states ? states(e.path).has(`${e.verb}:${e.arg}`) : false;
   const v = valueAt(values, e.path);
   const empty = emptyOf(v);
   if (e.verb === "has") {

@@ -1,0 +1,68 @@
+{
+  "crubal": "2",
+  "package": "distributor.example/catalog /2026-10-01",
+  "records": [
+    {
+      "id": "D-100",
+      "kind": "item",
+      "level": "product",
+      "owner": "distributor.example",
+      "values": {
+        "title": "Christmas Vacation",
+        "runtime": {
+          "$qty": "97",
+          "unit": "min"
+        }
+      },
+      "sources": {
+        "*": {
+          "origin": "declared",
+          "via": "L-1"
+        },
+        "runtime": {
+          "origin": "observed",
+          "via": "L-2"
+        }
+      }
+    }
+  ],
+  "log": [
+    {
+      "log": "L-1",
+      "owner": "distributor.example",
+      "at": "2026-10-14T08:00:00Z",
+      "by": {
+        "person": "editor-1"
+      },
+      "writes": [
+        {
+          "record": "D-100",
+          "address": "title",
+          "value": "Christmas Vacation"
+        }
+      ],
+      "sig": "2sGw4dJbbF59oPfvBuc3y-xKorgsZTRbqTlC67YF2vTr0XkRFlvjrDNL2rMQl0RXM88ygazvFPJu4tKot9dfCA"
+    },
+    {
+      "log": "L-2",
+      "owner": "distributor.example",
+      "at": "2026-10-14T08:05:00Z",
+      "by": {
+        "contract": "measure",
+        "run": "R-9"
+      },
+      "writes": [
+        {
+          "record": "D-100",
+          "address": "runtime",
+          "value": {
+            "$qty": "79",
+            "unit": "min"
+          }
+        }
+      ],
+      "prev": "sha256:be91e64d3b12dde705cdc121f9063e4fcb36e5c42ea84c5f74c34d2300908114",
+      "sig": "vGMDnrYIrEjirk3D7R0pMwI8Xx_t9iuc0Yvb3nE3QuO5b6RzfliELJGmpz4AjZ0oFYFlhOJ6XS-i6Ck8fM9sDA"
+    }
+  ]
+}

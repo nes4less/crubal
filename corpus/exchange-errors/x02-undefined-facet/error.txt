@@ -1,1 +1,1 @@
-6 subtitle is not a defined facet
+7 subtitle is not a defined facet

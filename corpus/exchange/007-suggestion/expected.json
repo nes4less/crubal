@@ -1,0 +1,9 @@
+{
+  "id": "P-7", "kind": "item", "level": "product", "owner": "test.example",
+  "values": { "title": "Christmas Vacation" },
+  "sources": { "*": { "origin": "declared", "via": "L-1" } },
+  "suggestions": {
+    "title": [ { "value": "National Lampoon's Christmas Vacation", "origin": "reported", "via": "L-R1" } ],
+    "runtime": [ { "value": { "$qty": "97", "unit": "min" }, "origin": "reported", "via": "L-R1" } ]
+  }
+}

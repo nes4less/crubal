@@ -1,0 +1,15 @@
+// With "lands: suggestion", values that arrive don't change the record: they are kept as suggestions
+// for a person to accept (chapter 7.5). Customer corrections land this way.
+contract: customerCorrection
+  kind: receive
+  lands: suggestion
+  reads:
+    Title -> title
+    Runtime -> runtime
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-7 [origin: declared, via: L-1]
+  title: Christmas Vacation

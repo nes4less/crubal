@@ -1,0 +1,4 @@
+[
+  { "contract": "guardedListing", "record": "P-5", "caller": "C-1", "payload": { "Title": "Christmas Vacation" } },
+  { "contract": "guardedListing", "record": "P-5", "caller": "C-2", "stopped": "who" }
+]

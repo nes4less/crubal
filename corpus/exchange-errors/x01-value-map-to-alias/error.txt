@@ -1,1 +1,1 @@
-7 BD is an alias of Blu-ray; a value map must name the real value
+8 BD is an alias of Blu-ray; a value map must name the real value

@@ -1,0 +1,4 @@
+// The consumer takes the presenter's record into P-4.
+run: catalogTake
+on: P-4
+offer: catalogOffer

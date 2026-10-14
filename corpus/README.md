@@ -51,7 +51,11 @@ signatures. Migration cases add a `recipe.crubal` and expect the restamped data 
 `review` queue; `store-errors/` holds recipes a publish must refuse. `package-errors/` holds packages a
 publish must refuse (chapter 11.5). `views/` cases project a view over `_records.crubal` and expect
 `expected-projection.json` or, with a `pick:`, `expected-counts.json`. `exchange/` cases add `run.crubal` (which contract runs on
-which record), an optional `answer.json` (what the other side sent back) and `expected-run.json`.
+which record), an optional `answer.json` (what the other side sent back) and `expected-run.json`. A
+`run.crubal` may hold several runs in order, each `run:` with `on:`, and optionally `caller:` and `offer:`;
+`write: ID` with indented values changes a record between runs. The runner names each run's log entry
+`L-R1`, `L-R2` …, in order. Offer-and-take cases add the presenter's record as `presenter.json`; border cases
+hold a signed wrapper in `border.json`, the presenter's key in `keys.json` and `expected-border.json`.
 
 ## Passing a case
 

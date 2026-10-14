@@ -12,3 +12,5 @@ export { evaluate, parseCondition, type Truth } from "./conditions.ts";
 export { checkRules, Engine, readRules, shortcutRules, type Result, type Rule, type Strength } from "./rules.ts";
 export { entryHash, fieldPath, land, matchParts, readContracts, receive, sha256, validate, verifyChain, type Contract, type IntakeRecord, type Observation } from "./store.ts";
 export { checkRecipe, readRecipes, restamp, type Recipe, type ReviewItem, type Step } from "./migrate.ts";
+export { checkContracts, Exchange, readRoles, verifyBorder, type Role, type RunResult } from "./exchange.ts";
+export { checkPackages, readPackages, type PackageInfo } from "./packages.ts";

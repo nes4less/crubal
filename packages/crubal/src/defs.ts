@@ -450,7 +450,7 @@ function readLongForm(node: Node): Facet {
   return f;
 }
 
-function readClassLine(text: string, line: number, section?: string): ClassLine {
+export function readClassLine(text: string, line: number, section?: string): ClassLine {
   const p = parseLine(text, line);
   const f = p.facet;
   const cl: ClassLine = { facet: f.key, line, text: text.trim() };

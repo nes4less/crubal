@@ -1,0 +1,11 @@
+run: listing
+on: U-6
+
+run: listing
+on: U-6
+
+write: U-6
+  price: 7.99USD
+
+run: listing
+on: U-6

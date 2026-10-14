@@ -8,6 +8,10 @@ import { canonical } from "./canonical.ts";
 import { type Dictionary, emptyDictionary, readDefinitions, splitCaseInput } from "./defs.ts";
 import { type Keys, land, matchParts, rawOf, readContracts, receive, replay, reviewByKey, validate, verifyChain, type IntakeOutcome, type Observation } from "./store.ts";
 import { checkRecipe, readRecipes, restamp } from "./migrate.ts";
+import { checkContracts, Exchange, readRoles, verifyBorder } from "./exchange.ts";
+import { checkPackages } from "./packages.ts";
+import { readUnder } from "./read-text.ts";
+import { readTree } from "./tree.ts";
 import type { Record as Rec } from "./model.ts";
 import { checkRules, Engine, readRules, type Result, type Rule } from "./rules.ts";
 import { checkPackage, checkRecord, facetJson, foldRecord, type Outcome, resolve, resolvedJson } from "./dictionary.ts";
@@ -25,6 +29,10 @@ const LEVEL_FOLDERS: { [level: string]: string[] } = {
   dictionary: ["reader", "reader-errors", "dictionary", "dictionary-errors"],
   rules: ["reader", "reader-errors", "dictionary", "dictionary-errors", "rules", "rules-errors"],
   store: ["reader", "reader-errors", "dictionary", "dictionary-errors", "rules", "rules-errors", "store", "store-errors"],
+  exchange: [
+    "reader", "reader-errors", "dictionary", "dictionary-errors", "rules", "rules-errors", "store", "store-errors",
+    "exchange", "exchange-errors", "package-errors",
+  ],
 };
 
 /** The shared definitions a folder's cases run under: the reader package, then the folder's own files. */
@@ -349,6 +357,124 @@ function runStoreCase(folder: string, caseDir: string, name: string, shared: Dic
   }
 }
 
+function runExchangeCase(folder: string, caseDir: string, name: string, shared: Dictionary, root: string): CaseResult {
+  const file = (f: string) => join(caseDir, f);
+  const json = (f: string) => JSON.parse(readFileSync(file(f), "utf8")) as Json;
+  const pass = { folder, name, pass: true };
+  const fail = (detail: string) => ({ folder, name, pass: false, detail });
+  try {
+    const input = existsSync(file("input.crubal")) ? readFileSync(file("input.crubal"), "utf8") : "";
+    if (folder === "exchange-errors" || folder === "package-errors") {
+      const want = Number(readFileSync(file("error.txt"), "utf8").trim().split(/\s/)[0]);
+      try {
+        if (folder === "package-errors") checkPackages(input);
+        else {
+          const d = copy(shared);
+          readDefinitions(input, d);
+          checkPackage(d);
+          checkContracts(readContracts(input), d);
+        }
+        return fail("published without refusing");
+      } catch (e) {
+        if (!(e instanceof CrubalError)) return fail(String(e));
+        return e.line === want ? pass : fail(`refused at line ${e.line} (${e.message}), expected line ${want}`);
+      }
+    }
+    if (existsSync(file("border.json"))) {
+      const got = verifyBorder(json("border.json") as unknown as { records: Rec[]; log: JsonObject[] }, json("keys.json") as unknown as Keys);
+      const p = subset(got as { [k: string]: Json }, json("expected-border.json") as { [k: string]: Json });
+      return p ? fail(`${p} (got ${serialize(got)})`) : pass;
+    }
+    const { defs, data } = splitCaseInput(input);
+    const dict = copy(shared);
+    if (defs.trim()) readDefinitions(defs, dict);
+    checkPackage(dict);
+    const shared_ = readFileSync(join(root, "exchange", "_contracts.crubal"), "utf8");
+    const contracts = [...readContracts(shared_), ...readContracts(defs)];
+    checkContracts(contracts, dict);
+    const ex = new Exchange(dict, contracts, readRoles(defs));
+    for (const r of readText(data, dict).records.map((x) => foldRecord(x, dict))) ex.put(r);
+
+    // The runs, in order.
+    const results: Json[] = [];
+    let current: { run?: string; on?: string; caller?: string; offer?: string } = {};
+    const flush = () => {
+      if (!current.run || !current.on) return;
+      const c = contracts.find((x) => x.name === current.run);
+      if (current.offer) {
+        results.push(ex.take(current.run, current.offer, current.on, json("presenter.json") as unknown as Rec) as Json);
+      } else if (c?.kind === "receive") {
+        results.push(ex.receiveRun(current.run, current.on, readFileSync(file("answer.json"), "utf8")) as Json);
+      } else {
+        results.push(ex.run(current.run, current.on, current.caller) as Json);
+      }
+      current = {};
+    };
+    for (const n of readTree(readFileSync(file("run.crubal"), "utf8"))) {
+      if (n.key === "run") {
+        flush();
+        current.run = n.value;
+      } else if (n.key === "on") current.on = n.value;
+      else if (n.key === "caller") current.caller = n.value;
+      else if (n.key === "offer") current.offer = n.value;
+      else if (n.key === "write") {
+        flush();
+        const r = ex.get(n.value);
+        if (!r) return fail(`write to an unknown record ${n.value}`);
+        const values = { ...r.values };
+        for (const c of n.children) {
+          const f = c.key ? dict.facets.get(c.key) : undefined;
+          if (c.key) values[c.key] = f ? (readUnder(f, c.value, dict) ?? c.value) : c.value;
+        }
+        ex.put({ ...r, values });
+      }
+    }
+    flush();
+
+    if (existsSync(file("expected.json"))) {
+      const id = (json("expected.json") as JsonObject).id as string;
+      const got = ex.get(id) as Rec;
+      const want = json("expected.json") as unknown as Rec;
+      const one = (r: Rec) => canonical({ crubal: "2", records: [r] }, dict);
+      const extra = (r: Rec) => serialize({ a: ((r as unknown as JsonObject).alternatives ?? {}) as Json, s: ((r as unknown as JsonObject).suggestions ?? {}) as Json });
+      if (one(got) !== one(want)) return fail(`record: ${firstDiff(one(got), one(want))}`);
+      if (extra(got) !== extra(want)) return fail(`alternatives/suggestions: got ${extra(got)}`);
+      return pass;
+    }
+    const wantRaw = json("expected-run.json");
+    const want = (Array.isArray(wantRaw) ? wantRaw : [wantRaw]) as { [k: string]: Json }[];
+    if (results.length !== want.length) return fail(`${results.length} runs, expected ${want.length}`);
+    for (let i = 0; i < want.length; i++) {
+      const w = { ...(want[i] as { [k: string]: Json }) };
+      const a = results[i] as { [k: string]: Json };
+      if (Array.isArray(w.outcomes)) {
+        for (const wo of w.outcomes as { [k: string]: Json }[]) {
+          const ao = (a.outcomes as { [k: string]: Json }[]).find((x) => x.from === wo.from);
+          if (!ao) return fail(`run ${i + 1}: no outcome for ${wo.from}`);
+          const p = subset(ao, wo, `run ${i + 1} ${wo.from}: `);
+          if (p) return fail(p);
+        }
+        if ((a.outcomes as Json[]).length !== (w.outcomes as Json[]).length) return fail(`run ${i + 1}: ${(a.outcomes as Json[]).length} outcomes`);
+        delete w.outcomes;
+      }
+      if (isPlainObject(w.sources)) {
+        const p = subset(a.sources as { [k: string]: Json }, w.sources as { [k: string]: Json }, `run ${i + 1} sources `);
+        if (p) return fail(p);
+        delete w.sources;
+      }
+      // Stopping is the verdict, not a detail: an expectation must say so when a run stopped.
+      if (a.stopped !== undefined && w.stopped === undefined) return fail(`run ${i + 1}: stopped at ${serialize(a.stopped)}, expected it to run`);
+      const p = subset(a, w, `run ${i + 1}: `);
+      if (p) return fail(p);
+    }
+    return pass;
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : String(e));
+  }
+}
+
+const isPlainObject = (v: Json | undefined): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);
+
 /** Run one level's corpus folders under `root`. */
 export function runCorpus(root: string, level: string): CaseResult[] {
   const folders = LEVEL_FOLDERS[level];
@@ -361,8 +487,10 @@ export function runCorpus(root: string, level: string): CaseResult[] {
     const sharedRules = folder === "rules" && existsSync(rulesFile) ? readRules(readFileSync(rulesFile, "utf8")) : [];
     for (const name of readdirSync(dir).sort()) {
       if (name.startsWith("_")) continue;
-      if (!["input.crubal", "log.json"].some((f) => existsSync(join(dir, name, f)))) continue;
-      const r = folder.startsWith("store")
+      if (!["input.crubal", "log.json", "border.json"].some((f) => existsSync(join(dir, name, f)))) continue;
+      const r = folder.startsWith("exchange") || folder === "package-errors"
+        ? runExchangeCase(folder, join(dir, name), name, dict, root)
+        : folder.startsWith("store")
         ? runStoreCase(folder, join(dir, name), name, dict)
         : folder.startsWith("rules")
         ? runRulesCase(folder, join(dir, name), name, dict, sharedRules)
