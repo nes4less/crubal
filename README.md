@@ -1,7 +1,7 @@
 # CRUBAL 2: the specification
 
 **Status:** working draft, 2026-10-14. Not yet published. The design it writes down is
-`docs/crubal/blueprint.html` (https://claude.ai/artifact/BLJ9DdEZSyqKrW84pLjHQh); where they differ, this spec
+`docs/crubal/blueprint.html` (https://claude.ai/artifact/KxmXeg77KrNVvqkvK5q4K9); where they differ, this spec
 is being wrong and gets fixed.
 
 CRUBAL is a language and engine for data about any kind of thing. Everything is a key and a value. Records
