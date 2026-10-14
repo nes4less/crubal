@@ -6,7 +6,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { canonical } from "./canonical.ts";
 import { type Dictionary, emptyDictionary, readDefinitions, splitCaseInput } from "./defs.ts";
-import { land, matchParts, readContracts, receive, validate, verifyChain, type Observation } from "./store.ts";
+import { type Keys, land, matchParts, rawOf, readContracts, receive, replay, reviewByKey, validate, verifyChain, type IntakeOutcome, type Observation } from "./store.ts";
 import { checkRecipe, readRecipes, restamp } from "./migrate.ts";
 import type { Record as Rec } from "./model.ts";
 import { checkRules, Engine, readRules, type Result, type Rule } from "./rules.ts";
@@ -40,7 +40,7 @@ function loadDictionary(root: string, folder: string): Dictionary {
 }
 
 function copy(d: Dictionary): Dictionary {
-  return { facets: new Map(d.facets), classes: new Map(d.classes), levels: new Map(d.levels), vary: new Map(d.vary) };
+  return { facets: new Map(d.facets), classes: new Map(d.classes), levels: new Map(d.levels), vary: new Map(d.vary), trust: [...d.trust], facetTrust: new Map(d.facetTrust) };
 }
 
 /** Each expected entry must match an actual one on every field it states; entry sets must be the same. */
@@ -245,9 +245,15 @@ function runStoreCase(folder: string, caseDir: string, name: string, shared: Dic
       }
     }
     if (existsSync(file("log.json"))) {
-      const got = verifyChain(json("log.json") as JsonObject[]) as unknown as { [k: string]: Json };
+      const keys = existsSync(file("keys.json")) ? (json("keys.json") as unknown as Keys) : undefined;
+      const got = verifyChain(json("log.json") as JsonObject[], keys) as unknown as { [k: string]: Json };
       const want = json("expected-verify.json") as { [k: string]: Json };
-      return serialize(got) === serialize(want) ? pass : fail(`got ${serialize(got)}`);
+      const p = subset(got, want);
+      return p ? fail(`${p} (got ${serialize(got)})`) : pass;
+    }
+    if (existsSync(file("answer.bin"))) {
+      const got = rawOf(readFileSync(file("answer.bin")), "text/plain") as unknown as Json;
+      return serialize(got) === serialize(json("expected-raw.json")) ? pass : fail(`got ${serialize(got)}`);
     }
     const { defs, data } = splitCaseInput(input);
     const dict = copy(shared);
@@ -264,6 +270,42 @@ function runStoreCase(folder: string, caseDir: string, name: string, shared: Dic
       const got = { ...JSON.parse(canonical({ crubal: "2", package: recipe.to, records: out }, dict)), review };
       const wantC = { ...JSON.parse(canonical({ crubal: String(want.crubal), package: String(want.package), records: want.records as unknown as Rec[] }, dict)), review: want.review };
       return serialize(got) === serialize(wantC) ? pass : fail(`got ${firstDiff(serialize(got), serialize(wantC))}`);
+    }
+    if (existsSync(file("contract-v2.crubal"))) {
+      const [v1] = readContracts(readFileSync(file("contract.crubal"), "utf8"));
+      const [v2] = readContracts(readFileSync(file("contract-v2.crubal"), "utf8"));
+      if (!v1 || !v2) return fail("no contract");
+      const body = readFileSync(file("answer.json"), "utf8");
+      const first = receive(v1, body, records[0]?.id ?? "", dict);
+      const again = replay(first, v2, dict);
+      const twice = replay(first, v2, dict);
+      const want = json("expected-replay.json") as { first: { [k: string]: Json }[]; replayed: { [k: string]: Json }[]; replays: number };
+      const replayed = (again.replays.at(-1)?.outcomes ?? []) as unknown as IntakeOutcome[];
+      const check = (got: IntakeOutcome[], exp: { [k: string]: Json }[], label: string) => {
+        for (const w of exp) {
+          const a = got.find((o) => o.from === w.from) as unknown as { [k: string]: Json } | undefined;
+          if (!a) return `${label}: no outcome for ${w.from}`;
+          const p = subset(a, w, `${label} ${w.from}: `);
+          if (p) return p;
+        }
+        return null;
+      };
+      const p = check(first.outcomes, want.first, "first") ?? check(replayed, want.replayed, "replayed");
+      if (p) return fail(p);
+      if (again.replays.length !== want.replays) return fail(`${again.replays.length} replays`);
+      if (serialize(again.replays as unknown as Json) !== serialize(twice.replays as unknown as Json)) return fail("replay isn't deterministic");
+      if (again.raw.body !== body || again.raw.sha256 !== first.raw.sha256) return fail("replay changed the kept bytes");
+      return pass;
+    }
+    if (existsSync(file("expected-review.json"))) {
+      const got = reviewByKey(json("intakes.json") as unknown as { for: string; outcomes: IntakeOutcome[] }[]);
+      const want = json("expected-review.json") as { "by-key": { [k: string]: Json }[]; proposals: { [k: string]: Json }[] };
+      if (got["by-key"].length !== want["by-key"].length) return fail(`by-key: got ${serialize(got["by-key"] as unknown as Json)}`);
+      for (let i = 0; i < want["by-key"].length; i++) {
+        const p = subset(got["by-key"][i] as { [k: string]: Json }, want["by-key"][i] as { [k: string]: Json }, `by-key[${i}] `);
+        if (p) return fail(p);
+      }
+      return serialize(got.proposals as unknown as Json) === serialize(want.proposals as unknown as Json) ? pass : fail(`proposals: got ${serialize(got.proposals as unknown as Json)}`);
     }
     if (existsSync(file("contract.crubal"))) {
       const text = readFileSync(file("contract.crubal"), "utf8");
@@ -296,7 +338,7 @@ function runStoreCase(folder: string, caseDir: string, name: string, shared: Dic
     }
     const intakes = existsSync(file("intakes.json")) ? (json("intakes.json") as JsonObject[]) : [json("intake.json") as JsonObject];
     let rec = records[0] as Rec;
-    for (const i of intakes) rec = land(rec, i as unknown as Parameters<typeof land>[1], { origin: "reported", via: String(i.log) });
+    for (const i of intakes) rec = land(rec, i as unknown as Parameters<typeof land>[1], { origin: "reported", via: String(i.log) }, dict.trust, dict.facetTrust);
     const want = json("expected.json") as unknown as Rec;
     const got = one(rec);
     const wantC = one(want);
@@ -319,7 +361,7 @@ export function runCorpus(root: string, level: string): CaseResult[] {
     const sharedRules = folder === "rules" && existsSync(rulesFile) ? readRules(readFileSync(rulesFile, "utf8")) : [];
     for (const name of readdirSync(dir).sort()) {
       if (name.startsWith("_")) continue;
-      if (!existsSync(join(dir, name, "input.crubal")) && !existsSync(join(dir, name, "log.json"))) continue;
+      if (!["input.crubal", "log.json"].some((f) => existsSync(join(dir, name, f)))) continue;
       const r = folder.startsWith("store")
         ? runStoreCase(folder, join(dir, name), name, dict)
         : folder.startsWith("rules")

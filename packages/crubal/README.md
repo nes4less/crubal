@@ -3,7 +3,7 @@
 The CRUBAL reference implementation. Pure functions, JSON in and JSON out, so a compiled core can replace
 the internals later behind the same API.
 
-**Level reached: Store** (spec chapters 1–6 and 8–10), with gaps listed below.
+**Level reached: Store** (spec chapters 1–6 and 8–10).
 
 - **Reader:** the text form and JSON both ways, facet types, unknown keys kept exactly, plain-words refusals
   with line numbers.
@@ -19,11 +19,12 @@ the internals later behind the same API.
   matching parts before minting rows, evidence validation (independent witnesses, vetoes, version-split
   proposals), and migration recipes with restamping and a review queue.
 
-It passes `corpus/reader*`, `corpus/dictionary*`, `corpus/rules*` and `corpus/store*` (55 cases).
+It passes `corpus/reader*`, `corpus/dictionary*`, `corpus/rules*` and `corpus/store*` (61 cases).
 
-**Store gaps the corpus doesn't test yet:** Ed25519 signatures (the corpus chains are unsigned), replay of
-held intake records, review by key and promotion by recurrence, binary payloads as `base64`, and the
-package's own trust order (the default order is used).
+Store also checks Ed25519 signatures against the owner's published key, replays intake records from their
+kept bytes (deterministically, keeping earlier outcomes), reviews unknown and new values by key across all
+records and proposes candidate facets by recurrence, keeps non-UTF-8 payloads as base64, and lands values by
+the package's own trust order and facets' orders.
 
 ```sh
 npm test                                   # unit tests and the Reader corpus
@@ -50,4 +51,4 @@ Needs Node 23.6 or later (it runs the TypeScript directly).
 | `src/migrate.ts` | migration recipes, checks and restamping (10) |
 | `src/corpus.ts` | the conformance runner (13) |
 
-Next: close the Store gaps above, then the Exchange level (contracts, offer and take, signatures across owners).
+Next: the Exchange level (contracts, offer and take, signatures across owners).

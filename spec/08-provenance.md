@@ -76,8 +76,10 @@ touched (chapter 3.8 gives the JSON).
 
 - **Hash-linked.** An entry's **hash** is the SHA-256 of its canonical form (chapter 3.9) without `sig`.
   `prev` is `sha256:` and the previous entry's hash, in hex. The first entry of a chain has no `prev`.
-- **Signed.** `sig` is the owner's signature over the entry's hash, made with the key published for the
-  owner's domain (chapter 7.8). The algorithm is Ed25519, written as base64url.
+- **Signed.** `sig` is the owner's Ed25519 signature over the entry's hash (its 32 bytes, not the hex
+  text), written as base64url without padding, made with the key published for the owner's domain (chapter
+  7.8). A redacted entry carries no `owner`; it is checked against its chain's owner. When the owner's key is
+  known, an entry without a valid `sig` breaks the chain there.
 - **Chains.** An owner MAY keep several chains, each linear (one per shard of a large store); every entry
   then names its `chain`. A record's writes MUST all go to one chain.
 - **No consensus.** There is no mining and no global ledger. Every record has an owner, and the owner's log is

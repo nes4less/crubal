@@ -1,0 +1,10 @@
+{
+  "_note": "TEST KEYS ONLY. The private key is published on purpose so anyone can regenerate the signed cases. Never use it for real data.",
+  "keys": {
+    "test.example": {
+      "alg": "Ed25519",
+      "public": "SJsLgx3WdWJHBfBBxXmzRgOUS9gwt2UpxTE0h59Z3kw",
+      "private-test-only": "y07bVFev1GG8BlNKpSBceLOJXboownf4L2Fx2FCp3T4"
+    }
+  }
+}

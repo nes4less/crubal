@@ -43,7 +43,11 @@ must match exactly, and each listed field must be equal. Kinds a case doesn't li
 `store/` cases hold a `log.json` and `expected-verify.json` (does the chain check out, and where does it
 break), or a record, an `intake.json` and the `expected.json` record after it lands. Intake cases add a
 `contract.crubal`, an `answer.json` and `expected-intake.json`; evidence cases add `observations.json` and
-`expected-validation.json`. Migration cases add a `recipe.crubal` and expect the restamped data plus its
+`expected-validation.json`. Signed-chain cases add a `keys.json` (the owner's published public key, from
+`store/_keys.json`); a chain case without one checks links only. Replay cases add `contract-v2.crubal` and
+`expected-replay.json`; review cases add `intakes.json` and `expected-review.json`; raw-byte cases add
+`answer.bin` and `expected-raw.json`. `tools/` holds the generators for cases that need real hashes or
+signatures. Migration cases add a `recipe.crubal` and expect the restamped data plus its
 `review` queue; `store-errors/` holds recipes a publish must refuse. `package-errors/` holds packages a
 publish must refuse (chapter 11.5). `views/` cases project a view over `_records.crubal` and expect
 `expected-projection.json` or, with a `pick:`, `expected-counts.json`. `exchange/` cases add `run.crubal` (which contract runs on

@@ -1,0 +1,128 @@
+[
+ {
+  "intake": "I-1",
+  "contract": "lookup",
+  "for": "P-1",
+  "outcomes": [
+   {
+    "from": "Studio",
+    "to": "market:Studio",
+    "outcome": "unknown",
+    "value": "Warner"
+   },
+   {
+    "from": "Format",
+    "to": "format",
+    "outcome": "new",
+    "value": "HD-DVD"
+   },
+   {
+    "from": "Signed",
+    "to": "market:Signed",
+    "outcome": "unknown",
+    "value": "yes"
+   },
+   {
+    "from": "Misprint",
+    "to": "market:Misprint",
+    "outcome": "unknown",
+    "value": "cover"
+   }
+  ]
+ },
+ {
+  "intake": "I-2",
+  "contract": "lookup",
+  "for": "P-2",
+  "outcomes": [
+   {
+    "from": "Studio",
+    "to": "market:Studio",
+    "outcome": "unknown",
+    "value": "Warner"
+   },
+   {
+    "from": "Format",
+    "to": "format",
+    "outcome": "new",
+    "value": "HD-DVD"
+   },
+   {
+    "from": "Signed",
+    "to": "market:Signed",
+    "outcome": "unknown",
+    "value": "yes"
+   }
+  ]
+ },
+ {
+  "intake": "I-3",
+  "contract": "lookup",
+  "for": "P-3",
+  "outcomes": [
+   {
+    "from": "Studio",
+    "to": "market:Studio",
+    "outcome": "unknown",
+    "value": "Universal"
+   },
+   {
+    "from": "Signed",
+    "to": "market:Signed",
+    "outcome": "unknown",
+    "value": "yes"
+   }
+  ]
+ },
+ {
+  "intake": "I-4",
+  "contract": "lookup",
+  "for": "P-4",
+  "outcomes": [
+   {
+    "from": "Studio",
+    "to": "market:Studio",
+    "outcome": "unknown",
+    "value": "Warner"
+   },
+   {
+    "from": "Signed",
+    "to": "market:Signed",
+    "outcome": "unknown",
+    "value": "yes"
+   }
+  ]
+ },
+ {
+  "intake": "I-5",
+  "contract": "lookup",
+  "for": "P-5",
+  "outcomes": [
+   {
+    "from": "Studio",
+    "to": "market:Studio",
+    "outcome": "unknown",
+    "value": "Paramount"
+   },
+   {
+    "from": "Signed",
+    "to": "market:Signed",
+    "outcome": "unknown",
+    "value": "yes"
+   }
+  ]
+ },
+ {
+  "intake": "I-6",
+  "contract": "lookup",
+  "for": "P-6",
+  "outcomes": [
+   {
+    "from": "Studio",
+    "to": "market:Studio",
+    "outcome": "unknown",
+    "value": "Universal"
+   }
+  ]
+ }
+]

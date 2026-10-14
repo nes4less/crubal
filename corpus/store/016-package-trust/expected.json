@@ -1,0 +1,13 @@
+{
+  "id": "P-1", "kind": "item", "level": "product", "owner": "test.example",
+  "values": { "title": "National Lampoon's Christmas Vacation", "runtime": { "$qty": "97", "unit": "min" } },
+  "sources": {
+    "*": { "origin": "declared", "via": "L-1" },
+    "title": { "origin": "reported", "via": "L-5" },
+    "runtime": { "origin": "observed", "via": "L-2" }
+  },
+  "alternatives": {
+    "title": [ { "value": "Christmas Vacation", "origin": "declared", "via": "L-1" } ],
+    "runtime": [ { "value": { "$qty": "98", "unit": "min" }, "origin": "reported", "via": "L-5" } ]
+  }
+}

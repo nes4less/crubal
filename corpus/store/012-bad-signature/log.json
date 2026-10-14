@@ -1,0 +1,56 @@
+[
+  {
+    "log": "L-1",
+    "owner": "test.example",
+    "at": "2026-10-14T09:00:00Z",
+    "by": {
+      "person": "staff-1"
+    },
+    "writes": [
+      {
+        "record": "P-1",
+        "address": "title",
+        "value": "Christmas Vacation"
+      }
+    ],
+    "sig": "rMOIWR-5XACHpfWlYyrD5nyufZrgm_L4rZ50OoP3V1gTvLenYoIXYlCAV0mY_9cDuNuQCB5HWqeRvNzbQd2sBg"
+  },
+  {
+    "log": "L-2",
+    "owner": "test.example",
+    "at": "2026-10-14T09:05:00Z",
+    "by": {
+      "contract": "ocr",
+      "run": "R-1"
+    },
+    "writes": [
+      {
+        "record": "P-1",
+        "address": "runtime",
+        "value": {
+          "$qty": "97",
+          "unit": "min"
+        }
+      }
+    ],
+    "prev": "sha256:945000e5ed2c3fd08f09f38d9d49a4c16e87c41edc6c77bb73d8feb454f2c96c",
+    "sig": "LBWRf-H4qw5hNmYHzv1lbS6oQSTQuDx8zysDOH36Vi6KPrbs7lq_UaMskRpG7ryBAnjhyO0Sk-IRt_KK4ZjlBg"
+  },
+  {
+    "log": "L-3",
+    "owner": "test.example",
+    "at": "2026-10-14T09:10:00Z",
+    "by": {
+      "rule": "listingTitle"
+    },
+    "writes": [
+      {
+        "record": "P-1",
+        "address": "listingTitle",
+        "value": "Christmas Vacation [DVD]"
+      }
+    ],
+    "prev": "sha256:6801003682938cfb4f9f9d3b768f295429b51b67dcbeb40fe2dd5d596e2dd0d6",
+    "sig": "xACLvqa2nG1JS6WcSuj5bwY0FVjE38NV5T3IgOayfQFGCWZJY_UdZzATlVLReS50a89T73PL1PeYE6wmIaLiBQ"
+  }
+]

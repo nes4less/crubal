@@ -97,10 +97,13 @@ export type Dictionary = {
   levels: Map<string, string>;
   /** level name → the facets that vary at the step into it (11.2) */
   vary: Map<string, Set<string>>;
+  /** The package's trust order and facets' own orders (11.3); empty means the default order. */
+  trust: string[];
+  facetTrust: Map<string, string[]>;
 };
 
 export function emptyDictionary(): Dictionary {
-  const d: Dictionary = { facets: new Map(), classes: new Map(), levels: new Map(), vary: new Map() };
+  const d: Dictionary = { facets: new Map(), classes: new Map(), levels: new Map(), vary: new Map(), trust: [], facetTrust: new Map() };
   // Core facets (spec 1.6, 5.6).
   d.facets.set("crubal:count", { ...blank("crubal:count", "number") });
   const notables = blank("crubal:notables", "compound");
@@ -521,7 +524,7 @@ function readClass(node: Node): ClassDef {
   return c;
 }
 
-const SKIP = new Set(["rule", "contract", "view", "shape", "filter", "role", "migration", "trust", "facet-trust", "package", "resolve"]);
+const SKIP = new Set(["rule", "contract", "view", "shape", "filter", "role", "migration", "package", "resolve"]);
 
 /** Read definition text (facets, classes and kinds) into a dictionary. Other blocks are skipped. */
 export function readDefinitions(source: string, into: Dictionary = emptyDictionary()): Dictionary {
@@ -535,6 +538,14 @@ export function readDefinitions(source: string, into: Dictionary = emptyDictiona
       if (node.key === "class") {
         const c = readClass(node);
         into.classes.set(c.name, c);
+        continue;
+      }
+      if (node.key === "trust") {
+        into.trust = node.children.map((c) => c.text.trim());
+        continue;
+      }
+      if (node.key === "facet-trust") {
+        for (const c of node.children) if (c.key) into.facetTrust.set(c.key, readList(c.value, c.line).map((p) => p.text));
         continue;
       }
       if (node.key === "kind") {

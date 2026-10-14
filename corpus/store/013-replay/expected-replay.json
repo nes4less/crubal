@@ -1,0 +1,6 @@
+{
+  "first": [ { "from": "Format", "to": "format", "outcome": "new", "value": "Blu-ray Disc" } ],
+  "replayed": [ { "from": "Format", "to": "format", "outcome": "absorbed", "value": "Blu-ray" } ],
+  "replays": 1,
+  "same-bytes": true
+}

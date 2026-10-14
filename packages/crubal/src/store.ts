@@ -2,7 +2,7 @@
 // contract with raw bytes kept (9.1–9.4), landing values by the trust order with alternatives (8.4),
 // matching parts before minting rows (9.2), and evidence validation with independence and vetoes (9.7).
 
-import { createHash } from "node:crypto";
+import { createHash, createPublicKey, verify } from "node:crypto";
 import { serialize } from "./canonical.ts";
 import type { Dictionary, Facet } from "./defs.ts";
 import { checkScalar, foldKey, foldValue } from "./dictionary.ts";
@@ -26,11 +26,25 @@ export function entryHash(entry: JsonObject): string {
   return sha256(serialize(rest));
 }
 
-/** Check a chain's links. Signatures are checked once parties' keys are known (Exchange level). */
-export function verifyChain(entries: JsonObject[]): { valid: boolean; "breaks-at"?: string } {
-  for (let i = 1; i < entries.length; i++) {
-    const want = `sha256:${entryHash(entries[i - 1] as JsonObject)}`;
-    if (entries[i]?.prev !== want) return { valid: false, "breaks-at": String(entries[i]?.log) };
+/** Published keys by owner domain: `{ "test.example": { "alg": "Ed25519", "public": "<base64url>" } }`. */
+export type Keys = { [owner: string]: { alg: string; public: string } };
+
+/** Does `sig` (base64url) verify over the entry's hash bytes with the owner's Ed25519 key? */
+export function verifySig(entry: JsonObject, owner: string, keys: Keys): boolean {
+  const k = keys[owner];
+  if (!k || k.alg !== "Ed25519" || typeof entry.sig !== "string") return false;
+  const key = createPublicKey({ key: { kty: "OKP", crv: "Ed25519", x: k.public }, format: "jwk" });
+  return verify(null, Buffer.from(entryHash(entry), "hex"), key, Buffer.from(entry.sig, "base64url"));
+}
+
+/** Check a chain's links, and, when the owner's key is known, every entry's signature (8.5). */
+export function verifyChain(entries: JsonObject[], keys?: Keys): { valid: boolean; "breaks-at"?: string; reason?: string } {
+  let owner = "";
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i] as JsonObject;
+    if (i > 0 && e.prev !== `sha256:${entryHash(entries[i - 1] as JsonObject)}`) return { valid: false, "breaks-at": String(e.log), reason: "link" };
+    if (typeof e.owner === "string") owner = e.owner;
+    if (keys?.[owner] && !verifySig(e, owner, keys)) return { valid: false, "breaks-at": String(e.log), reason: "signature" };
   }
   return { valid: true };
 }
@@ -174,6 +188,44 @@ function foldIn(f: Facet, raw: Json, map: MapLine | undefined, dict: Dictionary)
   return { value, outcome };
 }
 
+/** Keep a payload's exact bytes (3.8): as text when they are valid UTF-8, otherwise as base64. */
+export function rawOf(bytes: Uint8Array, type: string): { type: string; sha256: string; body?: string; base64?: string } {
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  try {
+    return { type, sha256: hash, body: new TextDecoder("utf-8", { fatal: true }).decode(bytes) };
+  } catch {
+    return { type, sha256: hash, base64: Buffer.from(bytes).toString("base64") };
+  }
+}
+
+/** Replay an intake record from its kept bytes under the current contract (9.6); earlier outcomes stay. */
+export function replay(intake: IntakeRecord & { replays?: JsonObject[] }, c: Contract, dict: Dictionary): IntakeRecord & { replays: JsonObject[] } {
+  const again = receive(c, intake.raw.body, intake.for, dict, intake.intake);
+  const replays = [...(intake.replays ?? []), { outcomes: again.outcomes as unknown as Json, contract: c.name }];
+  return { ...intake, replays };
+}
+
+/** Review by key across every intake record (9.5), and candidate facets proposed by recurrence. */
+export function reviewByKey(intakes: { for: string; outcomes: IntakeOutcome[] }[], recur = 5): { "by-key": JsonObject[]; proposals: JsonObject[] } {
+  const groups = new Map<string, { objects: Set<string>; values: Set<string>; outcome: string }>();
+  for (const i of intakes) {
+    for (const o of i.outcomes) {
+      if (o.outcome !== "unknown" && o.outcome !== "new") continue;
+      const key = o.to ?? o.from;
+      const g = groups.get(key) ?? { objects: new Set<string>(), values: new Set<string>(), outcome: o.outcome };
+      g.objects.add(i.for);
+      if (o.value !== undefined) g.values.add(serialize(o.value));
+      groups.set(key, g);
+    }
+  }
+  const rows = [...groups.entries()].sort((a, b) => b[1].objects.size - a[1].objects.size || a[0].localeCompare(b[0]));
+  return {
+    "by-key": rows.map(([key, g]) => ({ key, objects: g.objects.size, values: g.values.size, outcome: g.outcome })),
+    // Only keys no facet holds become candidate facets; a facet's new values go to vocabulary review.
+    proposals: rows.filter(([, g]) => g.outcome === "unknown" && g.objects.size >= recur).map(([key, g]) => ({ key, objects: g.objects.size, state: "candidate" })),
+  };
+}
+
 /** Receive a raw payload through a contract: every field gets exactly one outcome. The bytes are kept. */
 export function receive(c: Contract, body: string, forRecord: string, dict: Dictionary, intakeId = "I-1"): IntakeRecord {
   const payload = JSON.parse(body) as Json;
@@ -215,9 +267,21 @@ export function receive(c: Contract, body: string, forRecord: string, dict: Dict
 
 const DEFAULT_TRUST = ["person", "observed", "declared", "reported", "derived"];
 
-function rank(s: Source, trust: string[]): number {
-  const i = trust.indexOf(s.origin);
-  return i < 0 ? trust.length : i;
+/** Who a source is, for the trust order (11.3): a person, a contract, a party's domain, and its origin. */
+export type Who = { source: Source; person?: boolean; contract?: string };
+
+function matchAt(who: Who, order: string[]): number {
+  const hits = [who.person ? "person" : "", who.contract ?? "", who.source.owner ?? "", who.source.origin].filter(Boolean);
+  const at = order.findIndex((e) => hits.includes(e));
+  return at;
+}
+
+/** A source's rank under a facet's order then the package's (lower wins). */
+function rank(who: Who, trust: string[], facetOrder: string[] = []): number {
+  const f = matchAt(who, facetOrder);
+  if (f >= 0) return f;
+  const p = matchAt(who, trust);
+  return facetOrder.length + (p >= 0 ? p : trust.length);
 }
 
 function sourceAt(r: Record, address: string): Source | undefined {
@@ -228,7 +292,15 @@ function sourceAt(r: Record, address: string): Source | undefined {
  * Land an intake record's outcomes on a record. Absorbed and conflicting values go through the trust
  * order: the winner is current, the loser is kept as an alternative. Equal values are agreement.
  */
-export function land(r: Record, intake: { outcomes: IntakeOutcome[] }, source: Source, trust = DEFAULT_TRUST): Record {
+export function land(
+  r: Record,
+  intake: { outcomes: IntakeOutcome[]; contract?: string },
+  source: Source,
+  trust: string[] = DEFAULT_TRUST,
+  facetTrust: Map<string, string[]> = new Map(),
+): Record {
+  const order = trust.length ? trust : DEFAULT_TRUST;
+  const incoming: Who = { source, ...(intake.contract ? { contract: intake.contract } : {}) };
   const out: Record & { alternatives?: { [a: string]: JsonObject[] } } = {
     ...r,
     values: { ...r.values },
@@ -244,7 +316,8 @@ export function land(r: Record, intake: { outcomes: IntakeOutcome[] }, source: S
     }
     if (serialize(current) === serialize(o.value)) continue; // agreement: the current source stays
     const was = sourceAt(out, o.to) as Source;
-    const incomingWins = rank(source, trust) < rank(was, trust);
+    const fo = facetTrust.get(o.to) ?? [];
+    const incomingWins = rank(incoming, order, fo) < rank({ source: was }, order, fo);
     const loser: JsonObject = incomingWins ? { value: current, origin: was.origin, via: was.via } : { value: o.value, origin: source.origin, via: source.via };
     if (incomingWins) {
       out.values[o.to] = o.value;

@@ -1,0 +1,1 @@
+// Bytes that are not UTF-8 are kept as base64, with the hash of the bytes themselves (chapter 3.8).

@@ -1,0 +1,7 @@
+[
+  { "intake": "I-1", "log": "L-5", "contract": "catalogLookup", "for": "P-1",
+    "outcomes": [
+      { "from": "Title", "to": "title", "outcome": "conflict", "value": "National Lampoon's Christmas Vacation" },
+      { "from": "Run Time", "to": "runtime", "outcome": "conflict", "value": { "$qty": "98", "unit": "min" } }
+    ] }
+]

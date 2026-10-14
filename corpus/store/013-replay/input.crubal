@@ -1,0 +1,8 @@
+// An intake record is replayed from its kept bytes after the contract learns a value map. The first run
+// left "Blu-ray Disc" as a new value; the replay absorbs it as Blu-ray. Replay is deterministic.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation

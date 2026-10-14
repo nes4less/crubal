@@ -1,0 +1,5 @@
+contract: lookup
+  kind: receive
+  reads:
+    Format -> format
+      "Blu-ray Disc" -> Blu-ray

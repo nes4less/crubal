@@ -1,0 +1,17 @@
+// A package's own trust order. This package trusts its catalog contract above a declared value for every
+// facet, and puts observed first for runtime. The incoming intake is in intakes.json.
+trust:
+  person
+  catalogLookup
+  declared
+  reported
+facet-trust:
+  runtime: observed, person
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  runtime: 97min [origin: observed, via: L-2]

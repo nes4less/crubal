@@ -1,0 +1,4 @@
+contract: lookup
+  kind: receive
+  reads:
+    Format -> format

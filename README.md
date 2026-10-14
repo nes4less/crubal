@@ -10,7 +10,7 @@ The engine is universal at the kind level; commerce, media and the rest are pack
 | [`corpus/`](corpus/README.md) | the conformance test corpus | CC-BY-4.0 |
 | `packages/crubal/` | the reference implementation, `@cruba/crubal` (TypeScript first; a Rust core compiled to WebAssembly once the language freezes) | Apache-2.0 |
 
-**Status:** the spec is a complete working draft. The reference implementation passes the **Reader**, **Dictionary**, **Rules** and **Store** levels (Store with known gaps) and is being built level by level
+**Status:** the spec is a complete working draft. The reference implementation passes the **Reader**, **Dictionary**, **Rules** and **Store** levels and is being built level by level
 (Reader, Dictionary, Rules, Store, Exchange, Views); each level is done when its corpus folders pass.
 
 The home of the core definitions and standard packages will be `crubal.com`.

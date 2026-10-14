@@ -1,0 +1,37 @@
+{
+ "by-key": [
+  {
+   "key": "market:Studio",
+   "objects": 6,
+   "values": 3
+  },
+  {
+   "key": "market:Signed",
+   "objects": 5,
+   "values": 1
+  },
+  {
+   "key": "format",
+   "objects": 2,
+   "values": 1,
+   "outcome": "new"
+  },
+  {
+   "key": "market:Misprint",
+   "objects": 1,
+   "values": 1
+  }
+ ],
+ "proposals": [
+  {
+   "key": "market:Studio",
+   "objects": 6,
+   "state": "candidate"
+  },
+  {
+   "key": "market:Signed",
+   "objects": 5,
+   "state": "candidate"
+  }
+ ]
+}

@@ -1,0 +1,12 @@
+// Review works by key across all objects (9.5), and a key seen on enough distinct records is proposed as
+// a candidate facet (recur, default 5). The intake records are in intakes.json.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: reported, via: L-1]
+product: P-2 [origin: reported, via: L-1]
+product: P-3 [origin: reported, via: L-1]
+product: P-4 [origin: reported, via: L-1]
+product: P-5 [origin: reported, via: L-1]
+product: P-6 [origin: reported, via: L-1]

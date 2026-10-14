@@ -102,7 +102,9 @@ facet-trust:
   matches the contract, then its origin; a value from another owner matches the domain, then its origin.
 - Of two sources, the one ranked earlier wins. Equal ranks keep the current value.
 - A source matching no entry ranks last.
-- `facet-trust` gives a facet its own order, tried before the package's.
+- `facet-trust` gives a facet its own order, tried before the package's: a source matching an entry of the
+  facet's order ranks by that entry; a source matching none of them ranks after all of them, by its place in
+  the package's order.
 - The default order, when a package has none, is `person`, `observed`, `declared`, `reported`, `derived`.
 
 Adopted values (chapter 8.2) are outside the trust order: they don't change until they are given back.
