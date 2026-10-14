@@ -1,0 +1,29 @@
+{
+  "crubal": "2",
+  "package": "test /2026-11-01",
+  "records": [
+    {
+      "id": "P-1", "kind": "item", "level": "product", "owner": "test.example",
+      "values": {
+        "videoCodec": "H.264",
+        "runtime": { "$qty": "96", "unit": "min" },
+        "releaseDate": "1997-10",
+        "format": "4K",
+        "hdrFormats": ["HDR10"]
+      },
+      "sources": { "*": { "origin": "declared", "via": "L-1" } }
+    },
+    {
+      "id": "P-2", "kind": "item", "level": "product", "owner": "test.example",
+      "values": {
+        "videoCodec": "VC-1",
+        "format": "Blu-ray",
+        "languages": ["English", "French", "Spanish"]
+      },
+      "sources": { "*": { "origin": "reported", "via": "L-2" } }
+    }
+  ],
+  "review": [
+    { "record": "P-2", "address": "languages", "step": "review: count of languages over 2", "held": true }
+  ]
+}

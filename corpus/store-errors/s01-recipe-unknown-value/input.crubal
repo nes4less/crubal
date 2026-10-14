@@ -1,0 +1,4 @@
+// A merge into a value the new version doesn't have.
+migration: test /2026-10-14 -> test /2026-11-01
+  facet: videoCodec
+    merge: AVC -> H.265

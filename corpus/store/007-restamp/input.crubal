@@ -1,0 +1,16 @@
+// Records written under test /2026-10-14, restamped by recipe.crubal to test /2026-11-01.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  videoCodec: AVC
+  runtime: 1.6h
+  releaseDate: 1997-10-03
+  format: Blu-ray
+  hdrFormats: HDR10
+
+product: P-2 [origin: reported, via: L-2]
+  videoCodec: "VC 1"
+  format: Blu-ray
+  languages: English, French, Spanish

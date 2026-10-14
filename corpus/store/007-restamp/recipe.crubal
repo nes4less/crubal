@@ -1,0 +1,15 @@
+migration: test /2026-10-14 -> test /2026-11-01
+  facet: videoCodec
+    rename: "VC 1" -> VC-1
+    merge: AVC, H264 -> H.264
+  facet: runtime
+    convert: h -> min
+    rounding: nearest
+  facet: releaseDate
+    precision: day -> month
+  facet: format
+    split: Blu-ray
+      when: hdrFormats has -> 4K
+      else: Blu-ray
+  facet: languages
+    review: count of languages over 2
