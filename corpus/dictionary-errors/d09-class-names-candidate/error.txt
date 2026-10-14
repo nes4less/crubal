@@ -1,1 +1,1 @@
-7 spineNumber is a candidate; a class line can only name an active facet
+8 spineNumber is a candidate; a class line can only name an active facet

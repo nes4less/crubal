@@ -11,7 +11,7 @@
   "scripts": {
     "test": "node --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "corpus": "node bin/crubal.ts test ../../corpus --level reader"
+    "corpus": "node bin/crubal.ts test ../../corpus --level dictionary"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

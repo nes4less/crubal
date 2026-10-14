@@ -1,7 +1,7 @@
 // print-text.ts: the JSON form (spec chapter 3) back to canonical text (chapter 2.9). Full mode writes the
 // envelope lines and sources, so reading the print gives the same pairs back.
 
-import type { Dictionary, Facet } from "./defs.ts";
+import { blank, type Dictionary, type Facet } from "./defs.ts";
 import { writeText } from "./lex.ts";
 import type { Json, JsonObject, Record, Source, Wrapper } from "./model.ts";
 
@@ -22,7 +22,7 @@ function sourcePairs(s: Source | undefined): [string, string][] {
   return out;
 }
 
-const TEXT: Facet = { key: "", type: "text", many: false, ordered: false };
+const TEXT: Facet = blank("", "text");
 
 /** Spellings that would read as another shape under this facet, so text holding them must be quoted. */
 function otherShapes(f: Facet): string[] {

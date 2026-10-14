@@ -1,5 +1,5 @@
 [
-  { "address": "parts[discs]", "outcome": "contradiction", "cites": { "type": "BoxSet: disc" }, "reason": "plural of a non-fungible slot" },
-  { "address": "parts[discs].crubal:count", "outcome": "contradiction", "cites": { "type": "BoxSet: disc" }, "reason": "count on a non-fungible slot" },
-  { "address": "parts[aa].crubal:count", "outcome": "absorbed" }
+  {"record": "P-1", "address": "parts[discs]", "outcome": "contradiction", "cites": {"type": "BoxSet: disc"}, "reason": "plural of a non-fungible slot"},
+  {"record": "P-1", "address": "parts[discs].crubal:count", "outcome": "contradiction", "cites": {"type": "BoxSet: disc"}, "reason": "count on a non-fungible slot"},
+  {"record": "P-1", "address": "parts[aa].crubal:count", "outcome": "absorbed"}
 ]

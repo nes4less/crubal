@@ -1,4 +1,15 @@
 // Non-fungible slots itemize; only a fungible slot may count.
+discFormat{DVD-5|DVD-9}
+cellType{AA|AAA}
+
+class: Disc
+  facets:
+    discFormat
+
+class: Battery
+  facets:
+    cellType
+
 class: BoxSet
   parts:
     disc: Disc *

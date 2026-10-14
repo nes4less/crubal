@@ -275,3 +275,9 @@ function orderRecord(r: Record): Record {
 }
 
 export { writeText };
+
+/** Read one value's text under a facet, as if it had been written on that facet's line. */
+export function readUnder(f: Facet, text: string, dict: Dictionary, line = 0): Json | undefined {
+  const node: Node = { kind: "pair", key: f.key, value: text, text, line, indent: 0, children: [] };
+  return readValue(f, node, { dict, sources: {} }, f.key);
+}

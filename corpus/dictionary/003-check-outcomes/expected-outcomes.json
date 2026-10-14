@@ -1,11 +1,11 @@
 [
-  { "address": "title", "outcome": "absorbed", "flag": "length" },
-  { "address": "format", "outcome": "new" },
-  { "address": "releaseDate", "outcome": "absorbed", "flag": "precision" },
-  { "address": "runtime", "outcome": "absorbed", "flag": "range" },
-  { "address": "genres[\"Comedy\"]", "outcome": "absorbed" },
-  { "address": "genres[\"Western\"]", "outcome": "new" },
-  { "address": "region", "outcome": "contradiction", "cites": { "type": "region" } },
-  { "address": "discs", "outcome": "contradiction", "cites": { "type": "discs" } },
-  { "address": "languages", "outcome": "contradiction", "cites": { "type": "languages" } }
+  {"record": "P-2", "address": "title", "outcome": "absorbed", "flag": "length"},
+  {"record": "P-2", "address": "format", "outcome": "new"},
+  {"record": "P-2", "address": "releaseDate", "outcome": "absorbed", "flag": "precision"},
+  {"record": "P-2", "address": "runtime", "outcome": "absorbed", "flag": "range"},
+  {"record": "P-2", "address": "genres[\"Comedy\"]", "outcome": "absorbed"},
+  {"record": "P-2", "address": "genres[\"Western\"]", "outcome": "new"},
+  {"record": "P-2", "address": "region", "outcome": "contradiction", "cites": {"type": "region"}},
+  {"record": "P-2", "address": "discs", "outcome": "contradiction", "cites": {"type": "discs"}},
+  {"record": "P-2", "address": "languages", "outcome": "contradiction", "cites": {"type": "languages"}}
 ]
