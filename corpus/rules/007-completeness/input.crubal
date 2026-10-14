@@ -1,5 +1,7 @@
 // Completeness: asked facets with a value / asked facets. Unknown is empty; "-" is answered.
 // Parts are measured on themselves and never added to the whole's count.
+discFormat{DVD-5|DVD-9}
+
 class: Film
   facets:
     title

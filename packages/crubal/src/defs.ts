@@ -95,10 +95,12 @@ export type Dictionary = {
   classes: Map<string, ClassDef>;
   /** level name → kind name */
   levels: Map<string, string>;
+  /** level name → the facets that vary at the step into it (11.2) */
+  vary: Map<string, Set<string>>;
 };
 
 export function emptyDictionary(): Dictionary {
-  const d: Dictionary = { facets: new Map(), classes: new Map(), levels: new Map() };
+  const d: Dictionary = { facets: new Map(), classes: new Map(), levels: new Map(), vary: new Map() };
   // Core facets (spec 1.6, 5.6).
   d.facets.set("crubal:count", { ...blank("crubal:count", "number") });
   const notables = blank("crubal:notables", "compound");
@@ -540,6 +542,13 @@ export function readDefinitions(source: string, into: Dictionary = emptyDictiona
         const levels = node.children.find((c) => c.key === "levels");
         const names = levels ? splitTop(levels.value, ",", levels.line) : [kind];
         for (const level of names) into.levels.set(level, kind);
+        const vary = node.children.find((c) => c.key === "vary");
+        for (const step of vary?.children ?? []) {
+          if (!step.key) continue;
+          const set = into.vary.get(step.key) ?? new Set<string>();
+          for (const k of splitTop(step.value, ",", step.line)) if (k) set.add(k);
+          into.vary.set(step.key, set);
+        }
         continue;
       }
       if (SKIP.has(node.key) || node.key === "crubal" || node.key === "owner") continue;

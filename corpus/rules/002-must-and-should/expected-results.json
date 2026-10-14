@@ -1,5 +1,5 @@
 [
   { "record": "P-3", "result": "refused", "address": "hdrFormats", "rule": "hdrOnlyOnHd" },
-  { "record": "P-4", "result": "incomplete", "rule": "titleRequired" },
+  { "record": "P-4", "result": "incomplete", "address": "title", "rule": "titleRequired" },
   { "record": "P-4", "result": "flagged", "address": "runtime", "rule": "sensibleRuntime" }
 ]

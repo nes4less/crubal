@@ -36,6 +36,10 @@ corpus/
   rules-errors/      rule sets a package publish must refuse
 ```
 
+`rules/` results are compared by kind: for every result kind a case lists (`complete`, `filled`, `derived`,
+`flagged`, `incomplete`, `refused`, `held`, `completeness`), the set of (record, address) pairs of that kind
+must match exactly, and each listed field must be equal. Kinds a case doesn't list aren't compared.
+
 `store/` cases hold a `log.json` and `expected-verify.json` (does the chain check out, and where does it
 break), or a record, an `intake.json` and the `expected.json` record after it lands. Intake cases add a
 `contract.crubal`, an `answer.json` and `expected-intake.json`; evidence cases add `observations.json` and

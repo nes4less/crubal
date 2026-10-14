@@ -6,6 +6,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { canonical } from "./canonical.ts";
 import { type Dictionary, emptyDictionary, readDefinitions, splitCaseInput } from "./defs.ts";
+import { checkRules, Engine, readRules, type Result, type Rule } from "./rules.ts";
 import { checkPackage, checkRecord, facetJson, foldRecord, type Outcome, resolve, resolvedJson } from "./dictionary.ts";
 import type { Json } from "./model.ts";
 import { serialize } from "./canonical.ts";
@@ -19,6 +20,7 @@ export type CaseResult = { folder: string; name: string; pass: boolean; detail?:
 const LEVEL_FOLDERS: { [level: string]: string[] } = {
   reader: ["reader", "reader-errors"],
   dictionary: ["reader", "reader-errors", "dictionary", "dictionary-errors"],
+  rules: ["reader", "reader-errors", "dictionary", "dictionary-errors", "rules", "rules-errors"],
 };
 
 /** The shared definitions a folder's cases run under: the reader package, then the folder's own files. */
@@ -33,7 +35,7 @@ function loadDictionary(root: string, folder: string): Dictionary {
 }
 
 function copy(d: Dictionary): Dictionary {
-  return { facets: new Map(d.facets), classes: new Map(d.classes), levels: new Map(d.levels) };
+  return { facets: new Map(d.facets), classes: new Map(d.classes), levels: new Map(d.levels), vary: new Map(d.vary) };
 }
 
 /** Each expected entry must match an actual one on every field it states; entry sets must be the same. */
@@ -152,6 +154,66 @@ function runCase(folder: string, dir: string, name: string, dict: Dictionary): C
   }
 }
 
+function compareResults(actual: Result[], expected: Result[]): string | null {
+  const ident = (o: Result) => `${o.result}|${o.record}|${o.address ?? ""}`;
+  const kinds = new Set(expected.map((e) => e.result));
+  const pool = actual.filter((a) => kinds.has(a.result));
+  const want = new Set(expected.map(ident));
+  const extra = pool.filter((a) => !want.has(ident(a)));
+  if (extra.length) return `unexpected: ${extra.map((e) => serialize(e as unknown as Json)).join(" ")}`;
+  for (const e of expected) {
+    const a = pool.find((x) => ident(x) === ident(e)) as unknown as { [k: string]: Json } | undefined;
+    if (!a) return `missing: ${serialize(e as unknown as Json)}`;
+    for (const [k, v] of Object.entries(e)) {
+      if (serialize(a[k] as Json) !== serialize(v as Json)) return `${ident(e)}: ${k} is ${serialize((a[k] ?? "∅") as Json)}, expected ${serialize(v as Json)}`;
+    }
+  }
+  return null;
+}
+
+function runRulesCase(folder: string, caseDir: string, name: string, shared: Dictionary, sharedRules: Rule[]): CaseResult {
+  const input = readFileSync(join(caseDir, "input.crubal"), "utf8");
+  try {
+    if (folder === "rules-errors") {
+      const want = Number(readFileSync(join(caseDir, "error.txt"), "utf8").trim().split(/\s/)[0]);
+      try {
+        const d = copy(shared);
+        readDefinitions(input, d);
+        checkPackage(d);
+        checkRules(readRules(input), d);
+        return { folder, name, pass: false, detail: "published without refusing" };
+      } catch (e) {
+        if (!(e instanceof CrubalError)) return { folder, name, pass: false, detail: String(e) };
+        return e.line === want ? { folder, name, pass: true } : { folder, name, pass: false, detail: `refused at line ${e.line} (${e.message}), expected line ${want}` };
+      }
+    }
+    const { defs, data } = splitCaseInput(input);
+    const dict = copy(shared);
+    if (defs.trim()) readDefinitions(defs, dict);
+    const rules = [...sharedRules, ...readRules(defs)];
+    checkPackage(dict);
+    checkRules(rules, dict);
+    const engine = new Engine(dict, rules);
+    const altFile = join(caseDir, "alternatives.json");
+    const alts = existsSync(altFile) ? (JSON.parse(readFileSync(altFile, "utf8")) as { [id: string]: Json }) : {};
+    const last = new Map<string, Result[]>();
+    const run = (text: string) => {
+      for (const r of readText(text, dict).records.map((x) => foldRecord(x, dict))) {
+        if (alts[r.id]) (r as unknown as { alternatives: Json }).alternatives = alts[r.id] as Json;
+        last.set(r.id, engine.write(r));
+      }
+    };
+    run(data);
+    const writeFile = join(caseDir, "write.crubal");
+    if (existsSync(writeFile)) run(readFileSync(writeFile, "utf8"));
+    const actual = [...last.values()].flat();
+    const problem = compareResults(actual, JSON.parse(readFileSync(join(caseDir, "expected-results.json"), "utf8")) as Result[]);
+    return problem ? { folder, name, pass: false, detail: problem } : { folder, name, pass: true };
+  } catch (e) {
+    return { folder, name, pass: false, detail: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 /** Run one level's corpus folders under `root`. */
 export function runCorpus(root: string, level: string): CaseResult[] {
   const folders = LEVEL_FOLDERS[level];
@@ -160,9 +222,15 @@ export function runCorpus(root: string, level: string): CaseResult[] {
   for (const folder of folders) {
     const dir = join(root, folder);
     const dict = loadDictionary(root, folder);
+    const rulesFile = join(root, "rules", "_rules.crubal");
+    const sharedRules = folder === "rules" && existsSync(rulesFile) ? readRules(readFileSync(rulesFile, "utf8")) : [];
     for (const name of readdirSync(dir).sort()) {
       if (name.startsWith("_") || !existsSync(join(dir, name, "input.crubal"))) continue;
-      const r = folder.startsWith("dictionary") ? runDictionaryCase(folder, join(dir, name), name, dict) : runCase(folder, dir, name, dict);
+      const r = folder.startsWith("rules")
+        ? runRulesCase(folder, join(dir, name), name, dict, sharedRules)
+        : folder.startsWith("dictionary")
+          ? runDictionaryCase(folder, join(dir, name), name, dict)
+          : runCase(folder, dir, name, dict);
       if (r) results.push(r);
     }
   }

@@ -5,7 +5,7 @@ import { runCorpus } from "../src/index.ts";
 
 const corpus = fileURLToPath(new URL("../../../corpus", import.meta.url));
 
-for (const level of ["reader", "dictionary"]) {
+for (const level of ["reader", "dictionary", "rules"]) {
   test(`the implementation passes the ${level} corpus`, () => {
     const results = runCorpus(corpus, level);
     const failed = results.filter((r) => !r.pass);

@@ -7,7 +7,12 @@ import { CrubalError } from "./tree.ts";
 
 export type Truth = true | false | "undetermined";
 
-type Expr =
+/** What a condition can know beyond values: each address's states (6.3.2). */
+export type StateOf = (path: string) => Set<string>;
+
+export const STATES = new Set(["confirmed", "contradicted", "unobserved", "conflicted", "new", "held", "adopted", "suggested"]);
+
+export type Expr =
   | { op: "and" | "or"; a: Expr; b: Expr }
   | { op: "not"; a: Expr }
   | { op: "test"; path: string; verb: string; arg: string };
@@ -75,7 +80,8 @@ function emptyOf(v: Json | undefined): "absent" | "unknown" | "n/a" | null {
   return null;
 }
 
-function test(e: Extract<Expr, { op: "test" }>, values: JsonObject): Truth {
+function test(e: Extract<Expr, { op: "test" }>, values: JsonObject, states?: StateOf): Truth {
+  if (e.verb === "is" && STATES.has(e.arg)) return states ? states(e.path).has(e.arg) : false;
   const v = values[e.path];
   const empty = emptyOf(v);
   if (e.verb === "has") {
@@ -106,14 +112,14 @@ function test(e: Extract<Expr, { op: "test" }>, values: JsonObject): Truth {
   return "undetermined";
 }
 
-export function evaluate(e: Expr, values: JsonObject): Truth {
-  if (e.op === "test") return test(e, values);
+export function evaluate(e: Expr, values: JsonObject, states?: StateOf): Truth {
+  if (e.op === "test") return test(e, values, states);
   if (e.op === "not") {
-    const a = evaluate(e.a, values);
+    const a = evaluate(e.a, values, states);
     return a === "undetermined" ? a : !a;
   }
-  const a = evaluate(e.a, values);
-  const b = evaluate(e.b, values);
+  const a = evaluate(e.a, values, states);
+  const b = evaluate(e.b, values, states);
   if (e.op === "and") {
     if (a === false || b === false) return false;
     return a === true && b === true ? true : "undetermined";

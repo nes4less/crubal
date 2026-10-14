@@ -168,9 +168,10 @@ comes back if the verdict changes again, and a person or a migration recipe (cha
 The rules that apply to a record are those whose `for` it matches, from every class it wears, every facet
 shortcut, and the package. A package MUST be refused at publish when its rule set breaks any of these:
 
-1. **Layered.** Draw an edge from every key a rule reads (in `when` or on the right of `then`) to the key it
-   produces. The graph MUST have no cycle: no rule depends on its own effect, and no two fills chase each
-   other.
+1. **Layered.** Draw an edge from every address a rule reads (in `when` or on the right of `then`) to the
+   address it produces. The graph MUST have no cycle: no rule depends on its own effect, and no two fills
+   chase each other. Addresses, not bare keys: a rollup that reads `parts[*].condition` and produces
+   `condition` on the whole is not a cycle.
 2. **No contradictions.** Two `must` rules that can apply to the same record MUST NOT require disjoint
    values of the same key. Implementations MUST detect this at least for `is`, `in` and range tests whose
    `when` conditions are both satisfiable at once; they MAY detect more.

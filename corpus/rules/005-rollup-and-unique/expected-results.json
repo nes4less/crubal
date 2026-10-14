@@ -1,6 +1,7 @@
 [
   { "record": "P-7", "result": "complete" },
   { "record": "P-7", "result": "derived", "address": "listingTitle", "value": "Christmas Vacation [Blu-ray]", "rule": "listingTitle" },
+  { "record": "U-7", "result": "complete" },
   { "record": "U-7", "result": "derived", "address": "condition", "value": "G", "rule": "unitCondition" },
   { "record": "P-8", "result": "refused", "address": "gtin", "rule": "gtinUnique" }
 ]
