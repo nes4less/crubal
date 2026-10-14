@@ -17,9 +17,17 @@ corpus/
     e01-tab-indent/
       input.crubal
       error.txt      line number, then a short description of the error
+  dictionary/        cases every Dictionary-level implementation must pass
+    _facets.crubal   the definitions the data cases use
+    001-…/
+      input.crubal   definitions or data in
+      long.crubal    (definition cases) the same definitions in the long form
+      expected.json  the definitions (JSON, chapter 4.6) or the folded data it must read to
+      expected-outcomes.json  (check cases) the outcome for each address (chapter 4.9)
+  dictionary-errors/ definitions a package publish must refuse
 ```
 
-Later levels (`dictionary/`, `rules/`, `store/`, `exchange/`) follow the same layout.
+Later levels (`rules/`, `store/`, `exchange/`) follow the same layout.
 
 ## Passing a case
 

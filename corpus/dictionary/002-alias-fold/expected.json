@@ -1,0 +1,15 @@
+{
+  "crubal": "2",
+  "package": "test /2026-10-14",
+  "records": [
+    {
+      "id": "P-1", "kind": "item", "level": "product", "owner": "test.example",
+      "values": {
+        "title": "Christmas Vacation",
+        "format": "DVD",
+        "runtime": { "$qty": "90", "unit": "min" }
+      },
+      "sources": { "*": { "origin": "reported", "via": "L-1" } }
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+// Key and value aliases fold away, with case and spacing folded too. Stored data holds only real names.
+// (A key alias with a space, like "Video Format", can only arrive through intake: text keys have no spaces.)
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: reported, via: L-1]
+  name: Christmas Vacation
+  VIDEOFORMAT: dvd   video
+  runtime: 1.5h

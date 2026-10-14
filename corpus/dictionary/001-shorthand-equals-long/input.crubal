@@ -1,0 +1,5 @@
+// Shorthand.
+videoCodec{MPEG-2|H.264|VC-1~vc1|HEVC|AV1} ~codec =schema:encodingFormat /2026-10-13
+condition{NM|VG|G|F|P} ranked
+runtime#min 1..600
+cast(person&Person character$)* ordered identity: person

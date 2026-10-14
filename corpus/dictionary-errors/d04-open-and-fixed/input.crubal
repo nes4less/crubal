@@ -1,0 +1,2 @@
+// A list is open or fixed, never both.
+region{A|B|C|...} fixed

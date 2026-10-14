@@ -1,0 +1,11 @@
+[
+  { "address": "title", "outcome": "absorbed", "flag": "length" },
+  { "address": "format", "outcome": "new" },
+  { "address": "releaseDate", "outcome": "contradiction", "cites": { "type": "releaseDate" } },
+  { "address": "runtime", "outcome": "absorbed", "flag": "range" },
+  { "address": "genres[\"Comedy\"]", "outcome": "absorbed" },
+  { "address": "genres[\"Western\"]", "outcome": "new" },
+  { "address": "region", "outcome": "contradiction", "cites": { "type": "region" } },
+  { "address": "discs", "outcome": "contradiction", "cites": { "type": "discs" } },
+  { "address": "languages", "outcome": "contradiction", "cites": { "type": "languages" } }
+]

@@ -1,0 +1,9 @@
+// Facet definitions the dictionary cases use.
+title$80 ~name
+format{DVD~"DVD Video"|Blu-ray~BD~Bluray|4K} ~"Video Format" ~videoFormat
+releaseDate@ym
+runtime#min 1..600 accepts: h
+genres{Comedy|Holiday|Drama|...}*
+region{A|B|C} fixed
+discs#
+languages$*2

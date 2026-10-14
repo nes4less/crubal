@@ -1,0 +1,14 @@
+// What a Dictionary-level reader reports for values that don't fit their facets.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-2 [origin: reported, via: L-1]
+  title: A title well over eighty characters long, which the length setting flags but does not refuse
+  format: HD-DVD
+  releaseDate: 1989
+  runtime: 900min
+  genres: Comedy, Western
+  region: D
+  discs: two
+  languages: English, French, Spanish

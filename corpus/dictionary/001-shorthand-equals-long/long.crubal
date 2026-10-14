@@ -1,0 +1,26 @@
+// The same four facets in the long form.
+facet: videoCodec
+  type: choice
+  values: MPEG-2, H.264, VC-1 ~vc1, HEVC, AV1
+  aliases: codec
+  same-as: schema:encodingFormat
+  version: 2026-10-13
+
+facet: condition
+  type: choice
+  values: NM, VG, G, F, P
+  ranked: yes
+
+facet: runtime
+  type: number
+  unit: min
+  range: 1..600
+
+facet: cast
+  type: compound
+  pick: any
+  ordered: yes
+  identity: person
+  facets:
+    person&Person
+    character$

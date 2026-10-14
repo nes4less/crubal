@@ -1,4 +1,4 @@
-// Facet lines in the settled marks (blueprint section 14). Chapter 4 makes them normative.
+// Facet definitions, in chapter 4's shorthand and long form.
 title$
 subtitle$
 format{DVD|Blu-ray|4K}
@@ -16,8 +16,8 @@ director&Person
 homepage&url
 cover^
 region{US|UK|...}
-rating{G|PG|PG-13|R|15|...}*
-condition{NM|VG|G|F|P}
+rating{G|PG|PG-13|R|15|...}* qualifiers: region
+condition{NM|VG|G|F|P} ranked
 discFormat{DVD-5|DVD-9|BD-25|BD-50}
 note$
 

@@ -1,0 +1,3 @@
+// A key alias that folds to another facet's key.
+title$ ~name
+name$

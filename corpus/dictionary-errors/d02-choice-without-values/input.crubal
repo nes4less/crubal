@@ -1,0 +1,3 @@
+// A choice facet must have values.
+facet: subgenre
+  type: choice

@@ -17,7 +17,7 @@ The chapters follow the stack from the bottom. Each refers only to the chapters 
 | 1 | [Data and the value model](01-data.md) | draft |
 | 2 | [The text form](02-text.md) | draft |
 | 3 | [The JSON form](03-json.md) | draft |
-| 4 | Facets | not written |
+| 4 | [Facets](04-facets.md) | draft |
 | 5 | Classes | not written |
 | 6 | Rules | not written |
 | 7 | Contracts | not written |

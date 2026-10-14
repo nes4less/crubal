@@ -1,0 +1,20 @@
+[
+  {
+    "facet": "videoCodec", "type": "choice",
+    "values": [
+      { "value": "MPEG-2" }, { "value": "H.264" }, { "value": "VC-1", "aliases": ["vc1"] },
+      { "value": "HEVC" }, { "value": "AV1" }
+    ],
+    "aliases": ["codec"], "same-as": ["schema:encodingFormat"], "version": "2026-10-13"
+  },
+  {
+    "facet": "condition", "type": "choice",
+    "values": [ { "value": "NM" }, { "value": "VG" }, { "value": "G" }, { "value": "F" }, { "value": "P" } ],
+    "ranked": true
+  },
+  { "facet": "runtime", "type": "number", "unit": "min", "range": { "min": "1", "max": "600" } },
+  {
+    "facet": "cast", "type": "compound", "pick": "any", "ordered": true, "identity": "person",
+    "facets": [ { "facet": "person", "type": "link", "to": "Person" }, { "facet": "character", "type": "text" } ]
+  }
+]
