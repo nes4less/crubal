@@ -22,7 +22,7 @@ The chapters follow the stack from the bottom. Each refers only to the chapters 
 | 6 | [Rules](06-rules.md) | draft |
 | 7 | [Contracts](07-contracts.md) | draft |
 | 8 | [Provenance and logs](08-provenance.md) | draft |
-| 9 | Intake and evidence | not written |
+| 9 | [Intake and evidence](09-intake.md) | draft |
 | 10 | Migrations | not written |
 | 11 | Packages | not written |
 | 12 | Views | stub until designed |

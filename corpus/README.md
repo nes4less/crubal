@@ -37,7 +37,9 @@ corpus/
 ```
 
 `store/` cases hold a `log.json` and `expected-verify.json` (does the chain check out, and where does it
-break), or a record, an `intake.json` and the `expected.json` record after it lands. `exchange/` cases add `run.crubal` (which contract runs on
+break), or a record, an `intake.json` and the `expected.json` record after it lands. Intake cases add a
+`contract.crubal`, an `answer.json` and `expected-intake.json`; evidence cases add `observations.json` and
+`expected-validation.json`. `exchange/` cases add `run.crubal` (which contract runs on
 which record), an optional `answer.json` (what the other side sent back) and `expected-run.json`.
 
 ## Passing a case

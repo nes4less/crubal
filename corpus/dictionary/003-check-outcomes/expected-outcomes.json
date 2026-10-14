@@ -1,7 +1,7 @@
 [
   { "address": "title", "outcome": "absorbed", "flag": "length" },
   { "address": "format", "outcome": "new" },
-  { "address": "releaseDate", "outcome": "contradiction", "cites": { "type": "releaseDate" } },
+  { "address": "releaseDate", "outcome": "absorbed", "flag": "precision" },
   { "address": "runtime", "outcome": "absorbed", "flag": "range" },
   { "address": "genres[\"Comedy\"]", "outcome": "absorbed" },
   { "address": "genres[\"Western\"]", "outcome": "new" },

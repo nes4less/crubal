@@ -59,8 +59,9 @@ contract: ebayListing
 | `when` | the trigger: a condition (chapter 6.3) that starts a run when it becomes true, or `asked` for runs started by a caller | all; default `asked` |
 | `who` | who may run it: a condition over the caller (7.6) | all |
 | `origin` | the origin of the values it brings in (chapter 1.9) | receive, form, take; default `reported` for systems and `declared` for forms |
-| `lands` | `value` (the default) or `suggestion` (7.5) | receive, form, take |
-| `absorb` · `ignore` · `keep-raw` | intake bypass (chapter 9) | receive, take |
+| `lands` | `value` (the default), `suggestion` (7.5) or `observation` (chapter 9.7) | receive, form, take |
+| `evidence` | with `lands: observation`: the evidence type (`photo`, `scan`, `disc-read`, `scale` …) | receive |
+| `absorb` · `ignore` · `keep-raw` · `prefix` | intake bypass, and the prefix raw fields are carried under (chapter 9.4) | receive, take |
 | `auth` · `scope` · `credential` | what the other side requires (7.6) | send, receive |
 | `retry` · `undo` | run handling (7.5) | send, receive |
 | `version` | the dated version | all |

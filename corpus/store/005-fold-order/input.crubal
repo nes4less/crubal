@@ -1,0 +1,8 @@
+// The fold runs map, then aliases, then shapes. The contract and raw payload are in contract.crubal and
+// answer.json; the record before intake is below.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation

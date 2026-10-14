@@ -1,0 +1,10 @@
+format{DVD~"DVD Video"|Blu-ray|4K}
+runtime#min
+contract: lookup
+  kind: receive
+  prefix: market
+  reads:
+    Format -> format
+    "Run Time" -> runtime
+  ignore: Condition
+  keep-raw: Studio

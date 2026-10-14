@@ -1,0 +1,9 @@
+{
+  "record": "P-1",
+  "address": "runtime",
+  "witnesses-for": 2,
+  "witnesses-against": 1,
+  "state": "contradicted",
+  "alternatives": [ { "value": { "$qty": "92", "unit": "min" }, "origin": "observed" } ],
+  "split-proposed": false
+}

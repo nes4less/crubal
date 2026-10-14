@@ -259,7 +259,7 @@ chapter 9's intake outcomes, and the checks are:
 | Check | Fails as |
 |---|---|
 | the value has the facet's shape (a date where a date is wanted) | contradiction, citing `type` |
-| a date has a precision the facet accepts; a more precise date is cut to what the facet keeps, and the intake record keeps the rest | contradiction when less precise than every accepted precision |
+| a date has a precision the facet accepts; a more precise date is cut to what the facet keeps, and the intake record keeps the rest | flagged when less precise than every accepted precision (it still lands) |
 | a quantity's unit is `unit` or in `accepts` | contradiction, citing `type` |
 | a choice value is in the list | **new** for an open or closed list; contradiction, citing `type`, for a fixed list |
 | no more values than `pick` allows | contradiction, citing `type`; review offers both fixes |

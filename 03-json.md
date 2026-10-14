@@ -195,6 +195,7 @@ chapter 8.5). A write that removes a value has
   "address": "runtime",
   "value": { "$qty": "97", "unit": "min" },
   "evidence": { "$image": "https://…/back-cover.jpg", "sha256": "77a0…" },
+  "evidence-type": "photo",
   "reading": "I-56AA",
   "supports": "P-4QX7"
 }

@@ -1,0 +1,12 @@
+// Observations from three units support the product's runtime. Two photos of U-1 are one witness; U-3's
+// disc read disagrees. Observations are in observations.json.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: reported, via: L-1]
+  runtime: 97min
+
+unit: U-1 of P-1 [origin: observed, via: L-2]
+unit: U-2 of P-1 [origin: observed, via: L-3]
+unit: U-3 of P-1 [origin: observed, via: L-4]
