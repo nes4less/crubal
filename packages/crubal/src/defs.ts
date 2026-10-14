@@ -311,8 +311,11 @@ function parseLine(text: string, line: number): Parsed {
         i += 2;
       }
     } else if (t.endsWith(":")) {
-      applySetting(facet, t.slice(0, -1), tails[i + 1] ?? "", line);
+      // A value runs on after a trailing comma: `accepts: g, lb, oz`.
+      let value = tails[i + 1] ?? "";
       i++;
+      while (value.endsWith(",") && i + 1 < tails.length) value += ` ${tails[++i]}`;
+      applySetting(facet, t.slice(0, -1), value, line);
     } else if (/^[a-z][\w-]*$/.test(t)) applySetting(facet, t, "yes", line);
     else throw new CrubalError(`unknown tail ${t} in ${text}`, line);
   }

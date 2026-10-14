@@ -1,0 +1,111 @@
+// The units table's records.
+crubal: 2
+package: crubal.com/units /2026-10-14
+owner: crubal.com
+
+measure: s
+  dimension: time
+  factor: 1
+  spellings: sec, secs, second, seconds
+  uncefact: SEC
+measure: min
+  dimension: time
+  factor: 60
+  spellings: MIN., mins, minute, minutes
+  uncefact: MIN
+measure: h
+  dimension: time
+  factor: 3600
+  spellings: hr, hrs, hour, hours
+  uncefact: HUR
+measure: mm
+  dimension: length
+  factor: 0.001
+  uncefact: MMT
+measure: cm
+  dimension: length
+  factor: 0.01
+  uncefact: CMT
+measure: m
+  dimension: length
+  factor: 1
+  uncefact: MTR
+measure: in
+  dimension: length
+  factor: 0.0254
+  spellings: inch, inches
+  uncefact: INH
+measure: ft
+  dimension: length
+  factor: 0.3048
+  spellings: foot, feet
+  uncefact: FOT
+measure: g
+  dimension: mass
+  factor: 0.001
+  uncefact: GRM
+measure: kg
+  dimension: mass
+  factor: 1
+  uncefact: KGM
+measure: oz
+  dimension: mass
+  factor: 0.028349523125
+  spellings: ounce, ounces
+  uncefact: ONZ
+measure: lb
+  dimension: mass
+  factor: 0.45359237
+  spellings: lbs, pound, pounds
+  uncefact: LBR
+measure: B
+  dimension: data
+  factor: 1
+  spellings: byte, bytes
+  uncefact: AD
+measure: KB
+  dimension: data
+  factor: 1000
+  uncefact: 2P
+measure: MB
+  dimension: data
+  factor: 1000000
+  uncefact: 4L
+measure: GB
+  dimension: data
+  factor: 1000000000
+  uncefact: E34
+measure: TB
+  dimension: data
+  factor: 1000000000000
+  uncefact: E35
+measure: each
+  dimension: count
+  factor: 1
+  spellings: ea, pc, pcs, piece, pieces
+  uncefact: EA
+
+currency: USD
+  name: US dollar
+  places: 2
+currency: EUR
+  name: Euro
+  places: 2
+currency: GBP
+  name: Pound sterling
+  places: 2
+currency: CAD
+  name: Canadian dollar
+  places: 2
+currency: AUD
+  name: Australian dollar
+  places: 2
+currency: MXN
+  name: Mexican peso
+  places: 2
+currency: JPY
+  name: Yen
+  places: 0
+currency: BHD
+  name: Bahraini dinar
+  places: 3

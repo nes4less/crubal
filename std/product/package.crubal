@@ -1,0 +1,76 @@
+// crubal.com/product: the item kind and the facets any product has. Commerce (prices, stock) is a separate
+// package that attaches to items; media and other domains extend this one.
+package: product /2026-10-14
+  owner: crubal.com
+  label: Products
+  crubal: 2
+  licence: CC-BY-4.0
+  prefixes:
+    schema: https://schema.org/
+    units: crubal.com/units
+
+kind: item
+  levels: group, product, unit
+  base: Item
+  schema:
+    group: schema:ProductGroup
+    product: schema:Product
+    unit: schema:IndividualProduct
+  vary:
+    product: edition, size, colour
+    unit: condition, serial, unitNotes
+
+title$200 =schema:name
+subtitle$200
+description$ =schema:description
+brand$ =schema:brand
+manufacturer$ =schema:manufacturer
+gtin$ unique =schema:gtin
+mpn$ =schema:mpn
+image^* =schema:image
+releaseDate@any =schema:releaseDate
+edition$
+size$ =schema:size
+colour$ ~color =schema:color
+weight#kg accepts: g, lb, oz =schema:weight
+serial$ =schema:serialNumber
+unitNotes$
+
+facet: dimensions
+  type: compound
+  label: Dimensions
+  facets:
+    height#cm accepts: mm, m, in
+    width#cm accepts: mm, m, in
+    depth#cm accepts: mm, m, in
+
+facet: condition
+  type: choice
+  values: new, like new, very good, good, acceptable, poor
+  ranked: yes
+  same-as: schema:itemCondition
+
+class: Item
+  label: Item
+  for: item
+  facets:
+    !title
+    subtitle
+    description
+    brand
+    manufacturer
+    gtin
+    mpn
+    image
+    releaseDate
+    section: Variant
+    edition
+    size
+    colour
+    section: Physical
+    weight
+    dimensions
+    section: This unit
+    unit::condition
+    unit::serial
+    unit::unitNotes

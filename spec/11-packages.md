@@ -14,8 +14,8 @@ package: me /2026-10-13
   licence: CC-BY-4.0
   extends: commerce /2026-10-01, media /2026-10-01
   prefixes:
-    commerce: crubal.example/commerce
-    media: crubal.example/media
+    commerce: crubal.com/commerce
+    media: crubal.com/media
     wd: https://www.wikidata.org/entity/
     schema: https://schema.org/
     ebay: ebay.com
@@ -39,7 +39,8 @@ package: me /2026-10-13
 | `terms` | how each audience may use what it's shown: `public: search yes, answer yes, train no` (chapter 12.5.1) |
 
 The rest of the package is its member files: `facet:`, `class:`, `rule:`, `contract:`, `kind:`, `view:` and
-`migration:` blocks, in any number of files.
+`migration:` blocks, in any number of files. A package MAY also publish **reference records** (data files in
+the text form, chapter 2) that others read but don't own copies of: the units table is one.
 
 **Prefixes are nicknames.** Identity is always the full `domain/name`; a prefix only abbreviates it inside a
 package or a wrapper, and readers compare after resolving (chapter 1.3). Two packages may use different
@@ -151,8 +152,8 @@ A published version MUST NOT change. A mistake is fixed by a new version.
   "id": "mediaencyclopedia.com/me",
   "crubal": "2",
   "licence": "CC-BY-4.0",
-  "extends": [ { "package": "crubal.example/commerce", "version": "2026-10-01" } ],
-  "prefixes": { "commerce": "crubal.example/commerce", "wd": "https://www.wikidata.org/entity/" },
+  "extends": [ { "package": "crubal.com/commerce", "version": "2026-10-01" } ],
+  "prefixes": { "commerce": "crubal.com/commerce", "wd": "https://www.wikidata.org/entity/" },
   "units": { "package": "crubal:units", "version": "2026-10-14" },
   "trust": ["person", "me:unitizer", "observed", "declared", "reported"],
   "facet-trust": { "runtime": ["observed", "person"] },
@@ -160,8 +161,56 @@ A published version MUST NOT change. A mistake is fixed by a new version.
 }
 ```
 
-## 11.7 Open
+## 11.7 The home: crubal.com
 
-- The registry where packages are found, and the spec's home domain.
+**The core** is the package `crubal.com/core`, and the prefix `crubal` always names it. Its names (envelope
+lines, origins, audiences, the core facets `crubal:notables`, `crubal:count` and `crubal:clonedFrom`, the
+shape `crubal:portable`) are fixed by this specification.
+
+**The standard packages** are published by crubal.com for anyone to extend:
+
+| Identity | Holds |
+|---|---|
+| `crubal.com/core` | the core's names |
+| `crubal.com/units` | the units table: units by dimension, with conversion factors and accepted spellings, and ISO 4217 currencies |
+| `crubal.com/product` | the `item` kind (group > product > unit) and the base product facets |
+| `crubal.com/service` | the `service` kind (service > booking) and the base service facets |
+| `crubal.com/commerce` | stock, offers, prices and shipping, attached to products and services |
+| `crubal.com/media` | films, shows, music and games: formats, codecs, regions, contained works, cast |
+
+**Where a package is.** A package's identity `domain/name` resolves through the domain's **well-known file**:
+
+```
+https://<domain>/.well-known/crubal.json
+```
+
+```json
+{
+  "crubal": "2",
+  "owner": "crubal.com",
+  "keys": { "crubal.com": { "alg": "Ed25519", "public": "…" } },
+  "packages": [
+    { "package": "crubal.com/product", "latest": "2026-10-14",
+      "versions": { "2026-10-14": "https://crubal.com/product/2026-10-14/package.json" } }
+  ]
+}
+```
+
+- `keys` holds the owner's published signing keys (chapter 8.5); a party with no published key has unsigned
+  data, which readers MAY refuse.
+- Each package lists its versions and where each version's bundle is: the package's definitions in the JSON
+  form, the same as its text files read through a Reader (chapters 4.6, 5.9, 6.10, 7.9, 10.6, 11.6).
+- A domain MAY also serve its packages as text, beside the JSON (`…/package.crubal`).
+
+crubal.com serves the standard packages at `https://crubal.com/<name>/`, a page for people, with each version
+at `https://crubal.com/<name>/<version>/package.crubal` and `…/package.json`.
+
+**The registry.** `https://crubal.com/registry/` lists known packages from any domain, and
+`https://crubal.com/registry/index.json` lists the same as data. Listing is optional and never changes where a
+package is or who owns it: the owner's well-known file is the truth. A package is listed by adding its
+identity to the registry file in the CRUBAL repository.
+
+## 11.8 Open
+
 - Language versions: what a `crubal: 3` would break, and how a package moves.
 - The standard units table itself.

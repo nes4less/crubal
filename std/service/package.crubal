@@ -1,0 +1,54 @@
+// crubal.com/service: the service kind (a service, and bookings of it).
+package: service /2026-10-14
+  owner: crubal.com
+  label: Services
+  crubal: 2
+  licence: CC-BY-4.0
+  prefixes:
+    schema: https://schema.org/
+
+kind: service
+  levels: service, booking
+  base: Service
+  schema:
+    service: schema:Service
+    booking: schema:Reservation
+  vary:
+    booking: bookingDate, startTime, bookingStatus, bookingNotes
+
+serviceName$200 =schema:name
+summary$ =schema:description
+provider$ =schema:provider
+area$ =schema:areaServed
+duration#min accepts: h, s
+bookingDate@ymd
+bookingStatus{requested|confirmed|completed|cancelled|no-show} ranked
+bookingNotes$
+
+facet: startTime
+  type: text
+  length: 5
+  label: Start time
+  describe: Local time of day as HH:MM, 24-hour. Text until the value model has a time of day (chapter 1.4 has dates only).
+
+class: Service
+  label: Service
+  for: service
+  facets:
+    !serviceName
+    summary
+    provider
+    area
+    duration
+    section: Booking
+    booking::bookingDate
+    booking::startTime
+    booking::bookingStatus
+    booking::bookingNotes
+
+rule: bookingHasDate
+  for: booking
+  when: bookingStatus in confirmed, completed
+  then: bookingDate has
+  strength: must
+  because: a confirmed booking needs its date

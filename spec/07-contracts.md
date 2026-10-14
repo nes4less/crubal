@@ -200,8 +200,8 @@ contract: catalogTake
   engine honours, backed by licence and law.
 - A presenter's update never overrides a value a person entered on the consumer's side, unless the consumer
   took `controlled` terms.
-- **Parties** are identified by domain, with their keys published at a well-known address on that domain
-  (the address is fixed when the spec's home is chosen).
+- **Parties** are identified by domain, with their keys published in the domain's well-known file,
+  `https://<domain>/.well-known/crubal.json` (chapter 11.7).
 
 ## 7.9 The JSON form
 
@@ -249,4 +249,3 @@ A package MUST be refused at publish when a contract breaks these:
 
 - Scheduled triggers (`every day at 03:00`) wait on `now` in conditions (chapter 6.11).
 - Partial success (a run that acted on some items and not others).
-- The well-known address for party keys.

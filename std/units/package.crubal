@@ -1,0 +1,55 @@
+// crubal.com/units: the units table (chapter 1.4.3). Units are reference records of the kind "measure";
+// currencies are records of the kind "currency". Readers fold the spellings and convert within a dimension.
+package: units /2026-10-14
+  owner: crubal.com
+  label: Units and currencies
+  crubal: 2
+  licence: CC-BY-4.0
+
+kind: measure
+  levels: measure
+  base: Measure
+
+kind: currency
+  levels: currency
+  base: Currency
+
+facet: dimension
+  type: choice
+  values: time, length, mass, data, count
+  fixed: yes
+
+facet: factor
+  type: number
+  describe: How many of the dimension's base unit one of this unit is (s, m, kg, B, each).
+
+facet: spellings
+  type: text
+  pick: any
+  describe: Other ways intake may write this unit; folded case-insensitively.
+
+facet: uncefact
+  type: text
+  label: UN/CEFACT code
+  describe: The unit's UN/CEFACT Recommendation 20 code, for borders that use it. Never a spelling.
+
+facet: places
+  type: number
+  describe: A currency's decimal places (ISO 4217 minor units).
+
+facet: name
+  type: text
+
+class: Measure
+  for: measure
+  facets:
+    !dimension
+    !factor
+    spellings
+    uncefact
+
+class: Currency
+  for: currency
+  facets:
+    !name
+    !places

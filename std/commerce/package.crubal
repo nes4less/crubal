@@ -1,0 +1,53 @@
+// crubal.com/commerce: the machinery of selling. It attaches to items and services; it is never part of
+// the core (chapter 1, "the engine is universal at the kind level").
+package: commerce /2026-10-14
+  owner: crubal.com
+  label: Commerce
+  crubal: 2
+  licence: CC-BY-4.0
+  extends: crubal.com/product /2026-10-14, crubal.com/service /2026-10-14
+  prefixes:
+    schema: https://schema.org/
+    product: crubal.com/product
+    service: crubal.com/service
+
+price#currency =schema:price
+compareAt#currency
+cost#currency
+sku$80 unique =schema:sku
+stock#
+offerStatus{draft|listed|reserved|sold|withdrawn}
+shippingWeight#kg accepts: g, lb, oz
+shipsFrom$
+taxCode$
+
+rule: listedNeedsPrice
+  when: offerStatus is listed
+  then: price has
+  strength: must
+  because: a listed offer needs a price
+
+rule: costIsStaff
+  then: cost shown to staff
+  strength: must
+
+rule: soldHasNoStock
+  when: offerStatus is sold
+  then: stock in 0..0
+  strength: should
+  because: a sold one-off has none left
+
+class: Offer
+  label: Offer
+  for: item, service
+  facets:
+    unit::price
+    unit::compareAt
+    unit::cost
+    unit::sku
+    unit::stock
+    !unit::offerStatus
+    section: Shipping
+    shippingWeight
+    shipsFrom
+    taxCode

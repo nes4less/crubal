@@ -191,7 +191,8 @@ tail     = "~" key                             ; key alias
 - **Settings with no mark** (`label`, `ask`, `describe`, `qualifiers`, `accepts`, `places`, `words`,
   `ranked`, `scored`, `fixed`, `na`, `unique`, `when`, `ordered`, `identity`, package settings) go on the line
   as bare tails: a word alone means `yes` (`ranked`), and `name: value` gives a value
-  (`identity: person`). A value with a space is quoted.
+  (`identity: person`). A list value runs on after each comma (`accepts: g, lb, oz`); any other value with a
+  space is quoted.
 - **The level mark** `unit::` belongs to class lines (chapter 5), not to a facet's own definition. Where a
   facet varies is declared by kinds and classes, never by the facet.
 

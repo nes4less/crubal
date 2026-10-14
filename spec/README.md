@@ -36,7 +36,7 @@ The chapters follow the stack from the bottom. Each refers only to the chapters 
   `json` blocks. A `//` note inside a JSON example is for the reader of this spec only; real JSON carries no
   comments.
 - `me:` in examples is the Media Encyclopedia package, CRUBAL's first adopter. `wd:` is Wikidata. `crubal:`
-  is a placeholder prefix for the core's own names until the spec's home domain is chosen.
+  is the core, `crubal.com/core` (chapter 11.7).
 
 ## Conformance levels
 
@@ -55,7 +55,6 @@ A claim is proven by passing that level's folder of the [test corpus](../corpus/
 
 ## Open in the spec (not in the design)
 
-- The spec's home domain, which replaces the `crubal:` placeholder.
 - Long text in the text form: quoted strings with `\n` work, but a readable block form is not designed.
 - The units table (UN/CEFACT based) that names which unit spellings are valid.
 - Losing values kept as alternatives (an `alternatives` map shaped like `sources`): recommended, awaiting a

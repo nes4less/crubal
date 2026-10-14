@@ -1,0 +1,26 @@
+// crubal.com/core: the core's own names (chapter 11.7). The envelope lines, origins and audiences are fixed
+// by the specification; the facets below are the core facets every package may use as crubal:<name>.
+package: core /2026-10-14
+  owner: crubal.com
+  label: CRUBAL core
+  crubal: 2
+  licence: CC-BY-4.0
+
+facet: notables
+  type: compound
+  pick: any
+  label: Notables
+  describe: Facts true of this one record that no class asks for: signed, misprint, edition number. A key that recurs across enough records is proposed as a facet (chapter 9.5).
+  facets:
+    key$80
+    value$
+
+facet: count
+  type: number
+  label: Count
+  describe: How many identical things a fungible part holds (chapter 5.6).
+
+facet: clonedFrom
+  type: link
+  label: Cloned from
+  describe: The record this one was adopted from, when a whole record was made one's own (chapter 8.2).

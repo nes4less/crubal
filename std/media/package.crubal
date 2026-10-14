@@ -1,0 +1,90 @@
+// crubal.com/media: films, shows, music and games, and the physical releases that carry them. A release
+// (a DVD) is an item; the work it carries (the film) is a shared part, a record of its own (chapter 1.6).
+package: media /2026-10-14
+  owner: crubal.com
+  label: Media
+  crubal: 2
+  licence: CC-BY-4.0
+  extends: crubal.com/product /2026-10-14
+  prefixes:
+    schema: https://schema.org/
+    wd: https://www.wikidata.org/entity/
+    product: crubal.com/product
+
+kind: work
+  levels: work
+  base: Work
+  schema: schema:CreativeWork
+
+workType{film|series|episode|album|track|game|book|special} =schema:additionalType
+workTitle$200 =schema:name
+originalTitle$200
+year@y =schema:datePublished
+genres{action|adventure|animation|comedy|documentary|drama|family|fantasy|holiday|horror|music|mystery|romance|science fiction|thriller|western|...}* =schema:genre
+director&person* =schema:director
+season#
+episode#
+runtime#min 1..1000 accepts: h, s =schema:duration
+works&work* ordered =schema:workExample
+format{DVD|Blu-ray|4K UHD Blu-ray|HD DVD|VHS|LaserDisc|CD|Vinyl|Cassette|Digital|...}
+videoCodec{MPEG-2|H.264|VC-1|HEVC|AV1|...}
+audioFormats{Dolby Digital|DTS|Dolby TrueHD|DTS-HD MA|Dolby Atmos|DTS:X|LPCM|Stereo|Mono|...}*
+hdrFormats{HDR10|HDR10+|Dolby Vision|HLG}*
+aspectRatio{1.33:1|1.66:1|1.78:1|1.85:1|2.00:1|2.35:1|2.39:1|...}
+dvdRegion{0|1|2|3|4|5|6|7|8}* fixed
+bluRayRegion{A|B|C|free}* fixed
+discFormat{DVD-5|DVD-9|DVD-10|BD-25|BD-50|BD-66|BD-100|CD|LP|...}
+rating$40 qualifiers: ratingBody
+ratingBody{MPAA|BBFC|FSK|ESRB|PEGI|ACB|CBFC|...}
+label$ =schema:publisher
+
+facet: cast
+  type: compound
+  pick: any
+  ordered: yes
+  identity: person
+  facets:
+    person&person
+    character$
+
+class: Work
+  label: Work
+  for: work
+  facets:
+    !workTitle
+    !workType
+    originalTitle
+    year
+    genres
+    director
+    cast
+    runtime
+    season when workType is episode
+    episode when workType is episode
+
+class: Release
+  label: Release
+  for: item
+  facets:
+    works
+    !format
+    label
+    rating
+    runtime
+    section: Picture and sound
+    videoCodec
+    hdrFormats
+    aspectRatio
+    audioFormats
+    section: Regions
+    dvdRegion
+    bluRayRegion
+  parts:
+    disc: Disc * match: discFormat
+
+class: Disc
+  label: Disc
+  facets:
+    discFormat
+    dvdRegion
+    bluRayRegion

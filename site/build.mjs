@@ -5,6 +5,7 @@ import { build as bundle } from "esbuild";
 import { marked } from "marked";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { readTree } from "../packages/crubal/src/tree.ts";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -41,6 +42,7 @@ const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">"
 const NAV = [
   ["/", "Home"],
   ["/spec/", "Spec"],
+  ["/registry/", "Packages"],
   ["/corpus/", "Corpus"],
   ["/play/", "Playground"],
   [REPO, "GitHub"],
@@ -252,6 +254,145 @@ page(
 page("/404/", "Not found · CRUBAL", `<h1>Not found</h1><p>That page doesn't exist. Try the <a href="/spec/">spec</a> or the <a href="/">home page</a>.</p>`);
 cpSync(join(here, "static"), out, { recursive: true });
 if (existsSync(join(out, "404", "index.html"))) cpSync(join(out, "404", "index.html"), join(out, "404.html"));
+// ─── Standard packages, the registry and the well-known file (chapter 11.7) ──
+
+const crubal = await import(join(root, "packages", "crubal", "src", "index.ts"));
+const STD = ["core", "units", "product", "service", "commerce", "media"];
+const stdPackages = [];
+
+function classJson(c) {
+  return {
+    class: c.name,
+    ...(c.label ? { label: c.label } : {}),
+    for: c.for,
+    ...(c.uses.length ? { uses: c.uses } : {}),
+    facets: c.lines.map((l) => ({
+      facet: l.facet,
+      ...(l.required ? { required: true } : {}),
+      ...(l.values ? { values: l.values } : {}),
+      ...(l.level ? { level: l.level } : {}),
+      ...(l.when ? { when: l.when } : {}),
+      ...(l.section ? { section: l.section } : {}),
+    })),
+    ...(c.parts.length ? { parts: c.parts.map((p) => ({ slot: p.slot, wears: p.wears, pick: p.many ? "any" : "1", ...(p.fungible ? { fungible: true } : {}), ...(p.match ? { match: p.match } : {}) })) } : {}),
+  };
+}
+
+const facetSummary = (f) => {
+  if (f.type === "choice") return `${(f.values ?? []).slice(0, 8).map((v) => v.value).join(", ")}${(f.values ?? []).length > 8 ? ", …" : ""}${f.open ? " (open)" : f.fixed ? " (fixed)" : ""}`;
+  if (f.type === "number") return f.unit ? `unit ${f.unit}${f.accepts.length ? `, accepts ${f.accepts.join(", ")}` : ""}` : "";
+  if (f.type === "date") return f.precision && f.precision !== "any" ? `${f.precision} precision` : "any precision";
+  if (f.type === "link") return f.to ? `to ${f.to}` : "";
+  if (f.type === "compound") return `${[...(f.children ?? new Map()).keys()].join(", ")}${f.identity ? `; rows by ${f.identity}` : ""}`;
+  if (f.type === "text") return f.length ? `up to ${f.length} characters` : "";
+  return "";
+};
+
+for (const name of STD) {
+  const dir = join(root, "std", name);
+  const src = readFileSync(join(dir, "package.crubal"), "utf8");
+  const [info] = crubal.readPackages(src);
+  const dict = crubal.readDefinitions(src);
+  const rules = crubal.readRules(src);
+  const facets = [...dict.facets.values()].filter((f) => !f.key.startsWith("crubal:"));
+  const recordsFile = readdirSync(dir).find((f) => f !== "package.crubal" && f.endsWith(".crubal"));
+  const records = recordsFile ? crubal.readText(readFileSync(join(dir, recordsFile), "utf8"), dict).records : [];
+  const id = `${info.owner}/${info.name}`;
+  const kinds = [...new Set(dict.levels.values())].map((k) => ({ kind: k, levels: [...dict.levels].filter(([, kk]) => kk === k).map(([l]) => l) }));
+  const head = readTree(src).find((n) => n.key === "package");
+  const label = head?.children.find((c) => c.key === "label")?.value ?? info.name;
+  const intro = src.split("\n").filter((l) => l.startsWith("//")).map((l) => l.replace(/^\/\/\s?/, "")).join(" ");
+  const bundle = {
+    crubal: "2",
+    package: info.name,
+    version: info.version,
+    id,
+    owner: info.owner,
+    label,
+    licence: "CC-BY-4.0",
+    ...(info.extends.length ? { extends: info.extends.map((e) => ({ package: e.name, version: e.version })) } : {}),
+    ...(info.prefixes.size ? { prefixes: Object.fromEntries([...info.prefixes].map(([k, v]) => [k, v.target])) } : {}),
+    ...(kinds.length ? { kinds } : {}),
+    facets: facets.map(crubal.facetJson),
+    ...(dict.classes.size ? { classes: [...dict.classes.values()].map(classJson) } : {}),
+    ...(rules.length ? { rules: rules.map((r) => ({ rule: r.name, for: r.for, ...(r.whenText ? { when: r.whenText } : {}), then: r.thenText, strength: r.strength, ...(r.because ? { because: r.because } : {}) })) } : {}),
+    ...(records.length ? { records } : {}),
+  };
+  for (const at of [`/${name}/`, `/${name}/${info.version}/`]) {
+    mkdirSync(join(out, at), { recursive: true });
+    writeFileSync(join(out, at, "package.crubal"), src);
+    writeFileSync(join(out, at, "package.json"), `${JSON.stringify(bundle, null, 2)}\n`);
+  }
+  stdPackages.push({ name, id, version: info.version, label, intro, facets: facets.length, classes: dict.classes.size });
+
+  const row = (cells) => `<tr>${cells.map((c) => `<td>${c}</td>`).join("")}</tr>`;
+  const table = (heads, rows) => (rows.length ? `<table><thead><tr>${heads.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>` : "");
+  const body = `<h1>${esc(label)}</h1>
+<p class="lede">${esc(intro)}</p>
+<table><tbody>
+${row(["Identity", `<code>${esc(id)}</code>`])}
+${row(["Version", `<code>${esc(info.version)}</code>`])}
+${info.extends.length ? row(["Extends", info.extends.map((e) => `<code>${esc(e.name)} /${esc(e.version)}</code>`).join(", ")]) : ""}
+${row(["Licence", "CC-BY-4.0"])}
+${row(["Files", `<a href="/${name}/package.crubal">package.crubal</a> · <a href="/${name}/package.json">package.json</a> · <a href="/${name}/${info.version}/package.json">${info.version}/package.json</a>`])}
+</tbody></table>
+${kinds.length ? `<h2>Kinds</h2>${table(["Kind", "Levels"], kinds.map((k) => row([`<code>${esc(k.kind)}</code>`, esc(k.levels.join(" > "))])))}` : ""}
+<h2>Facets</h2>
+${table(["Key", "Type", "How many", "Values and settings", "Same as"], facets.map((f) => row([`<code>${esc(f.key)}</code>`, f.type, f.many ? (f.pick === "any" ? "any" : `up to ${f.pick}`) : "one", esc(facetSummary(f)), esc(f.sameAs.join(", "))])))}
+${dict.classes.size ? `<h2>Classes</h2>${[...dict.classes.values()].map((c) => `<h3>${esc(c.label ?? c.name)} <code>${esc(c.name)}</code></h3><p>For ${esc(c.for.join(", ") || "every kind")}.${c.uses.length ? ` Uses ${esc(c.uses.join(", "))}.` : ""}</p>${table(["Facet", "Asked", "Narrowed to", "Level"], c.lines.map((l) => row([`<code>${esc(l.facet)}</code>`, l.required ? "required" : l.when ? `when ${esc(l.when)}` : "", esc((l.values ?? []).join(", ")), esc(l.level ?? "")])))}${c.parts.length ? table(["Part slot", "Wears", "How many", ""], c.parts.map((p) => row([`<code>${esc(p.slot)}</code>`, esc(p.wears), p.many ? "any" : "one", p.fungible ? "fungible" : "itemized"]))) : ""}`).join("")}` : ""}
+${rules.length ? `<h2>Rules</h2>${table(["Rule", "When", "Then", "Strength"], rules.map((r) => row([`<code>${esc(r.name)}</code>`, esc(r.whenText), esc(r.thenText), r.strength])))}` : ""}
+${records.length ? `<h2>Records</h2>${table(["ID", "Kind", "Values"], records.map((r) => row([`<code>${esc(r.id)}</code>`, r.kind, esc(Object.entries(r.values).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : typeof v === "object" ? JSON.stringify(v) : v}`).join(" · "))])))}` : ""}
+<h2>Use it</h2>
+<pre><code>package: mine /2026-10-14
+  owner: example.com
+  extends: ${esc(id)} /${esc(info.version)}
+  prefixes:
+    ${esc(name)}: ${esc(id)}</code></pre>`;
+  page(`/${name}/`, `${label} · ${id}`, body, `${label}: the standard CRUBAL package ${id}. ${intro}`.slice(0, 158), {
+    "@context": "https://schema.org",
+    "@type": "Dataset",
+    name: `${label} (${id})`,
+    description: intro,
+    url: `${ORIGIN}/${name}/`,
+    license: "https://creativecommons.org/licenses/by/4.0/",
+    publisher: STEWARD,
+    distribution: [{ "@type": "DataDownload", encodingFormat: "application/json", contentUrl: `${ORIGIN}/${name}/package.json` }],
+  });
+}
+
+const listed = JSON.parse(readFileSync(join(root, "registry", "packages.json"), "utf8")).packages ?? [];
+const registry = [
+  ...stdPackages.map((p) => ({ package: p.id, latest: p.version, standard: true, url: `${ORIGIN}/${p.name}/` })),
+  ...listed,
+];
+mkdirSync(join(out, "registry"), { recursive: true });
+writeFileSync(join(out, "registry", "index.json"), `${JSON.stringify({ crubal: "2", packages: registry }, null, 2)}\n`);
+page(
+  "/registry/",
+  "CRUBAL packages and registry",
+  `<h1>Packages</h1>
+<p class="lede">The standard packages anyone can extend, and the registry of packages from any domain. A package <code>domain/name</code> resolves through <code>https://domain/.well-known/crubal.json</code>; listing here never changes who owns it.</p>
+<div class="cards">${stdPackages.map((p) => `<a class="card" href="/${p.name}/" style="text-decoration:none;color:inherit"><h3>${esc(p.label)}</h3><p><code>${esc(p.id)}</code> · ${p.facets} facets${p.classes ? `, ${p.classes} classes` : ""}</p></a>`).join("")}</div>
+<h2>Listed packages</h2>
+${listed.length ? `<ul>${listed.map((p) => `<li><code>${esc(p.package)}</code></li>`).join("")}</ul>` : `<p>None yet. Add yours with a pull request to <a href="${REPO}/blob/main/registry/packages.json"><code>registry/packages.json</code></a>.</p>`}
+<p>As data: <a href="/registry/index.json"><code>/registry/index.json</code></a>.</p>`,
+  "The standard CRUBAL packages (core, units, product, service, commerce, media) and the registry of packages from any domain.",
+);
+mkdirSync(join(out, ".well-known"), { recursive: true });
+writeFileSync(
+  join(out, ".well-known", "crubal.json"),
+  `${JSON.stringify(
+    {
+      crubal: "2",
+      owner: "crubal.com",
+      keys: {},
+      packages: stdPackages.map((p) => ({ package: p.id, latest: p.version, versions: { [p.version]: `${ORIGIN}/${p.name}/${p.version}/package.json` } })),
+    },
+    null,
+    2,
+  )}\n`,
+);
+
 // ─── For crawlers and agents (chapter 12.5) ──────────────────────────────────
 
 const today = new Date().toISOString().slice(0, 10);
@@ -263,6 +404,6 @@ writeFileSync(
 writeFileSync(join(out, "robots.txt"), `# terms: public: search yes, answer yes, train yes\nUser-agent: *\nAllow: /\n\nSitemap: ${ORIGIN}/sitemap.xml\n`);
 writeFileSync(
   join(out, "llms.txt"),
-  `# CRUBAL\n\n> An open language and engine for data about any kind of thing. Everything is a key and a value. Stewarded by Infinite Token.\n\nThe specification is CC-BY-4.0. Read the chapters as Markdown:\n\n${chapters.map((c) => `- [${c.title}](${RAW}/spec/${c.file})`).join("\n")}\n\n## Implementing it\n\n- [Conformance test corpus](${REPO}/tree/main/corpus): ${total} cases, level by level\n- [Reference implementation](${REPO}/tree/main/packages/crubal): npm \`@cruba/crubal\`\n`,
+  `# CRUBAL\n\n> An open language and engine for data about any kind of thing. Everything is a key and a value. Stewarded by Infinite Token.\n\nThe specification is CC-BY-4.0. Read the chapters as Markdown:\n\n${chapters.map((c) => `- [${c.title}](${RAW}/spec/${c.file})`).join("\n")}\n\n## Implementing it\n\n- [Conformance test corpus](${REPO}/tree/main/corpus): ${total} cases, level by level\n- [Reference implementation](${REPO}/tree/main/packages/crubal): npm \`@cruba/crubal\`\n\n## Standard packages\n\n${stdPackages.map((p) => `- [${p.label}](${ORIGIN}/${p.name}/package.json): \`${p.id}\``).join("\n")}\n`,
 );
 console.log(`built ${chapters.length} chapters, ${total} corpus cases, playground → site/dist`);

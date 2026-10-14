@@ -1,0 +1,4 @@
+{
+  "_about": "Packages listed on https://crubal.com/registry/ besides the standard ones. Add yours by pull request: its identity (domain/name), and the domain must serve /.well-known/crubal.json. Listing never changes ownership; the owner's well-known file is the truth.",
+  "packages": []
+}
