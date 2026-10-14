@@ -1,0 +1,8 @@
+// Two buckets of one filter may not hold the same value.
+condition{NM|VG|G|F|P} ranked
+
+filter: condition
+  facet: condition
+  buckets:
+    Good: VG, G
+    "Like new": NM, VG

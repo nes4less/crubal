@@ -36,6 +36,7 @@ package: me /2026-10-13
 | `units` | the units table it uses, pinned |
 | `confirm` · `split` | evidence thresholds (chapter 9.7): independent observations to confirm a value (default 2), instances to propose a version split (default 3) |
 | `trust` · `facet-trust` | the trust order (11.3) |
+| `terms` | how each audience may use what it's shown: `public: search yes, answer yes, train no` (chapter 12.5.1) |
 
 The rest of the package is its member files: `facet:`, `class:`, `rule:`, `contract:`, `kind:`, `view:` and
 `migration:` blocks, in any number of files.

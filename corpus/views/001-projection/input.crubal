@@ -1,0 +1,3 @@
+// Project the view "discs" over _records.crubal: pinned first, hidden left out, a record whose required
+// slot is empty dropped, the rest by releaseDate, newest first.
+view: discs

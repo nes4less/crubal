@@ -1,0 +1,40 @@
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: DVD
+  releaseDate: 1989
+  genres: Comedy, Holiday
+
+product: P-2 [origin: declared, via: L-1]
+  title: Home Alone
+  format: Blu-ray
+  releaseDate: 1990
+  genres: Comedy, Holiday
+
+product: P-3 [origin: declared, via: L-1]
+  title: Die Hard
+  format: 4K
+  releaseDate: 1988
+  genres: Drama, Western
+
+product: P-4 [origin: declared, via: L-1]
+  title: Hidden Title
+  format: DVD
+  releaseDate: 2001
+
+product: P-5 [origin: declared, via: L-1]
+  format: DVD
+  releaseDate: 1995
+
+unit: U-1 of P-1 [origin: observed, via: L-2]
+  condition: VG
+  price: 12.50USD
+unit: U-2 of P-1 [origin: observed, via: L-2]
+  condition: G
+  price: 8.00USD
+unit: U-3 of P-2 [origin: observed, via: L-2]
+  condition: F
+  price: 5.00USD

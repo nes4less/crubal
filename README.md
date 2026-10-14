@@ -25,7 +25,7 @@ The chapters follow the stack from the bottom. Each refers only to the chapters 
 | 9 | [Intake and evidence](09-intake.md) | draft |
 | 10 | [Migrations](10-migrations.md) | draft |
 | 11 | [Packages](11-packages.md) | draft |
-| 12 | [Views](12-views.md) | stub: settled points, design to come |
+| 12 | [Views](12-views.md) | draft |
 | 13 | [Conformance](13-conformance.md) | draft |
 
 ## Conventions
@@ -50,6 +50,7 @@ An implementation claims one level, and every level includes the ones above it i
 | **Rules** | also evaluates rules, and refuses a write that breaks a `must` rule (chapter 6) |
 | **Store** | also keeps sources and signed logs, runs intake with raw bytes kept, and applies migration recipes (chapters 8–10) |
 | **Exchange** | also runs contracts, offer and take, and verifies signatures across owners (chapters 7, 9, 11) |
+| **Views** | also builds stored projections, filter sub-indexes, audiences and roles (chapter 12) |
 
 A claim is proven by passing that level's folder of the [test corpus](corpus/README.md).
 

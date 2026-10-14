@@ -133,7 +133,8 @@ Every run has a **run ID** (`R-118`), and the log entry for its writes names it 
 
 **Authorization is inside CRUBAL.** `who` is a condition (chapter 6.3) over the **caller**, which is a record:
 a person, an organization or a system. Its values are read with the `caller` prefix
-(`caller.role is staff`), and `caller wears Staff` tests its classes. What a caller sees is decided by
+(`caller.role is staff`), `caller wears Staff` tests its classes, and `caller may run ebayListing` tests
+its roles' grants (chapter 12.4). What a caller sees is decided by
 `show` rules (chapter 12).
 
 **Authentication is the host's job.** Sign-in, OAuth flows and API keys belong to whatever runs the

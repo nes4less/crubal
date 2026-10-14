@@ -1,0 +1,5 @@
+// Counts for each bucket with the shopper's pick genres: Holiday. A filter's own pick doesn't narrow its
+// own counts; "Western" is new and never bucketed. One bucket of an indexed filter is a landing page.
+view: discs
+pick:
+  genres: Holiday

@@ -1,0 +1,8 @@
+{
+  "records": ["P-2", "P-1"],
+  "counts": {
+    "condition": { "Like new": 1, "Good": 1, "Fair": 1 },
+    "genres": { "Comedy": 2, "Holiday": 2, "Drama": 1 }
+  },
+  "indexable": true
+}

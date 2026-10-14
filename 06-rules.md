@@ -53,15 +53,17 @@ test      = path " is " value                      ; equals
           / path ( " before " / " after " ) value  ; dates
           / path ( " over " / " under " ) value    ; numbers, quantities, money, ranked choices
           / path " is unique"                      ; global (6.6); in "then" only
+          / path " shown to " audience             ; visibility (chapter 12.4); in "then" only
 path      = address / aggregate
 aggregate = combine " of " address                 ; "worst of parts[*].condition"
-          / "count of " address
+          / ( "count" / "least" / "most" ) " of " address   ; how many · smallest · largest
 ```
 
 - **Addresses** are chapter 1.10's, plus the wildcard `[*]` for every row or part, and the level prefix
   (`unit::condition`) to read a lower level from above.
 - **Values** are written as in the text form (chapter 2), read by the facet at the path.
-- **Aggregates** use the combine rules (chapter 4.4) and `count`. `over` and `under` on a ranked choice
+- **Aggregates** use the combine rules (chapter 4.4), `count`, and `least` and `most` (the smallest and
+  largest number, quantity, money or date; for ranked choices, use `best` and `worst`). `over` and `under` on a ranked choice
   compare positions in the list: earlier is higher.
 
 ### 6.3.1 Empties in conditions

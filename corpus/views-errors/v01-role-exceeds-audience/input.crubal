@@ -1,0 +1,11 @@
+// A role can only narrow its audience. cost is shown to staff only.
+cost#USD
+
+rule: costIsStaffOnly
+  then: cost shown to staff
+  strength: must
+
+role: greeter
+  audience: member
+  may:
+    see: cost

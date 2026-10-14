@@ -12,7 +12,7 @@ level's corpus. Each level includes the levels before it.
 | **Rules** | 6 | `rules/`, `rules-errors/` |
 | **Store** | 8–10 | `store/`, `store-errors/` |
 | **Exchange** | 7, 9 (as it applies to borders), 11 | `exchange/`, `exchange-errors/`, `package-errors/` |
-| **Views** | 12 | not defined until chapter 12 is designed |
+| **Views** | 12 | `views/`, `views-errors/` |
 
 A level is claimed whole. An implementation that does part of a level conforms only at the level below it.
 

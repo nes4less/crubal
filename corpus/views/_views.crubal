@@ -1,0 +1,33 @@
+// Facets, shapes, filters and views the view cases use.
+title$
+format{DVD|Blu-ray|4K}
+releaseDate@any
+genres{Comedy|Holiday|Drama|...}*
+condition{NM|VG|G|F|P} ranked
+price#USD
+
+shape: card
+  slots:
+    !title -> heading
+    "{format} · {releaseDate}" -> line
+    least of unit::price -> price
+
+filter: condition
+  facet: unit::condition
+  buckets:
+    "Like new": NM, VG
+    Good: G
+    Fair: F, P
+
+filter: genres
+  facet: genres
+
+view: discs
+  select:
+    level: product
+  pin: P-3
+  hide: P-4
+  order: releaseDate after
+  shape: card
+  filters: condition, genres
+  index: genres
