@@ -1,0 +1,20 @@
+{
+  "name": "@cruba/crubal",
+  "version": "0.0.1",
+  "description": "The CRUBAL reference implementation: read, print and check CRUBAL text and JSON.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "private": true,
+  "exports": { ".": "./src/index.ts" },
+  "bin": { "crubal": "./bin/crubal.ts" },
+  "engines": { "node": ">=23.6" },
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "corpus": "node bin/crubal.ts test ../../corpus --level reader"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.6.0"
+  }
+}

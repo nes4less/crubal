@@ -1,0 +1,13 @@
+// Lines indented under an unknown key belong to its raw value, kept exactly (comments aside).
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-10 [origin: reported, via: L-1]
+  title: Christmas Vacation
+  ebay:Specifics:
+    Format: DVD   // a comment, not data
+    Studio: Warner
+      Region: 1
+  ebay:Note: first line
+    second line

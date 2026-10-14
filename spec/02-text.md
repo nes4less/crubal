@@ -110,7 +110,10 @@ Without quotes, a value's spelling suggests its shape. The facet decides (chapte
 
 **Unknown keys.** A Reader MUST keep an unknown key's value as raw: the exact characters after the separator,
 with the trailing comment and spaces removed and nothing else changed. A short list under an unknown key stays
-one raw value (`a, b` is the raw text `a, b`).
+one raw value (`a, b` is the raw text `a, b`). When lines are indented under an unknown key, they are part of
+its raw value: the text after the separator, then for each inner line a line break, its indentation relative
+to the first inner line, and its text with any comment removed. Printers write a raw value with line breaks
+back as the same indented block.
 
 ## 2.5 Quoting
 
