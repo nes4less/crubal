@@ -25,8 +25,8 @@ The chapters follow the stack from the bottom. Each refers only to the chapters 
 | 9 | [Intake and evidence](09-intake.md) | draft |
 | 10 | [Migrations](10-migrations.md) | draft |
 | 11 | [Packages](11-packages.md) | draft |
-| 12 | Views | stub until designed |
-| 13 | Conformance | summary below |
+| 12 | [Views](12-views.md) | stub: settled points, design to come |
+| 13 | [Conformance](13-conformance.md) | draft |
 
 ## Conventions
 
