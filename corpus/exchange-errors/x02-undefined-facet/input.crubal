@@ -1,0 +1,7 @@
+// Every our-side address names a defined facet.
+title$
+
+contract: badSend
+  kind: send
+  writes:
+    subtitle -> Subtitle

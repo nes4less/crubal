@@ -1,0 +1,13 @@
+{
+  "contract": "catalogLookup",
+  "record": "P-3",
+  "outcomes": [
+    { "from": "Title", "to": "title", "outcome": "conflict" },
+    { "from": "aspects.\"Run Time\"", "to": "runtime", "outcome": "absorbed", "value": { "$qty": "97", "unit": "min" } },
+    { "from": "aspects.Format", "to": "format", "outcome": "absorbed", "value": "Blu-ray" },
+    { "from": "aspects.Studio", "to": "market:Studio", "outcome": "unknown" },
+    { "from": "aspects.Condition", "outcome": "ignored" },
+    { "from": "aspects.Region", "outcome": "unknown" }
+  ],
+  "sources": { "origin": "reported" }
+}

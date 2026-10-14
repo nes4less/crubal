@@ -1,0 +1,6 @@
+// Facets the exchange cases use.
+title$
+format{DVD|Blu-ray|4K}
+runtime#min
+price#USD
+status{draft|listed|sold}

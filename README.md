@@ -20,7 +20,7 @@ The chapters follow the stack from the bottom. Each refers only to the chapters 
 | 4 | [Facets](04-facets.md) | draft |
 | 5 | [Classes](05-classes.md) | draft |
 | 6 | [Rules](06-rules.md) | draft |
-| 7 | Contracts | not written |
+| 7 | [Contracts](07-contracts.md) | draft |
 | 8 | Provenance and logs | not written |
 | 9 | Intake and evidence | not written |
 | 10 | Migrations | not written |

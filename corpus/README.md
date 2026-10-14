@@ -36,7 +36,8 @@ corpus/
   rules-errors/      rule sets a package publish must refuse
 ```
 
-Later levels (`store/`, `exchange/`) follow the same layout.
+Later levels (`store/`) follow the same layout. `exchange/` cases add `run.crubal` (which contract runs on
+which record), an optional `answer.json` (what the other side sent back) and `expected-run.json`.
 
 ## Passing a case
 

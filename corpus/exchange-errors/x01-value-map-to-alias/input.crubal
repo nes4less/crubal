@@ -1,0 +1,8 @@
+// Our side of a value map must be a real value, never an alias.
+format{DVD|Blu-ray~BD|4K}
+
+contract: badMap
+  kind: receive
+  reads:
+    Format -> format
+      "Blu-ray Disc" -> BD

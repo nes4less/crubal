@@ -1,0 +1,7 @@
+// Map back: a receive contract's answer folds in. The raw payload is in answer.json.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-3 [origin: declared, via: L-1]
+  title: Christmas Vacation

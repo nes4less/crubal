@@ -1,0 +1,9 @@
+{
+  "contract": "listing",
+  "record": "U-2",
+  "payload": {
+    "Title": "Christmas Vacation",
+    "aspects": { "Format": "4K UHD Blu-ray" },
+    "price": { "value": "24.99", "currency": "USD" }
+  }
+}

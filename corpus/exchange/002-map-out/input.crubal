@@ -1,0 +1,11 @@
+// Map out: a value map, a level-prefixed address, and a literal.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-2 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: 4K
+
+unit: U-2 of P-2 [origin: observed, via: L-2]
+  price: 24.99USD

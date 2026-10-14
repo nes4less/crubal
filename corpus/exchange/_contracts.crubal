@@ -1,0 +1,28 @@
+// The contracts the exchange cases run.
+contract: listing
+  kind: send
+  needs:
+    !title$80
+    !format{DVD|Blu-ray|4K}
+    !unit::price
+  writes:
+    title -> Title
+    format -> aspects.Format
+      4K -> "4K UHD Blu-ray"
+    unit::price -> price.value
+    "USD" -> price.currency
+  reads:
+    itemId -> market:itemId
+  credential: market-seller
+
+contract: catalogLookup
+  kind: receive
+  origin: reported
+  reads:
+    Title -> title
+    aspects."Run Time" -> runtime
+    aspects.Format -> format
+      "4K UHD Blu-ray" -> 4K
+      "Blu-ray Disc" -> Blu-ray
+    aspects.Studio -> market:Studio
+  ignore: aspects.Condition
