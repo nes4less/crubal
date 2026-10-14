@@ -1,0 +1,7 @@
+// The later write: format becomes DVD. hdrFormats isn't written.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-6 [origin: declared, via: L-2]
+  format: DVD

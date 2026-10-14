@@ -1,0 +1,7 @@
+[
+  { "record": "P-1", "result": "complete" },
+  { "record": "P-1", "result": "filled", "address": "videoCodec", "value": "MPEG-2", "rule": "dvdIsMpeg2" },
+  { "record": "P-1", "result": "derived", "address": "listingTitle", "value": "Christmas Vacation [DVD]", "rule": "listingTitle" },
+  { "record": "P-2", "result": "complete" },
+  { "record": "P-2", "result": "derived", "address": "listingTitle", "value": "Christmas Vacation [DVD]", "rule": "listingTitle" }
+]

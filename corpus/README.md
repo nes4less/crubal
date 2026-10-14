@@ -27,9 +27,16 @@ corpus/
       expected-outcomes.json  (check cases) the outcome for each address (chapters 4.9, 5.5)
     a `resolve: Class` input expects the resolved class lines (chapter 5.4)
   dictionary-errors/ definitions a package publish must refuse
+  rules/             cases every Rules-level implementation must pass
+    _facets.crubal · _rules.crubal   the facets and rules every case runs under
+    001-…/
+      input.crubal   records written, in order
+      write.crubal   (optional) a later write to those records, read like input
+      expected-results.json  the rule results after the last write (chapter 6.9)
+  rules-errors/      rule sets a package publish must refuse
 ```
 
-Later levels (`rules/`, `store/`, `exchange/`) follow the same layout.
+Later levels (`store/`, `exchange/`) follow the same layout.
 
 ## Passing a case
 

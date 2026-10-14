@@ -19,7 +19,7 @@ The chapters follow the stack from the bottom. Each refers only to the chapters 
 | 3 | [The JSON form](03-json.md) | draft |
 | 4 | [Facets](04-facets.md) | draft |
 | 5 | [Classes](05-classes.md) | draft |
-| 6 | Rules | not written |
+| 6 | [Rules](06-rules.md) | draft |
 | 7 | Contracts | not written |
 | 8 | Provenance and logs | not written |
 | 9 | Intake and evidence | not written |

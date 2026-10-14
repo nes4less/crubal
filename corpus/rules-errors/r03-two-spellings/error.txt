@@ -1,0 +1,1 @@
+4 titleRequired says the same as title's required setting

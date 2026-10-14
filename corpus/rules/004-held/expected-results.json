@@ -1,0 +1,5 @@
+[
+  { "record": "P-6", "result": "held", "address": "hdrFormats", "rule": "hdrOnlyOnHd" },
+  { "record": "P-6", "result": "filled", "address": "videoCodec", "value": "MPEG-2", "rule": "dvdIsMpeg2" },
+  { "record": "P-6", "result": "derived", "address": "listingTitle", "value": "Christmas Vacation [DVD]", "rule": "listingTitle" }
+]

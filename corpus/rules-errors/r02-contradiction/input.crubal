@@ -1,0 +1,10 @@
+// Two must rules that can apply to the same record and require disjoint values.
+rule: onlyDvd
+  when: title has
+  then: format is DVD
+  strength: must
+
+rule: onlyBluray
+  when: title has
+  then: format in Blu-ray, 4K
+  strength: must

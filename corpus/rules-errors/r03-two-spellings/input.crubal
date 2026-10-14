@@ -1,0 +1,6 @@
+// A shortcut and the same rule written in full.
+!title$
+
+rule: titleRequired
+  then: title has
+  strength: must

@@ -1,0 +1,13 @@
+// A must breaks: refused. A should breaks: flagged. A required value missing: incomplete.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-3 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: DVD
+  hdrFormats: HDR10
+
+product: P-4 [origin: declared, via: L-1]
+  format: Blu-ray
+  runtime: 900min

@@ -1,0 +1,10 @@
+// Absent and unknown make a test undetermined: the gate doesn't apply, the fill doesn't fire,
+// and the template produces nothing.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-5 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: _
+  hdrFormats: HDR10

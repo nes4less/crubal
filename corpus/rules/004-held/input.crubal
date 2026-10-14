@@ -1,0 +1,9 @@
+// The gate closes because format changed, not because hdrFormats was written: the value is held.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-6 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: Blu-ray
+  hdrFormats: HDR10

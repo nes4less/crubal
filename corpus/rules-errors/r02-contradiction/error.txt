@@ -1,0 +1,1 @@
+2 onlyDvd and onlyBluray can't both hold when title has a value

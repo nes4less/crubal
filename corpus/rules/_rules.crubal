@@ -1,0 +1,33 @@
+// Rules every rules case runs under.
+rule: dvdIsMpeg2
+  when: format is DVD
+  then: videoCodec is MPEG-2
+  strength: suggest
+  because: DVD-Video is MPEG-2 by standard
+
+rule: hdrOnlyOnHd
+  when: not format in Blu-ray, 4K
+  then: hdrFormats is -
+  strength: must
+
+rule: titleRequired
+  then: title has
+  strength: must
+
+rule: sensibleRuntime
+  when: runtime has
+  then: runtime in 1..600
+  strength: should
+
+rule: listingTitle
+  then: listingTitle is "{title} [{format}]"
+  strength: suggest
+
+rule: unitCondition
+  for: unit
+  then: condition is worst of parts[*].condition
+  strength: must
+
+rule: gtinUnique
+  then: gtin is unique
+  strength: must

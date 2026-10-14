@@ -127,9 +127,9 @@ truth; the setting is a short way to write it.
 | `na: yes` | `-` is an allowed value for `key` | must (without it, `-` breaks a must rule) |
 | `unique: yes` | `then: key is unique` (a global rule) | must |
 | `when: condition` | outside the condition, `key` is `-` | must |
-| `length: 80` | `then: key under 81 characters` | should |
-| `range: 1..600` | `then: key in 1..600` | should |
-| `combine: worst` | `then: key is worst of parts.key` (chapter 6's rollups) | must |
+| `length: 80` | `when: key has` `then: key under 81 characters` | should |
+| `range: 1..600` | `when: key has` `then: key in 1..600` | should |
+| `combine: worst` | `then: key is worst of parts[*].key` (chapter 6's rollups) | must |
 
 A rule written in full and a shortcut that say the same thing are the same rule; a package MUST NOT carry
 both.

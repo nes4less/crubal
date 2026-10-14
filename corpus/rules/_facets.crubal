@@ -1,0 +1,9 @@
+// Facets the rules cases use.
+title$
+format{DVD|Blu-ray|4K}
+videoCodec{MPEG-2|H.264|VC-1|HEVC|AV1}
+hdrFormats{HDR10|Dolby Vision|...}*
+runtime#min
+listingTitle$
+condition{NM|VG|G|F|P} ranked
+gtin$

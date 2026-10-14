@@ -1,0 +1,8 @@
+// Two fills chasing each other.
+rule: aFromB
+  then: subtitle is "{title}"
+  strength: suggest
+
+rule: bFromA
+  then: title is "{subtitle}"
+  strength: suggest

@@ -1,0 +1,24 @@
+// A unit's condition is the worst of its parts'. A second record with the same gtin is refused.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-7 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: Blu-ray
+  gtin: 012569828469
+  crubal:parts:
+    - [row: disc1]
+    - [row: disc2]
+
+unit: U-7 of P-7 [origin: observed, via: L-2]
+  crubal:parts:
+    - [row: disc1]
+      condition: NM
+    - [row: disc2]
+      condition: G
+
+product: P-8 [origin: declared, via: L-1]
+  title: Christmas Vacation (again)
+  format: Blu-ray
+  gtin: 012569828469
