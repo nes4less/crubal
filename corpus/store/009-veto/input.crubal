@@ -1,0 +1,9 @@
+// A veto is evidence that a value is not true. Two sources say DVD, one vetoes it.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: reported, via: L-1]
+  format: DVD
+unit: U-1 of P-1 [origin: observed, via: L-2]
+unit: U-2 of P-1 [origin: observed, via: L-3]

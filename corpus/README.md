@@ -59,8 +59,12 @@ Layout, quoting and comment choices never decide a pass: only the pairs are comp
 For a case with `error.txt`, a Reader passes when it refuses the input and names the given line. The wording
 of the message is free.
 
+A case's `input.crubal` MAY start with definitions (facets, classes, rules) that apply to that case only; the
+data part begins at the `crubal:` header line.
+
 ## Writing a case
 
 - One idea per case, named for it.
-- Use the shared `_package.crubal` and `_facets.crubal`; add facets there, never per case.
+- Use the shared `_package.crubal` and `_facets.crubal` where they fit. Definitions only one case needs go at
+  the top of that case's input.
 - The owner is `test.example` and the package is `test`, so the corpus stays independent of any adopter.

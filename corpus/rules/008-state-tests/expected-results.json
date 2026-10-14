@@ -1,0 +1,4 @@
+[
+  { "record": "P-1", "result": "flagged", "address": "title", "rule": "settleTitles" },
+  { "record": "P-2", "result": "complete" }
+]

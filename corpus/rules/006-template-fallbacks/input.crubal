@@ -1,0 +1,23 @@
+// {a ?? b} takes the first value present; {a?} drops itself and the separator before it.
+facet: subtitle
+  type: text
+facet: altTitle
+  type: text
+facet: card
+  type: text
+
+rule: cardLine
+  then: card is "{altTitle ?? title} · {subtitle?}"
+  strength: suggest
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+
+product: P-2 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  altTitle: National Lampoon's Christmas Vacation
+  subtitle: 20th Anniversary

@@ -24,6 +24,12 @@ A payload is folded in a fixed order. Rules run only on the result.
 
 A value that no step can make fit is not changed: it goes to step 4 as it is, and the check reports it.
 
+**Rows and parts are matched before they are minted.** Incoming rows of a compound, and incoming parts, bind
+to existing ones in this order: by identity child; else by the fold key of the declared `match` child
+(chapter 1.6); else, when the record already holds rows that could be the same, the row goes to review
+instead of becoming a new row. A contract MAY propose a consolidation ("disc hub" and "inner tray" are one
+part); it lands as a suggestion. Re-deriving the same record MUST NOT grow its rows by renaming them.
+
 4. **Check** each value against its facet (chapter 4.9), its worn classes (chapter 5.3.1) and the `must`
    rules it touches (chapter 6).
 
@@ -52,6 +58,10 @@ A value the vocabulary lacks is growth, not a contradiction. Off-list values con
 wants, lands and is flagged. A value more precise than the facet keeps lands cut to what it keeps, and the
 intake record keeps the rest.
 
+**Comparing.** Agreement and conflict compare values by the facet's `agree-by` (chapter 4.2): "The Secret of
+NIMH (DVD)" and "Secret of NIMH" can agree under a title normalizer while the stored value stays one real
+title.
+
 **Agreement.** A value equal to the current one is absorbed; the current source stays (its origin never
 changes), and the log records the second source.
 
@@ -76,7 +86,14 @@ distinct values.
 - After a decision, the held intake records are **replayed** (9.6), and the objects change through the fold
   like any other intake.
 - New and unknown values are searchable by staff and never shown in customer filters or pages.
-- AI may propose mappings. It never applies them.
+- AI may propose mappings. It never applies them. A review item shows the deterministic evidence (the
+  mechanical match, the fold collision, the counts) beside any AI recommendation, so a reviewer can check
+  one against the other.
+- **Candidates.** Proposed vocabulary lands as a `candidate` facet or class (chapter 4.1), never active.
+  Candidates are matched against active vocabulary only.
+- **Promotion by recurrence.** A notable key (chapter 1.6) or unknown key seen on enough distinct records (a
+  package threshold, `recur:`, default 5) is proposed as a candidate facet. Below the threshold it stays a
+  one-off.
 
 ## 9.6 Replay
 
@@ -118,7 +135,7 @@ support goes up.** Parts work the same way.
 
 | State | When |
 |---|---|
-| **confirmed** | at least *n* independent observations agree with the value (*n* is per package, default 2) |
+| **confirmed** | at least *n* independent observations agree with the value (*n* is per package, default 2), and nothing vetoes it |
 | **contradicted** | an independent observation disagrees; this is a conflict (9.3), and the observed value is an alternative |
 | **unobserved** | the value is declared or reported only |
 
@@ -128,6 +145,17 @@ raw readings all stay for replay.
 
 Rules decide what confirmation is worth. A package MAY rank `observed` above `declared` for physical facts
 (runtime, weight, the barcode).
+
+### 9.7.2a Vetoes
+
+Evidence can say a value is **not** true. A receive contract or an observation MAY **veto** a value
+(`format is not DVD`: "Media Storage / DVD Racks" means a rack, not a disc) or a class (5.5).
+
+- A vetoed value can't become confirmed and can't win consensus; a value already current becomes
+  contradicted, citing the veto.
+- A veto counts as an independent witness like any observation. An observation document carries `veto`
+  (the value it denies) in place of `value`.
+- A veto that targets nothing current is kept, and blocks that value until a person overrides it.
 
 ### 9.7.3 Version splits
 

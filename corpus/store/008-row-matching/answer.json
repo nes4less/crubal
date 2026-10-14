@@ -1,0 +1,5 @@
+{ "parts": [
+  { "slot": "disc", "name": "disc 1" },
+  { "slot": "insert", "name": "Booklet Insert Leaflet" },
+  { "slot": "disc", "name": "Bonus Disc" }
+] }

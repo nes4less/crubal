@@ -1,0 +1,6 @@
+[
+  { "obs": "O-1", "on": "U-1", "address": "format", "value": "DVD", "evidence-type": "photo", "reading": "I-1", "supports": "P-1" },
+  { "obs": "O-2", "on": "U-2", "address": "format", "value": "DVD", "evidence-type": "scan", "reading": "I-2", "supports": "P-1" },
+  { "obs": "O-3", "on": "U-2", "address": "format", "veto": "DVD", "evidence-type": "photo", "reading": "I-3", "supports": "P-1",
+    "note": "the photo shows a DVD storage rack, not a disc" }
+]

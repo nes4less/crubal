@@ -1,0 +1,10 @@
+{
+  "parts": [
+    { "$row": "p1", "matched": "name", "from": "disc 1" },
+    { "$row": "p2" },
+    { "$row": "p3", "new": true, "from": "Bonus Disc" }
+  ],
+  "review": [
+    { "address": "parts", "from": "Booklet Insert Leaflet", "reason": "could be the same part as p2 (insert); not matched by name" }
+  ]
+}

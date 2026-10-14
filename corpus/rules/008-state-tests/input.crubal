@@ -1,0 +1,15 @@
+// A condition can test a value's state. The conflicted title is flagged; the other isn't.
+rule: settleTitles
+  then: not title is conflicted
+  strength: should
+  because: two sources disagree about the title
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+
+product: P-2 [origin: declared, via: L-1]
+  title: Home Alone

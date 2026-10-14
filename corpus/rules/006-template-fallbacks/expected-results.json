@@ -1,0 +1,4 @@
+[
+  { "record": "P-1", "result": "derived", "address": "card", "value": "Christmas Vacation", "rule": "cardLine" },
+  { "record": "P-2", "result": "derived", "address": "card", "value": "National Lampoon's Christmas Vacation · 20th Anniversary", "rule": "cardLine" }
+]

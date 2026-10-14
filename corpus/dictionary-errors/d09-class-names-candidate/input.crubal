@@ -1,0 +1,8 @@
+// A class line names active vocabulary only.
+facet: spineNumber
+  type: number
+  state: candidate
+
+class: Criterion
+  facets:
+    spineNumber

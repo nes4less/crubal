@@ -163,7 +163,10 @@ the list, that never changes when rows are reordered.
 - If the compound declares an identity child (cast's `person`), the row key is that child's link target
   (`wd:Q310394`), so two sources can tell they mean the same row. An identity child MUST be a link facet,
   and its row key is never written separately.
-- Otherwise the first writer mints a row key, and it MUST NOT be reused for another row of that list.
+- Otherwise the first writer mints a row key, and it MUST NOT be reused for another row of that list. A
+  compound or part slot without an identity child MAY declare a **match** child (`match: name`): incoming
+  rows are matched to existing ones by that child's fold key (chapter 4.3) before any new row key is minted
+  (chapter 9.2).
 - A minted row key follows the ID grammar (1.1); a derived one is an ID or `prefix:ID`.
 
 **Parts.** Owned parts (disc 2 of a set, the case) are rows of the record's `parts`. Each has a row key, its
@@ -172,6 +175,11 @@ facet, and read through.
 
 **Units mirror parts.** A record at a lower level holds parts with the same row keys as the record above,
 carrying only the values that vary at its level (1.7).
+
+**Notables.** Every record MAY hold `crubal:notables`, a core compound (`key` text, `value` text, any number,
+rows matched by `key`) for facts that are true of this record and that no class asks for: signed, misprint,
+edition number 4522, graded. Notables are data like any other, with sources. A notable key that recurs across
+enough records is proposed as a real facet through review (chapter 9.5); a one-off stays a notable.
 
 ## 1.7 Values down the levels
 

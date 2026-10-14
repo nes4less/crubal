@@ -54,6 +54,7 @@ test      = path " is " value                      ; equals
           / path ( " over " / " under " ) value    ; numbers, quantities, money, ranked choices
           / path " is unique"                      ; global (6.6); in "then" only
           / path " shown to " audience             ; visibility (chapter 12.4); in "then" only
+          / path " is " state                      ; a value's state (6.3.2)
 path      = address / aggregate
 aggregate = combine " of " address                 ; "worst of parts[*].condition"
           / ( "count" / "least" / "most" ) " of " address   ; how many · smallest · largest
@@ -84,6 +85,21 @@ compared with other records.
 A rule whose `when` is false or undetermined doesn't apply. A `must` rule whose `then` is undetermined makes
 the record incomplete; a `should` rule's flags it; a `suggest` rule's fills it when it can.
 
+### 6.3.2 Value states
+
+A condition MAY test the **state** of a value, not only the value: `is confirmed`, `is contradicted`, `is
+unobserved` (chapter 9.7.2), `is conflicted` (it has alternatives, chapter 8.4), `is new` (a value the
+vocabulary doesn't hold yet), `is held` (6.7), `is adopted` (chapter 8.2) and `is suggested` (it has
+suggestions). State tests are never undetermined.
+
+They are what lets contracts form a **cascade**: cheap sources first, expensive ones only when needed.
+
+```crubal
+contract: aiTitle
+  kind: receive
+  when: title is conflicted or not title has
+```
+
 ## 6.4 Consequences
 
 `then` is a condition (6.3) that should hold, read in one of two ways:
@@ -109,8 +125,12 @@ the record incomplete; a `should` rule's flags it; a `suggest` rule's fills it w
 ### 6.4.1 Templates
 
 A template is a quoted text with **placeholders**: `{address}` is replaced by the value there, printed as in
-the text form without its detail. `{{` and `}}` write a literal brace. If any placeholder's value is empty,
-the template produces nothing. Templates are the only computation inside rules: arithmetic, lookups and AI
+the text form without its detail. `{{` and `}}` write a literal brace.
+
+- `{a ?? b ?? c}` takes the first of them that has a value.
+- `{a?}` is replaced by nothing when `a` is empty, and a space or one of `· , - :` written right before it is
+  dropped with it: `"{title} · {subtitle?}"` is `"Vacation"` when there is no subtitle.
+- If any other placeholder's value is empty, the template produces nothing. Templates are the only computation inside rules: arithmetic, lookups and AI
 belong to contracts.
 
 ## 6.5 What rules are for
@@ -169,6 +189,7 @@ After a write, a record's rule results are:
 | Result | Means |
 |---|---|
 | **complete** | for each class it wears: no `must` rule is undetermined or broken |
+| **completeness** | a number from 0 to 1: the asked facets that have a value, divided by all asked facets. Unknown counts as empty, does-not-apply as answered. Parts are measured on themselves and never added to the whole's count, so a five-disc set isn't less complete than one disc for the same answers |
 | **incomplete** | a `must` rule needs a value that is empty; lists the rules |
 | **flagged** | a `should` rule broke or is undetermined; lists the rules and addresses |
 | **filled** · **derived** | values the rules produced, with their sources |
@@ -195,6 +216,5 @@ Conditions are stored as their text (6.3), so there is one grammar for them, not
 ## 6.11 Open
 
 - `now` in conditions (dates relative to today), and events versus current values.
-- Optional placeholders in templates (`{subtitle?}`).
 - Which rules a store compiles into its database and which it checks in the application is an
   implementation choice; the results MUST be the same.

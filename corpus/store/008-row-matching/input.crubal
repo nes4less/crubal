@@ -1,0 +1,21 @@
+// Parts bind to existing ones before new rows are minted. The slot matches by name.
+class: DvdCase
+  parts:
+    disc: Disc * match: name
+    insert: Insert * match: name
+facet: name
+  type: text
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: reported, via: L-1]
+  crubal:wears: DvdCase
+  crubal:parts:
+    - [row: p1]
+      crubal:wears: Disc
+      name: Disc 1
+    - [row: p2]
+      crubal:wears: Insert
+      name: Chapter Booklet

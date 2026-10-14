@@ -28,6 +28,10 @@ shape: card
   same projection to software instead of people: agents and feeds get complete, structured facets without
   reading pages. A view MAY name several shapes (`shape: card, feed`); they share one selection, one
   projection's freshness and one read set.
+- **The portable shape.** The core package defines `crubal:portable`, the default machine shape: every
+  value as `{"key", "label", "type", "value"}`, where `value` may be empty but the other three are always
+  present, and every further member is advisory. A consumer that knows nothing of CRUBAL reads the four and
+  ignores the rest.
 - **Page shapes** describe a whole page over one record. Their slots MAY hold other views, which then run with
   the page's record as their context (12.2, `of`).
 

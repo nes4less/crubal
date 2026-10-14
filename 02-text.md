@@ -85,7 +85,8 @@ unit: U-9KD2 of P-4QX7 [origin: observed, via: L-9D4E]
 - The level names the kind (chapter 1.2). `crubal:kind:` MAY be written and MUST then agree.
 - **Envelope lines** are written with the core prefix: `crubal:wears`, `crubal:parts`, `crubal:owner`,
   `crubal:created`, `crubal:updated`. Bare keys are always values, so a package may have a facet named
-  `owner` without colliding.
+  `owner` without colliding. Any other `crubal:` key is a **core facet** and is a value like any other:
+  `crubal:notables` (chapter 1.6), `crubal:count` on a fungible part (chapter 5.6).
 - **The default source** is the header's detail. A source on a value's own detail wins over it.
 - A key MUST NOT appear twice in one record, part or compound row.
 

@@ -1,0 +1,28 @@
+// Completeness: asked facets with a value / asked facets. Unknown is empty; "-" is answered.
+// Parts are measured on themselves and never added to the whole's count.
+class: Film
+  facets:
+    title
+    format
+    runtime
+    videoCodec
+class: Disc
+  facets:
+    discFormat
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  crubal:wears: Film
+  title: Christmas Vacation
+  format: DVD
+  runtime: _
+  videoCodec: -
+  crubal:parts:
+    - [row: d1]
+      crubal:wears: Disc
+    - [row: d2]
+      crubal:wears: Disc
+      discFormat: DVD-9

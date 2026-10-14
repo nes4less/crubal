@@ -11,7 +11,8 @@ A class never says what a facet *means*: type, the full list of values and other
 
 A class is named like a key (chapter 1.3), by convention with a capital first (`OpticalDisc`), and written
 with its owner's prefix outside its own package (`me:OpticalDisc`). Class names and facet keys are separate
-namespaces. Classes are versioned like facets (chapter 4.1).
+namespaces. Classes are versioned like facets and share their lifecycle: candidate, active, retired (chapter
+4.1).
 
 ## 5.2 The long form
 
@@ -51,7 +52,7 @@ the shorthand's marks (chapter 4.5), read the same way, with three differences:
 2. **A type mark narrows.** When a line carries a type mark, it MUST be the facet's own type, and every
    setting on it MUST be narrower than or equal to the facet's (5.3.1).
 3. **A line may be prefixed with a level** (`unit::discCondition`), and may carry placement settings
-   (5.3.2).
+   (5.3.3), and a `when` (5.3.2).
 
 ### 5.3.1 Narrowing
 
@@ -73,7 +74,24 @@ length, and so on, with the same strengths as the facet's shortcuts (chapter 4.4
 A line MUST NOT set a facet's meaning: `label`, `ask`, `describe`, `aliases`, `same-as`, `values` with
 aliases, `fixed`, `ranked` or `type`.
 
-### 5.3.2 Placement
+### 5.3.2 Asked only when
+
+A class line MAY end with `when` and a condition (chapter 6.3): the facet is asked only while the condition
+holds.
+
+```crubal
+facets:
+  workType{film|series|special}
+  season# when workType is series
+  episode# when workType is series
+  spineNumber# when edition is Criterion
+```
+
+Outside its condition the facet is **unasked** (5.5), not "does not apply": nothing is required, nothing is
+flagged, and a value already there is kept. Use a gate (chapter 6.5) when the facet must be `-`. Conditions on
+class lines MUST NOT read the facet they ask for, and the layering check (chapter 6.8) covers them.
+
+### 5.3.3 Placement
 
 Placement says where and when a facet is collected. It never changes a value.
 
@@ -116,6 +134,9 @@ common value of a facet).
 - **Lower levels read the wears above them.** A unit wears its product's classes and its own; it MUST NOT
   shed a class worn above.
 - **Owned parts wear their own classes** (`wears` on the part), resolved separately from the whole's.
+- **Classes can be proposed.** A receive contract MAY propose classes for a record. A proposal lands as worn
+  only by consensus (at least two independent sources proposing the same class, and none vetoing it; chapter
+  9.7) or by a person; otherwise it is kept as a suggestion. A vetoed class can't be worn by consensus.
 
 **Incomplete.** A required facet with no value (absent or unknown) makes the record **incomplete** for the
 class that requires it. Incomplete is a state of the record, not an intake outcome; chapter 6 defines it with
@@ -142,6 +163,20 @@ class: BoxSet
 Each line names a **part slot**, the class its parts wear, and how many (the shorthand's count). A part's row
 key is free; its slot is the class it wears. Units mirror the same parts (chapter 1.6). Part slots meet like
 facets (5.4): counts take the narrowest.
+
+**Itemize, don't count.** A slot is **non-fungible** by default: each instance is its own part, with its own
+row, because instances usually differ (disc 1 holds episodes 1–2, disc 2 holds 3–5). Only a slot marked
+`fungible: yes` (two identical AA batteries, four screws) MAY be held as one part with a count:
+
+```crubal
+parts:
+  disc: Disc *
+  battery: Battery * fungible: yes      // one part, count: 2
+```
+
+A fungible part carries `crubal:count`, a whole number of at least 1. A non-fungible slot MUST NOT carry a
+count, and a part whose key is a plural of its slot (`discs` in a `disc` slot) is a contradiction citing the
+slot. **Matching:** a slot MAY declare `match: name` so incoming parts bind to existing ones (chapter 9.2).
 
 ## 5.7 Modules
 
@@ -201,6 +236,10 @@ A package MUST be refused at publish when a class breaks these:
 6. A facet appears at most once among a class's own lines.
 7. `frame` appears only on image facets.
 8. Part slots name existing classes, and slot names are unique within the class.
+9. A class line names an active facet, never a candidate or retired one.
+
+A publish SHOULD **warn**, without refusing, when a class line restates a facet a used class already asks for
+and narrows nothing: redundant lines hide drift.
 
 ## 5.11 Changes
 

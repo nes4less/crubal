@@ -1,0 +1,19 @@
+// Non-fungible slots itemize; only a fungible slot may count.
+class: BoxSet
+  parts:
+    disc: Disc *
+    battery: Battery * fungible: yes
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: reported, via: L-1]
+  crubal:wears: BoxSet
+  crubal:parts:
+    - [row: discs]
+      crubal:wears: Disc
+      crubal:count: 3
+    - [row: aa]
+      crubal:wears: Battery
+      crubal:count: 2

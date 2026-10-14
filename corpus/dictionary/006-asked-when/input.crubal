@@ -1,0 +1,26 @@
+// Class lines with "when": season and episode are asked only for series.
+workType{film|series|special}
+season#
+episode#
+title$
+
+class: Show
+  facets:
+    !title
+    workType
+    !season when workType is series
+    !episode when workType is series
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  crubal:wears: Show
+  title: Planet Earth
+  workType: series
+
+product: P-2 [origin: declared, via: L-1]
+  crubal:wears: Show
+  title: Christmas Vacation
+  workType: film

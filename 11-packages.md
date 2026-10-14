@@ -34,7 +34,7 @@ package: me /2026-10-13
 | `extends` | the packages it builds on, each pinned to a version (11.4) |
 | `prefixes` | nicknames its files use, each mapped to a full identity: a package (`domain/name`), a vocabulary's base URL, or a party's domain. The package's own name is its default nickname for itself |
 | `units` | the units table it uses, pinned |
-| `confirm` · `split` | evidence thresholds (chapter 9.7): independent observations to confirm a value (default 2), instances to propose a version split (default 3) |
+| `confirm` · `split` · `recur` | thresholds: independent observations to confirm a value (default 2), instances to propose a version split (default 3), distinct records before a recurring notable or unknown key is proposed as a facet (default 5) (chapter 9) |
 | `trust` · `facet-trust` | the trust order (11.3) |
 | `terms` | how each audience may use what it's shown: `public: search yes, answer yes, train no` (chapter 12.5.1) |
 
@@ -76,7 +76,7 @@ kind: item
 | `vary` | for each level below the top, the facets that vary at the step into it (chapter 1.7). At the step into `product`, these are the group's **forks** (edition, size × colour), which shoppers pick along |
 | `follows` | facets that follow a fork (Label follows Edition): they are dependent, so filters count them together |
 
-Classes add vary steps for their wearers with level prefixes (chapter 5.3.2). A package that `extends`
+Classes add vary steps for their wearers with level prefixes (chapter 5.3.3). A package that `extends`
 another MAY add levels' vary steps to that package's kinds; it MUST NOT remove any.
 
 ## 11.3 The trust order

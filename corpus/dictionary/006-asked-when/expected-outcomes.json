@@ -1,0 +1,4 @@
+[
+  { "record": "P-1", "asked": ["title", "workType", "season", "episode"], "outcome": "incomplete", "missing": ["season", "episode"] },
+  { "record": "P-2", "asked": ["title", "workType"], "outcome": "complete" }
+]

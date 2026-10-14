@@ -1,0 +1,8 @@
+// A fact's identity is its address, not where it came from: the same runtime from two receive contracts
+// under different field names is one value, absorbed twice, with the first source kept.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation

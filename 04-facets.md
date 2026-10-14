@@ -18,6 +18,11 @@ one engine behind them.
   day (`2026-10-13.2`). A published version MUST NOT change. Each facet is versioned on its own; a package
   version is a frozen set of member versions (chapter 11).
 - A facet MAY carry a short ID (`F-7KQ2`) for display or tooling. It is never the identity.
+- **Lifecycle.** A facet is `candidate`, `active` or `retired` (`state:`, default `active`). A **candidate**
+  is proposed vocabulary: it is stored and reviewable, but forms, views and rules don't see it, and class
+  lines can't name it. A review decision **promotes** it to active, or **merges** it into an existing facet
+  (its key and aliases become that facet's aliases). A **retired** facet keeps its stored values readable but
+  is never asked for again; retiring is breaking (4.8). Classes have the same lifecycle (chapter 5.1).
 - Stored values carry no version. A breaking change (4.8) ships a migration recipe (chapter 10).
 
 ## 4.2 The long form
@@ -49,6 +54,8 @@ A definition is a block under `facet: key`. Its settings:
 | `qualifiers` | the facets whose values may qualify this facet's values (chapter 1.8) | none |
 | `aliases` | other spellings of the key (4.3) | none |
 | `same-as` | the same property elsewhere: `schema:name`, `wd:P577` | none |
+| `state` | `candidate`, `active` or `retired` (4.1) | `active` |
+| `agree-by` | how two values compare for agreement and conflict (chapter 9.3): `equal`, `fold` (the alias fold, 4.3), or a package-named normalizer (`me:titleNoise`, which may drop leading articles and format words). Storage still holds one real value | `equal`, or `fold` for text and choice |
 | `version` | the dated version (4.1) | required when published |
 
 ### By type
@@ -246,6 +253,8 @@ A package MUST be refused at publish when any definition breaks these:
 | narrow `pick`, `precision` or `places`; change `unit` | breaking | `review` · `convert` |
 | change `type` | breaking | `merge` + `review` |
 | fix a list, add `required`, add a `must` rule | breaking for data that breaks it | `review` |
+| retire a facet | breaking (it stops being asked) | `review` or `move` |
+| promote a candidate | safe | no |
 | change `combine` | breaking for rollups | recompute |
 
 A breaking version MUST ship a recipe (chapter 10). A store applies it before it accepts data written under

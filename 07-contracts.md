@@ -110,7 +110,9 @@ A run goes through seven steps, in order. Only step 4 has an effect.
 3. **Map out.** `writes` builds the payload.
 4. **Act.** The host performs the act: calls the system, prints the label, shows the form.
 5. **Map back.** `reads` turns the answer into values, each with a source: `origin` from the contract, `via`
-   the log entry for this run.
+   the log entry for this run. A contract MAY **abstain** for a field, or for the whole answer: it says it
+   doesn't know. An abstention is recorded on the intake record and never becomes a value; "a wrong value is
+   worse than none".
 6. **Rules.** What came in runs through intake (chapter 9) and the rules (chapter 6).
 7. **Record.** The run is logged with the versions of the contract, the package and the rules it used.
 
@@ -150,7 +152,7 @@ contracts. A contract only declares what the other side requires:
 
 A form is a contract with a person. Its screen assembles itself:
 
-- the fields are `needs`, in its lines' order and sections (chapter 5.3.2), each drawn with its facet's own
+- the fields are `needs`, in its lines' order and sections (chapter 5.3.3), each drawn with its facet's own
   control (a choice as bubbles, a date at its precision);
 - `writes` shows current values, `reads` takes the person's answers;
 - `who` is the person, and `origin` says what the person is doing: `declared` when they state it,
@@ -178,7 +180,9 @@ contract: catalogTake
   lands: value
 ```
 
-- **`to`** (offer): `public`, `followers`, named parties, or `private`. Visibility per record, facet or value
+- **`to`** (offer): `public`, `followers`, named parties, `link`, or `private`. **`link`** shares with anyone
+  holding an unguessable token: unpublishing revokes it without deleting anything, and republishing keeps
+  the same token, so links already handed out keep working. Visibility per record, facet or value
   is decided by `show` rules.
 - **`from`** (take): the presenter, by domain.
 - **`mode`** is defined by three properties. The four named modes are presets, and a package MAY name other
