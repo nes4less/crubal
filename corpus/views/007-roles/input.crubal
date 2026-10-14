@@ -1,0 +1,44 @@
+// Roles narrow an audience, never widen it (chapter 12.4). Both callers are staff; only C-1's role grants
+// seeing cost. With no role, staff see what members see.
+view: costed
+callers: C-1, C-2
+
+kind: person
+  levels: person
+audience{public|member|staff|owner}
+roles&role*
+
+rule: costIsStaff
+  then: cost shown to staff
+  strength: must
+
+role: buyer
+  audience: staff
+  may:
+    see: cost
+
+shape: costCard
+  slots:
+    !title -> heading
+    cost -> cost
+
+view: costed
+  select:
+    level: product
+  shape: costCard
+  show: staff
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-21 [origin: declared, via: L-1]
+  title: Die Hard
+  cost: 3.10USD
+
+person: C-1 [origin: declared, via: L-1]
+  audience: staff
+  roles: &buyer
+
+person: C-2 [origin: declared, via: L-1]
+  audience: staff

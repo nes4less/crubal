@@ -1,0 +1,3 @@
+// A view's read set decides what goes stale (chapter 12.6). U-3's price is read through "least of
+// unit::price", so writing it makes P-2 stale; P-1's notes aren't read, so writing them changes nothing.
+view: discs

@@ -1,4 +1,5 @@
-// Facets, shapes, filters and views the view cases use.
+// Facets, shapes, filters and views the view cases use. A case input holds run lines (view:, pick:,
+// context:, audiences:, callers:, page:) and may add definitions and records of its own.
 title$
 format{DVD|Blu-ray|4K}
 releaseDate@any
@@ -31,3 +32,7 @@ view: discs
   shape: card
   filters: condition, genres
   index: genres
+
+notes$
+cost#USD
+work&Work

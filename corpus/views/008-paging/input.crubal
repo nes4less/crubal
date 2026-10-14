@@ -1,0 +1,10 @@
+// Paging: two records a page, newest first. Pages after the first are never indexable (chapter 12.5).
+view: small
+page: 2
+
+view: small
+  select:
+    level: product
+  order: releaseDate after
+  page: 2
+  shape: card

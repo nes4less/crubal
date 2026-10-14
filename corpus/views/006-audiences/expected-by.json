@@ -1,0 +1,4 @@
+{
+  "public": [ { "record": "P-20", "heading": "Die Hard", "genres": ["Drama"] } ],
+  "staff": [ { "record": "P-20", "heading": "Die Hard", "genres": ["Drama", "Western"], "cost": { "$money": "3.10", "currency": "USD" } } ]
+}

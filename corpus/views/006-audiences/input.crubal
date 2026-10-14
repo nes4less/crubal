@@ -1,0 +1,29 @@
+// show rules decide what each audience sees (chapter 12.4). cost is shown to staff only; a new value
+// (Western) never appears in a public projection.
+view: costed
+audiences: public, staff
+
+rule: costIsStaff
+  then: cost shown to staff
+  strength: must
+
+shape: costCard
+  slots:
+    !title -> heading
+    genres -> genres
+    cost -> cost
+
+view: costed
+  select:
+    level: product
+  shape: costCard
+  show: staff
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-20 [origin: declared, via: L-1]
+  title: Die Hard
+  genres: Drama, Western
+  cost: 3.10USD

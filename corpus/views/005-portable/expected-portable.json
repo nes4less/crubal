@@ -1,0 +1,6 @@
+[ { "record": "P-1", "values": [
+  { "key": "title", "label": "Title", "type": "text", "value": "Christmas Vacation" },
+  { "key": "format", "label": "Format", "type": "choice", "value": "DVD" },
+  { "key": "releaseDate", "label": "Release date", "type": "date", "value": "1989" },
+  { "key": "genres", "label": "Genres", "type": "choice", "value": ["Comedy", "Holiday"] }
+] } ]

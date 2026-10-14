@@ -1,0 +1,17 @@
+// A public view can't read a facet that show rules hide from the public.
+title$
+cost#USD
+
+rule: costIsStaff
+  then: cost shown to staff
+  strength: must
+
+shape: costCard
+  slots:
+    title -> heading
+    cost -> cost
+
+view: leaky
+  select:
+    level: product
+  shape: costCard

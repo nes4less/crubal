@@ -1,0 +1,31 @@
+// "Also on other formats": a view inside a product page, narrowed by the page's record (chapter 12.2).
+view: alsoOn
+context: P-10
+
+view: alsoOn
+  select:
+    level: product
+  of: work is context.work and not id is context.id
+  shape: card
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-10 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: DVD
+  releaseDate: 1989
+  work: &W-1
+
+product: P-11 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: Blu-ray
+  releaseDate: 2010
+  work: &W-1
+
+product: P-12 [origin: declared, via: L-1]
+  title: Home Alone
+  format: DVD
+  releaseDate: 1990
+  work: &W-2

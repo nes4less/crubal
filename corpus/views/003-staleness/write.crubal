@@ -1,0 +1,9 @@
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+unit: U-3 of P-2 [origin: observed, via: L-9]
+  price: 4.00USD
+
+product: P-1 [origin: declared, via: L-9]
+  notes: shelf B

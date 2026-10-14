@@ -3,7 +3,7 @@
 The CRUBAL reference implementation. Pure functions, JSON in and JSON out, so a compiled core can replace
 the internals later behind the same API.
 
-**Level reached: Exchange** (spec chapters 1–11).
+**Level reached: Views**, every chapter of the spec (1–13). Conformance claim: `CRUBAL 2 · Views · corpus 2026-10-14`.
 
 - **Reader:** the text form and JSON both ways, facet types, unknown keys kept exactly, plain-words refusals
   with line numbers.
@@ -26,7 +26,13 @@ the internals later behind the same API.
   border wrappers verified against the presenter's key and its log, and package checks (prefixes, trust
   entries, extending without changing).
 
-It passes every corpus folder up to Exchange (75 cases).
+- **Views:** shapes as maps into slots (addresses, aggregates over lower levels, templates, required
+  slots), views with selection, context (`of`), pins, hides, order and pages, filters as sub-indexes with
+  range and value buckets and counts that follow the other picks, indexable landing pages, audiences and
+  `shown to` rules (new and unknown values never public), roles that narrow an audience, the portable shape,
+  and read sets that decide which rows a write makes stale.
+
+It passes every corpus folder (87 cases).
 
 Store also checks Ed25519 signatures against the owner's published key, replays intake records from their
 kept bytes (deterministically, keeping earlier outcomes), reviews unknown and new values by key across all
@@ -35,7 +41,7 @@ the package's own trust order and facets' orders.
 
 ```sh
 npm test                                   # unit tests and the Reader corpus
-node bin/crubal.ts test ../../corpus --level exchange   # the corpus runner, case by case
+node bin/crubal.ts test ../../corpus --level views   # the corpus runner, case by case
 node bin/crubal.ts read data.crubal --defs facets.crubal
 node bin/crubal.ts print data.json --defs facets.crubal [--plain]
 ```
@@ -58,6 +64,7 @@ Needs Node 23.6 or later (it runs the TypeScript directly).
 | `src/migrate.ts` | migration recipes, checks and restamping (10) |
 | `src/exchange.ts` | contract checks, runs, offer and take, borders (7, 8.5.1) |
 | `src/packages.ts` | package files: prefixes, trust entries, extending (11) |
+| `src/views.ts` | shapes, views, filters, audiences and roles, projections and staleness (12) |
 | `src/corpus.ts` | the conformance runner (13) |
 
-Next: the Views level (shapes, views, filters as sub-indexes, audiences and roles, projections).
+Next: make the repo public, publish `@cruba/crubal`, and start crubal.com.

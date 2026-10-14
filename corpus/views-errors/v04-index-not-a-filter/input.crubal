@@ -1,0 +1,15 @@
+// An indexed filter must be one of the view's filters.
+genres{Comedy|Drama}*
+
+filter: genres
+  facet: genres
+
+shape: plain
+  slots:
+    genres -> genres
+
+view: noFilters
+  select:
+    level: product
+  shape: plain
+  index: genres

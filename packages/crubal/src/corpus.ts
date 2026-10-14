@@ -10,6 +10,7 @@ import { type Keys, land, matchParts, rawOf, readContracts, receive, replay, rev
 import { checkRecipe, readRecipes, restamp } from "./migrate.ts";
 import { checkContracts, Exchange, readRoles, verifyBorder } from "./exchange.ts";
 import { checkPackages } from "./packages.ts";
+import { checkViews, readViews, Views } from "./views.ts";
 import { readUnder } from "./read-text.ts";
 import { readTree } from "./tree.ts";
 import type { Record as Rec } from "./model.ts";
@@ -32,6 +33,10 @@ const LEVEL_FOLDERS: { [level: string]: string[] } = {
   exchange: [
     "reader", "reader-errors", "dictionary", "dictionary-errors", "rules", "rules-errors", "store", "store-errors",
     "exchange", "exchange-errors", "package-errors",
+  ],
+  views: [
+    "reader", "reader-errors", "dictionary", "dictionary-errors", "rules", "rules-errors", "store", "store-errors",
+    "exchange", "exchange-errors", "package-errors", "views", "views-errors",
   ],
 };
 
@@ -473,6 +478,90 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
   }
 }
 
+const RUN_KEYS = new Set(["pick", "context", "audiences", "callers", "page"]);
+
+function runViewsCase(folder: string, caseDir: string, name: string, shared: Dictionary, root: string): CaseResult {
+  const file = (f: string) => join(caseDir, f);
+  const json = (f: string) => JSON.parse(readFileSync(file(f), "utf8")) as Json;
+  const pass = { folder, name, pass: true };
+  const fail = (detail: string) => ({ folder, name, pass: false, detail });
+  try {
+    const input = readFileSync(file("input.crubal"), "utf8");
+    if (folder === "views-errors") {
+      const want = Number(readFileSync(file("error.txt"), "utf8").trim().split(/\s/)[0]);
+      try {
+        const d = copy(shared);
+        readDefinitions(input, d);
+        checkPackage(d);
+        checkViews(readViews(input), d);
+        return fail("published without refusing");
+      } catch (e) {
+        if (!(e instanceof CrubalError)) return fail(String(e));
+        return e.line === want ? pass : fail(`refused at line ${e.line} (${e.message}), expected line ${want}`);
+      }
+    }
+    // Run lines (a bodiless "view:", pick, context, audiences, callers, page) are instructions, not definitions.
+    const lines = input.split("\n");
+    const run: { view?: string; picks: { [f: string]: string[] }; context?: string; audiences?: string[]; callers?: string[]; page?: number } = { picks: {} };
+    const tree = readTree(input);
+    for (const n of tree) {
+      const isRun = (n.key === "view" && n.children.length === 0) || (n.key !== null && RUN_KEYS.has(n.key));
+      if (!isRun) continue;
+      const blank = (x: typeof n) => {
+        lines[x.line - 1] = "";
+        for (const c of x.children) blank(c);
+      };
+      blank(n);
+      if (n.key === "view") run.view = n.value;
+      if (n.key === "pick") for (const c of n.children) if (c.key) run.picks[c.key] = c.value.split(",").map((x) => x.trim());
+      if (n.key === "context") run.context = n.value;
+      if (n.key === "audiences") run.audiences = n.value.split(",").map((x) => x.trim());
+      if (n.key === "callers") run.callers = n.value.split(",").map((x) => x.trim());
+      if (n.key === "page") run.page = Number(n.value);
+    }
+    const { defs, data } = splitCaseInput(lines.join("\n"));
+    const dict = copy(shared);
+    const sharedViews = readFileSync(join(root, "views", "_views.crubal"), "utf8");
+    readDefinitions(sharedViews, dict);
+    if (defs.trim()) readDefinitions(defs, dict);
+    checkPackage(dict);
+    const set = readViews(sharedViews);
+    const own = readViews(defs);
+    for (const k of ["shapes", "filters", "views", "roles", "shown"] as const) for (const [key, val] of own[k]) (set[k] as Map<string, unknown>).set(key, val);
+    checkViews(set, dict);
+    const views = new Views(dict, set);
+    const text = data.trim() ? data : readFileSync(join(root, "views", "_records.crubal"), "utf8");
+    const records = readText(text, dict).records.map((r) => foldRecord(r, dict));
+    for (const r of records) views.put(r);
+    const byId = new Map(records.map((r) => [r.id, r]));
+    const viewName = run.view as string;
+    const opts = { picks: run.picks, ...(run.context ? { context: byId.get(run.context) as Rec } : {}), ...(run.page ? { page: run.page } : {}) };
+    const same = (got: Json, want: Json, label: string) => (serialize(got) === serialize(want) ? pass : fail(`${label}: got ${serialize(got)}`));
+
+    if (existsSync(file("expected-stale.json"))) {
+      views.project(viewName, opts);
+      const stale = new Set<string>();
+      for (const w of readText(readFileSync(file("write.crubal"), "utf8"), dict).records) for (const id of views.staleAfter(viewName, w)) stale.add(id);
+      const want = json("expected-stale.json") as { stale: string[]; "not-stale": string[] };
+      const wrong = [...want.stale.filter((id) => !stale.has(id)), ...want["not-stale"].filter((id) => stale.has(id))];
+      return wrong.length ? fail(`stale: got ${[...stale].join(", ")}`) : pass;
+    }
+    if (existsSync(file("expected-by.json"))) {
+      const got: JsonObject = {};
+      for (const a of run.audiences ?? []) got[a] = views.project(viewName, { ...opts, audience: a }).rows;
+      for (const c of run.callers ?? []) got[c] = views.project(viewName, { ...opts, caller: byId.get(c) as Rec }).rows;
+      return same(got, json("expected-by.json"), "by audience");
+    }
+    const p = views.project(viewName, opts);
+    if (existsSync(file("expected-counts.json"))) return same({ records: p.records, counts: p.counts, indexable: p.indexable } as unknown as Json, json("expected-counts.json"), "counts");
+    if (existsSync(file("expected-pages.json"))) return same({ pages: p.pages, records: p.records, indexable: p.indexable } as unknown as Json, json("expected-pages.json"), "pages");
+    const wantFile = existsSync(file("expected-portable.json")) ? "expected-portable.json" : "expected-projection.json";
+    return same(p.rows as unknown as Json, json(wantFile), "projection");
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : String(e));
+  }
+}
+
 const isPlainObject = (v: Json | undefined): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** Run one level's corpus folders under `root`. */
@@ -488,7 +577,9 @@ export function runCorpus(root: string, level: string): CaseResult[] {
     for (const name of readdirSync(dir).sort()) {
       if (name.startsWith("_")) continue;
       if (!["input.crubal", "log.json", "border.json"].some((f) => existsSync(join(dir, name, f)))) continue;
-      const r = folder.startsWith("exchange") || folder === "package-errors"
+      const r = folder.startsWith("views")
+        ? runViewsCase(folder, join(dir, name), name, dict, root)
+        : folder.startsWith("exchange") || folder === "package-errors"
         ? runExchangeCase(folder, join(dir, name), name, dict, root)
         : folder.startsWith("store")
         ? runStoreCase(folder, join(dir, name), name, dict)

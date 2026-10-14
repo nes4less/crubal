@@ -1,0 +1,10 @@
+// The portable shape (chapter 12.1): every value as key, label, type and value, readable by software
+// that knows nothing of CRUBAL.
+view: portableDiscs
+context: P-1
+
+view: portableDiscs
+  select:
+    level: product
+  of: id is context.id
+  shape: crubal:portable

@@ -14,3 +14,4 @@ export { entryHash, fieldPath, land, matchParts, readContracts, receive, sha256,
 export { checkRecipe, readRecipes, restamp, type Recipe, type ReviewItem, type Step } from "./migrate.ts";
 export { checkContracts, Exchange, readRoles, verifyBorder, type Role, type RunResult } from "./exchange.ts";
 export { checkPackages, readPackages, type PackageInfo } from "./packages.ts";
+export { AUDIENCES, checkViews, readViews, Views, type Projection, type ProjectOptions, type View, type ViewSet } from "./views.ts";

@@ -17,7 +17,7 @@ export type Expr =
   | { op: "not"; a: Expr }
   | { op: "test"; path: string; verb: string; arg: string };
 
-const VERBS = [" may ", " wears ", " is not ", " is ", " in ", " has", " before ", " after ", " over ", " under "];
+const VERBS = [" shown to ", " may ", " wears ", " is not ", " is ", " in ", " has", " before ", " after ", " over ", " under "];
 
 /** Split on a word outside parentheses and quotes. */
 function splitWord(s: string, word: string): string[] {
@@ -98,6 +98,8 @@ function test(e: Extract<Expr, { op: "test" }>, values: JsonObject, states?: Sta
   if (e.verb === "is" && STATES.has(e.arg)) return states ? states(e.path).has(e.arg) : false;
   // `caller may run listing`, `caller wears Staff` (chapter 7.6): what the caller is, not a value.
   if (e.verb === "may" || e.verb === "wears") return states ? states(e.path).has(`${e.verb}:${e.arg}`) : false;
+  // `cost shown to staff` declares visibility (chapter 12.4); views apply it, so as a check it holds.
+  if (e.verb === "shown to") return true;
   const v = valueAt(values, e.path);
   const empty = emptyOf(v);
   if (e.verb === "has") {

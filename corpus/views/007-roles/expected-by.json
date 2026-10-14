@@ -1,0 +1,4 @@
+{
+  "C-1": [ { "record": "P-21", "heading": "Die Hard", "cost": { "$money": "3.10", "currency": "USD" } } ],
+  "C-2": [ { "record": "P-21", "heading": "Die Hard" } ]
+}
