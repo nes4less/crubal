@@ -1,0 +1,10 @@
+// The escape rule: JSON string syntax, and lenient reading where nothing splits.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-8 [origin: declared, via: L-1]
+  title: Star Wars: A New Hope
+  subtitle: "Episode IV, \"remastered\"\nSpecial Edition"
+  genres: "Comedy", Drama
+  note: "&not a link"

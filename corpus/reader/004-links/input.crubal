@@ -1,0 +1,9 @@
+// The three link targets. A URL's // is not a comment.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-4 [origin: declared, via: L-1]
+  work: &W-1
+  director: &wd:Q311319
+  homepage: &https://example.org/vacation  // a comment after a space

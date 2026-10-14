@@ -1,0 +1,7 @@
+// A key once per record.
+crubal: 2
+owner: test.example
+
+product: P-1
+  title: First
+  title: Second

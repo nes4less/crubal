@@ -1,0 +1,12 @@
+// Short and long lists are the same list; a set's order means nothing, an ordered list's does.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-3 [origin: declared, via: L-1]
+  genres: Holiday, Comedy
+  hdrFormats:
+    - HDR10
+  aliasesSeen:
+    - Xmas Vacation
+    - Christmas Vacation

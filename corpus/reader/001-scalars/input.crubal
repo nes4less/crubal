@@ -1,0 +1,17 @@
+// One value of each plain shape.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: National Lampoon's Christmas Vacation
+  format: DVD
+  releaseDate: 1997-10
+  discs: 1
+  runtime: 97min
+  weight: 0.25lb
+  sealed: yes
+
+unit: U-1 of P-1 [origin: observed, via: L-2]
+  price: 12.50USD
+  sealed: no

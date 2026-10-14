@@ -1,0 +1,10 @@
+// A row key once per list.
+crubal: 2
+owner: test.example
+
+product: P-1
+  tracks:
+    - [row: t1]
+      language: English
+    - [row: t1]
+      language: French

@@ -1,0 +1,17 @@
+{
+  "crubal": "2",
+  "package": "test /2026-10-14",
+  "records": [
+    {
+      "id": "P-2", "kind": "item", "level": "product", "owner": "test.example",
+      "values": {
+        "title": "_",
+        "subtitle": "-",
+        "videoCodec": { "$empty": "unknown" },
+        "hdrFormats": { "$empty": "n/a" },
+        "note": { "$empty": "n/a" }
+      },
+      "sources": { "*": { "origin": "declared", "via": "L-1" } }
+    }
+  ]
+}

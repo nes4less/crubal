@@ -1,0 +1,15 @@
+{
+  "crubal": "2",
+  "package": "test /2026-10-14",
+  "records": [
+    {
+      "id": "P-3", "kind": "item", "level": "product", "owner": "test.example",
+      "values": {
+        "genres": ["Comedy", "Holiday"],
+        "hdrFormats": ["HDR10"],
+        "aliasesSeen": ["Xmas Vacation", "Christmas Vacation"]
+      },
+      "sources": { "*": { "origin": "declared", "via": "L-1" } }
+    }
+  ]
+}

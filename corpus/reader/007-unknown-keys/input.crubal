@@ -1,0 +1,10 @@
+// Unknown keys are kept as written, never typed or split.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-7 [origin: reported, via: L-1]
+  title: Christmas Vacation
+  ebay:Studio: Warner Home Video
+  ebay:Features: Closed-captioned, Widescreen
+  ebay:Year: 1997

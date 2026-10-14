@@ -1,0 +1,19 @@
+{
+  "crubal": "2",
+  "package": "test /2026-10-14",
+  "records": [
+    {
+      "id": "P-9", "kind": "item", "level": "product", "owner": "test.example",
+      "wears": ["OpticalDisc"],
+      "values": { "title": "Christmas Vacation" },
+      "parts": [ { "$row": "disc1", "wears": ["Disc"], "values": { "discFormat": "DVD-9" } } ],
+      "sources": { "*": { "origin": "declared", "via": "L-1" } }
+    },
+    {
+      "id": "U-9", "kind": "item", "level": "unit", "of": "P-9", "owner": "test.example",
+      "values": { "condition": "VG" },
+      "parts": [ { "$row": "disc1", "values": { "condition": "NM" } } ],
+      "sources": { "*": { "origin": "observed", "via": "L-2" } }
+    }
+  ]
+}

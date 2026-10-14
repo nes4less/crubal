@@ -1,0 +1,15 @@
+// The package every reader case is written under.
+package: test /2026-10-14
+owner: test.example
+
+kind: item
+  levels: group, product, unit
+  base: Item
+  schema: schema:Product
+  vary:
+    unit: condition, price, sealed     // facets that vary at the step into this level
+
+kind: work
+  levels: work
+  base: Work
+  schema: schema:CreativeWork

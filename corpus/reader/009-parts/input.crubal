@@ -1,0 +1,18 @@
+// Owned parts, and a unit mirroring them by row key.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-9 [origin: declared, via: L-1]
+  crubal:wears: OpticalDisc
+  title: Christmas Vacation
+  crubal:parts:
+    - [row: disc1]
+      crubal:wears: Disc
+      discFormat: DVD-9
+
+unit: U-9 of P-9 [origin: observed, via: L-2]
+  condition: VG
+  crubal:parts:
+    - [row: disc1]
+      condition: NM

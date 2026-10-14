@@ -1,0 +1,22 @@
+{
+  "crubal": "2",
+  "package": "test /2026-10-14",
+  "records": [
+    {
+      "id": "P-6", "kind": "item", "level": "product", "owner": "test.example",
+      "values": {
+        "rating": [
+          { "$value": "15", "region": "UK" },
+          { "$value": "PG-13", "region": "US" }
+        ],
+        "runtime": { "$qty": "97", "unit": "min" },
+        "cover": { "$image": "https://img.example/p-6.jpg", "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881", "w": 1600, "h": 2400 }
+      },
+      "sources": {
+        "*": { "origin": "reported", "via": "L-1" },
+        "rating[\"15 [region: UK]\"]": { "origin": "declared", "via": "L-4" },
+        "runtime": { "origin": "observed", "via": "L-5", "owner": "other.example" }
+      }
+    }
+  ]
+}

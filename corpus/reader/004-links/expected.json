@@ -1,0 +1,15 @@
+{
+  "crubal": "2",
+  "package": "test /2026-10-14",
+  "records": [
+    {
+      "id": "P-4", "kind": "item", "level": "product", "owner": "test.example",
+      "values": {
+        "work": { "$link": "W-1" },
+        "director": { "$link": "wd:Q311319" },
+        "homepage": { "$link": "https://example.org/vacation" }
+      },
+      "sources": { "*": { "origin": "declared", "via": "L-1" } }
+    }
+  ]
+}

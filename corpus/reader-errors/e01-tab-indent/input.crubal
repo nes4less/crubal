@@ -1,0 +1,6 @@
+// A tab in indentation.
+crubal: 2
+owner: test.example
+
+product: P-1
+	title: Tabbed

@@ -1,0 +1,9 @@
+// Qualifiers are part of the value; sources are not. Image fields go in the detail.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-6 [origin: reported, via: L-1]
+  rating: PG-13 [region: US], 15 [region: UK, origin: declared, via: L-4]
+  runtime: 97min [origin: observed, via: L-5, owner: other.example]
+  cover: https://img.example/p-6.jpg [sha256: 2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881, w: 1600, h: 2400]

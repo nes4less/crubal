@@ -1,0 +1,18 @@
+// Rows: derived from an identity child (cast), or minted (tracks).
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-5 [origin: declared, via: L-1]
+  cast:
+    - person: &wd:Q310394
+      character: Clark Griswold
+    - person: &wd:Q229048
+      character: Ellen Griswold [origin: reported, via: L-3]
+  tracks:
+    - [row: t1]
+      language: English
+      channels: 6
+    - [row: t2]
+      language: French
+      channels: 2

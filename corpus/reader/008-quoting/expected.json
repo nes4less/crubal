@@ -1,0 +1,16 @@
+{
+  "crubal": "2",
+  "package": "test /2026-10-14",
+  "records": [
+    {
+      "id": "P-8", "kind": "item", "level": "product", "owner": "test.example",
+      "values": {
+        "title": "Star Wars: A New Hope",
+        "subtitle": "Episode IV, \"remastered\"\nSpecial Edition",
+        "genres": ["Comedy", "Drama"],
+        "note": "&not a link"
+      },
+      "sources": { "*": { "origin": "declared", "via": "L-1" } }
+    }
+  ]
+}

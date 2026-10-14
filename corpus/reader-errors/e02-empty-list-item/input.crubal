@@ -1,0 +1,8 @@
+// An empty is the whole value, never a list item.
+crubal: 2
+owner: test.example
+
+product: P-1
+  genres:
+    - Comedy
+    - -

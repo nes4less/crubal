@@ -1,0 +1,27 @@
+{
+  "crubal": "2",
+  "package": "test /2026-10-14",
+  "records": [
+    {
+      "id": "P-1", "kind": "item", "level": "product", "owner": "test.example",
+      "values": {
+        "title": "National Lampoon's Christmas Vacation",
+        "format": "DVD",
+        "releaseDate": "1997-10",
+        "discs": "1",
+        "runtime": { "$qty": "97", "unit": "min" },
+        "weight": { "$qty": "0.25", "unit": "lb" },
+        "sealed": true
+      },
+      "sources": { "*": { "origin": "declared", "via": "L-1" } }
+    },
+    {
+      "id": "U-1", "kind": "item", "level": "unit", "of": "P-1", "owner": "test.example",
+      "values": {
+        "price": { "$money": "12.50", "currency": "USD" },
+        "sealed": false
+      },
+      "sources": { "*": { "origin": "observed", "via": "L-2" } }
+    }
+  ]
+}

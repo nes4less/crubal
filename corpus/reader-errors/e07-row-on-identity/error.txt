@@ -1,0 +1,1 @@
+7 a row key on a compound whose row keys are derived

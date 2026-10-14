@@ -1,0 +1,11 @@
+// The three empties, and quotes taking a mark's meaning away.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-2 [origin: declared, via: L-1]
+  title: "_"
+  subtitle: "-"
+  videoCodec: _
+  hdrFormats: -
+  note: n/a

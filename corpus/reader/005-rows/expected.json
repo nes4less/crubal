@@ -1,0 +1,23 @@
+{
+  "crubal": "2",
+  "package": "test /2026-10-14",
+  "records": [
+    {
+      "id": "P-5", "kind": "item", "level": "product", "owner": "test.example",
+      "values": {
+        "cast": [
+          { "person": { "$link": "wd:Q310394" }, "character": "Clark Griswold" },
+          { "person": { "$link": "wd:Q229048" }, "character": "Ellen Griswold" }
+        ],
+        "tracks": [
+          { "$row": "t1", "language": "English", "channels": "6" },
+          { "$row": "t2", "language": "French", "channels": "2" }
+        ]
+      },
+      "sources": {
+        "*": { "origin": "declared", "via": "L-1" },
+        "cast[wd:Q229048].character": { "origin": "reported", "via": "L-3" }
+      }
+    }
+  ]
+}

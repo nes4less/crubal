@@ -1,0 +1,8 @@
+// A compound with an identity child derives its row keys; writing one is refused.
+crubal: 2
+owner: test.example
+
+product: P-1
+  cast:
+    - [row: chevy]
+      person: &wd:Q310394
