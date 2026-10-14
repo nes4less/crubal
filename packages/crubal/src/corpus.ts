@@ -6,9 +6,12 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { canonical } from "./canonical.ts";
 import { type Dictionary, emptyDictionary, readDefinitions, splitCaseInput } from "./defs.ts";
+import { land, matchParts, readContracts, receive, validate, verifyChain, type Observation } from "./store.ts";
+import { checkRecipe, readRecipes, restamp } from "./migrate.ts";
+import type { Record as Rec } from "./model.ts";
 import { checkRules, Engine, readRules, type Result, type Rule } from "./rules.ts";
 import { checkPackage, checkRecord, facetJson, foldRecord, type Outcome, resolve, resolvedJson } from "./dictionary.ts";
-import type { Json } from "./model.ts";
+import type { Json, JsonObject } from "./model.ts";
 import { serialize } from "./canonical.ts";
 import { checkWrapper, type Wrapper } from "./model.ts";
 import { printText } from "./print-text.ts";
@@ -21,6 +24,7 @@ const LEVEL_FOLDERS: { [level: string]: string[] } = {
   reader: ["reader", "reader-errors"],
   dictionary: ["reader", "reader-errors", "dictionary", "dictionary-errors"],
   rules: ["reader", "reader-errors", "dictionary", "dictionary-errors", "rules", "rules-errors"],
+  store: ["reader", "reader-errors", "dictionary", "dictionary-errors", "rules", "rules-errors", "store", "store-errors"],
 };
 
 /** The shared definitions a folder's cases run under: the reader package, then the folder's own files. */
@@ -29,7 +33,8 @@ function loadDictionary(root: string, folder: string): Dictionary {
   const files = [join(root, "reader", "_package.crubal")];
   const own = folder.replace(/-errors$/, "");
   for (const f of ["_facets.crubal", "_classes.crubal"]) files.push(join(root, own, f));
-  if (own !== "reader" && !folder.endsWith("-errors")) files.splice(1, 0, join(root, "reader", "_facets.crubal"));
+  // Data cases read under the reader's facets too; a store error case checks recipes against them.
+  if (own !== "reader" && (!folder.endsWith("-errors") || folder === "store-errors")) files.splice(1, 0, join(root, "reader", "_facets.crubal"));
   for (const p of files) if (existsSync(p)) readDefinitions(readFileSync(p, "utf8"), dict);
   return dict;
 }
@@ -214,6 +219,94 @@ function runRulesCase(folder: string, caseDir: string, name: string, shared: Dic
   }
 }
 
+/** Every field an expected object states must be equal in the actual one. */
+function subset(actual: { [k: string]: Json }, expected: { [k: string]: Json }, label = ""): string | null {
+  for (const [k, v] of Object.entries(expected)) {
+    if (serialize(actual[k] as Json) !== serialize(v)) return `${label}${k} is ${serialize((actual[k] ?? "∅") as Json)}, expected ${serialize(v)}`;
+  }
+  return null;
+}
+
+function runStoreCase(folder: string, caseDir: string, name: string, shared: Dictionary): CaseResult {
+  const file = (f: string) => join(caseDir, f);
+  const json = (f: string) => JSON.parse(readFileSync(file(f), "utf8")) as Json;
+  const pass = { folder, name, pass: true };
+  const fail = (detail: string) => ({ folder, name, pass: false, detail });
+  try {
+    const input = existsSync(file("input.crubal")) ? readFileSync(file("input.crubal"), "utf8") : "";
+    if (folder === "store-errors") {
+      const want = Number(readFileSync(file("error.txt"), "utf8").trim().split(/\s/)[0]);
+      try {
+        for (const r of readRecipes(input)) checkRecipe(r, shared);
+        return fail("published without refusing");
+      } catch (e) {
+        if (!(e instanceof CrubalError)) return fail(String(e));
+        return e.line === want ? pass : fail(`refused at line ${e.line} (${e.message}), expected line ${want}`);
+      }
+    }
+    if (existsSync(file("log.json"))) {
+      const got = verifyChain(json("log.json") as JsonObject[]) as unknown as { [k: string]: Json };
+      const want = json("expected-verify.json") as { [k: string]: Json };
+      return serialize(got) === serialize(want) ? pass : fail(`got ${serialize(got)}`);
+    }
+    const { defs, data } = splitCaseInput(input);
+    const dict = copy(shared);
+    if (defs.trim()) readDefinitions(defs, dict);
+    const records = readText(data, dict).records.map((r) => foldRecord(r, dict));
+    const one = (r: Rec) => canonical({ crubal: "2", records: [r] }, dict);
+
+    if (existsSync(file("recipe.crubal"))) {
+      const [recipe] = readRecipes(readFileSync(file("recipe.crubal"), "utf8"));
+      if (!recipe) return fail("no recipe");
+      checkRecipe(recipe, dict);
+      const { records: out, review } = restamp(records, recipe, dict);
+      const want = json("expected.json") as JsonObject;
+      const got = { ...JSON.parse(canonical({ crubal: "2", package: recipe.to, records: out }, dict)), review };
+      const wantC = { ...JSON.parse(canonical({ crubal: String(want.crubal), package: String(want.package), records: want.records as unknown as Rec[] }, dict)), review: want.review };
+      return serialize(got) === serialize(wantC) ? pass : fail(`got ${firstDiff(serialize(got), serialize(wantC))}`);
+    }
+    if (existsSync(file("contract.crubal"))) {
+      const text = readFileSync(file("contract.crubal"), "utf8");
+      readDefinitions(text, dict);
+      const [contract] = readContracts(text);
+      if (!contract) return fail("no contract");
+      const intake = receive(contract, readFileSync(file("answer.json"), "utf8"), records[0]?.id ?? "", dict);
+      const want = (json("expected-intake.json") as { outcomes: { [k: string]: Json }[] }).outcomes;
+      if (intake.outcomes.length !== want.length) return fail(`got ${intake.outcomes.length} outcomes: ${serialize(intake.outcomes as unknown as Json)}`);
+      for (const w of want) {
+        const a = intake.outcomes.find((o) => o.from === w.from) as unknown as { [k: string]: Json } | undefined;
+        if (!a) return fail(`no outcome for ${w.from}`);
+        const p = subset(a, w, `${w.from}: `);
+        if (p) return fail(p);
+      }
+      return pass;
+    }
+    if (existsSync(file("answer.json"))) {
+      const answer = json("answer.json") as { parts: { slot: string; [k: string]: Json }[] };
+      const got = matchParts(records[0] as Rec, answer.parts, dict);
+      const want = json("expected.json");
+      return serialize(got as unknown as Json) === serialize(want) ? pass : fail(`got ${serialize(got as unknown as Json)}`);
+    }
+    if (existsSync(file("observations.json"))) {
+      const want = json("expected-validation.json") as { [k: string]: Json };
+      const rec = records.find((r) => r.id === want.record) as Rec;
+      const got = validate(rec, String(want.address), json("observations.json") as unknown as Observation[]);
+      const p = subset(got as { [k: string]: Json }, want);
+      return p ? fail(p) : pass;
+    }
+    const intakes = existsSync(file("intakes.json")) ? (json("intakes.json") as JsonObject[]) : [json("intake.json") as JsonObject];
+    let rec = records[0] as Rec;
+    for (const i of intakes) rec = land(rec, i as unknown as Parameters<typeof land>[1], { origin: "reported", via: String(i.log) });
+    const want = json("expected.json") as unknown as Rec;
+    const got = one(rec);
+    const wantC = one(want);
+    const alts = serialize(((rec as unknown as JsonObject).alternatives ?? {}) as Json) === serialize(((want as unknown as JsonObject).alternatives ?? {}) as Json);
+    return got === wantC && alts ? pass : fail(`got ${firstDiff(got, wantC)} alternatives ${serialize(((rec as unknown as JsonObject).alternatives ?? {}) as Json)}`);
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : String(e));
+  }
+}
+
 /** Run one level's corpus folders under `root`. */
 export function runCorpus(root: string, level: string): CaseResult[] {
   const folders = LEVEL_FOLDERS[level];
@@ -225,8 +318,11 @@ export function runCorpus(root: string, level: string): CaseResult[] {
     const rulesFile = join(root, "rules", "_rules.crubal");
     const sharedRules = folder === "rules" && existsSync(rulesFile) ? readRules(readFileSync(rulesFile, "utf8")) : [];
     for (const name of readdirSync(dir).sort()) {
-      if (name.startsWith("_") || !existsSync(join(dir, name, "input.crubal"))) continue;
-      const r = folder.startsWith("rules")
+      if (name.startsWith("_")) continue;
+      if (!existsSync(join(dir, name, "input.crubal")) && !existsSync(join(dir, name, "log.json"))) continue;
+      const r = folder.startsWith("store")
+        ? runStoreCase(folder, join(dir, name), name, dict)
+        : folder.startsWith("rules")
         ? runRulesCase(folder, join(dir, name), name, dict, sharedRules)
         : folder.startsWith("dictionary")
           ? runDictionaryCase(folder, join(dir, name), name, dict)

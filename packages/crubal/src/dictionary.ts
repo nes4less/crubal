@@ -283,7 +283,7 @@ function foldQuantity(f: Facet, v: Json): Json {
   return amount === null ? v : { $qty: amount, unit: f.unit };
 }
 
-function foldValue(f: Facet, v: Json, dict: Dictionary): Json {
+export function foldValue(f: Facet, v: Json, dict: Dictionary): Json {
   if (Array.isArray(v)) return v.map((x) => foldValue(f, x, dict));
   if (f.type === "choice") return foldChoice(f, v);
   if (f.type === "number") return foldQuantity(f, v);
@@ -338,7 +338,7 @@ function precisionOf(d: string): "year" | "month" | "day" {
 }
 
 /** Check one scalar against its facet: an outcome and an optional flag. */
-function checkScalar(f: Facet, v: Json): { outcome: string; flag?: string } {
+export function checkScalar(f: Facet, v: Json): { outcome: string; flag?: string } {
   const c = core(v);
   if (isObj(c) && "$empty" in c) return { outcome: "absorbed" };
   switch (f.type) {

@@ -3,7 +3,7 @@
 The CRUBAL reference implementation. Pure functions, JSON in and JSON out, so a compiled core can replace
 the internals later behind the same API.
 
-**Level reached: Rules** (spec chapters 1–6).
+**Level reached: Store** (spec chapters 1–6 and 8–10), with gaps listed below.
 
 - **Reader:** the text form and JSON both ways, facet types, unknown keys kept exactly, plain-words refusals
   with line numbers.
@@ -14,11 +14,20 @@ the internals later behind the same API.
   `-`), derived (templates with `??` and `?`, rollups), flagged, incomplete, complete and completeness, with
   value-state tests and global uniqueness.
 
-It passes `corpus/reader*`, `corpus/dictionary*` and `corpus/rules*` (44 cases).
+- **Store:** hash-linked logs with redaction, intake through receive contracts (map, value maps, aliases,
+  shapes, ignore, keep-raw; raw bytes and their hash kept), landing by the trust order with alternatives,
+  matching parts before minting rows, evidence validation (independent witnesses, vetoes, version-split
+  proposals), and migration recipes with restamping and a review queue.
+
+It passes `corpus/reader*`, `corpus/dictionary*`, `corpus/rules*` and `corpus/store*` (55 cases).
+
+**Store gaps the corpus doesn't test yet:** Ed25519 signatures (the corpus chains are unsigned), replay of
+held intake records, review by key and promotion by recurrence, binary payloads as `base64`, and the
+package's own trust order (the default order is used).
 
 ```sh
 npm test                                   # unit tests and the Reader corpus
-node bin/crubal.ts test ../../corpus --level rules   # the corpus runner, case by case
+node bin/crubal.ts test ../../corpus --level store   # the corpus runner, case by case
 node bin/crubal.ts read data.crubal --defs facets.crubal
 node bin/crubal.ts print data.json --defs facets.crubal [--plain]
 ```
@@ -37,6 +46,8 @@ Needs Node 23.6 or later (it runs the TypeScript directly).
 | `src/conditions.ts` | conditions with three-valued empties (6.3) |
 | `src/units.ts` | a starter units table, until the standard units package exists |
 | `src/rules.ts` | rules, shortcuts, rule-set checks and the write engine (6) |
+| `src/store.ts` | logs, receive contracts and intake, landing and trust, part matching, evidence (8, 9) |
+| `src/migrate.ts` | migration recipes, checks and restamping (10) |
 | `src/corpus.ts` | the conformance runner (13) |
 
-Next: the Store level (sources and signed logs, intake with raw bytes, migrations).
+Next: close the Store gaps above, then the Exchange level (contracts, offer and take, signatures across owners).

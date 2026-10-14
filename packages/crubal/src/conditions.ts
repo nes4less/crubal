@@ -80,9 +80,23 @@ function emptyOf(v: Json | undefined): "absent" | "unknown" | "n/a" | null {
   return null;
 }
 
+/** A path's value, including aggregates: `count of languages`, `least of prices`, `most of …`, `sum of …`. */
+function valueAt(values: JsonObject, path: string): Json | undefined {
+  const agg = path.match(/^(count|least|most|sum) of (.+)$/);
+  if (!agg) return values[path];
+  const v = values[agg[2] as string];
+  const items = v === undefined || emptyOf(v) ? [] : Array.isArray(v) ? v : [v];
+  if (agg[1] === "count") return String(items.length);
+  if (!items.length) return undefined;
+  const nums = items.map((x) => Number.parseFloat(plain(x)));
+  if (agg[1] === "least") return String(Math.min(...nums));
+  if (agg[1] === "most") return String(Math.max(...nums));
+  return String(nums.reduce((a, b) => a + b, 0));
+}
+
 function test(e: Extract<Expr, { op: "test" }>, values: JsonObject, states?: StateOf): Truth {
   if (e.verb === "is" && STATES.has(e.arg)) return states ? states(e.path).has(e.arg) : false;
-  const v = values[e.path];
+  const v = valueAt(values, e.path);
   const empty = emptyOf(v);
   if (e.verb === "has") {
     if (empty) return false;

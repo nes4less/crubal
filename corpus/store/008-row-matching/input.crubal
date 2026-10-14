@@ -6,6 +6,14 @@ class: DvdCase
 facet: name
   type: text
 
+class: Disc
+  facets:
+    name
+
+class: Insert
+  facets:
+    name
+
 crubal: 2
 package: test /2026-10-14
 owner: test.example
