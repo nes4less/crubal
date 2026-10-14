@@ -1,11 +1,13 @@
 // Routing middleware for crubal.com: counts AI crawlers. Web Analytics leaves bots out on purpose, so
-// each request from a known AI crawler is recorded as a server-side custom event ("ai_crawler") instead.
+// each request from a known AI crawler is recorded as a server-side custom event ("ai_crawler": bot and path)
+// instead, at $3 per 100,000 events on Pro.
 // It never changes the response, and the event is sent after the response, so pages aren't slowed.
 
 import { track } from "@vercel/analytics/server";
 import { waitUntil } from "@vercel/functions";
 
-// User-agent token → who runs it. Training crawlers and answer-time fetchers are both listed.
+// User-agent token → who runs it (for the dashboard, which maps bot to operator). Training crawlers and
+// answer-time fetchers are both listed.
 const BOTS = [
   ["GPTBot", "OpenAI"], ["OAI-SearchBot", "OpenAI"], ["ChatGPT-User", "OpenAI"],
   ["ClaudeBot", "Anthropic"], ["Claude-User", "Anthropic"], ["Claude-SearchBot", "Anthropic"], ["anthropic-ai", "Anthropic"],
@@ -23,6 +25,7 @@ export default function middleware(request) {
   const hit = BOTS.find(([token]) => ua.includes(token));
   if (hit) {
     const path = new URL(request.url).pathname;
-    waitUntil(track("ai_crawler", { bot: hit[0], operator: hit[1], path }, { headers: request.headers }).catch(() => {}));
+    // Pro allows two properties per event: the bot names its operator, so the operator isn't sent.
+    waitUntil(track("ai_crawler", { bot: hit[0], path }, { headers: request.headers }).catch(() => {}));
   }
 }
