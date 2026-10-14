@@ -26,6 +26,11 @@ export default function middleware(request) {
   if (hit) {
     const path = new URL(request.url).pathname;
     // Pro allows two properties per event: the bot names its operator, so the operator isn't sent.
-    waitUntil(track("ai_crawler", { bot: hit[0], path }, { headers: request.headers }).catch(() => {}));
+    waitUntil(
+      track("ai_crawler", { bot: hit[0], path }, { headers: request.headers }).then(
+        () => console.log(`ai_crawler recorded: ${hit[0]} ${path}`),
+        (e) => console.error(`ai_crawler not recorded: ${e?.message ?? e}`),
+      ),
+    );
   }
 }
