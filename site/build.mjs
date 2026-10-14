@@ -11,6 +11,29 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
 const out = join(here, "dist");
 const REPO = "https://github.com/nes4less/crubal";
+const ORIGIN = "https://crubal.com";
+const RAW = "https://raw.githubusercontent.com/nes4less/crubal/main";
+const STEWARD = { "@type": "Organization", name: "Infinite Token", description: "A development company. We design and build software." };
+const pages = [];
+
+// Headings get ids and a link mark, so a section like 6.3 can be linked to.
+const slugify = (t) => t.toLowerCase().replace(/<[^>]+>/g, "").replace(/&[a-z]+;/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+marked.use({
+  renderer: {
+    heading({ tokens, depth }) {
+      const text = this.parser.parseInline(tokens);
+      const id = slugify(text);
+      return depth === 1 ? `<h1 id="${id}">${text}</h1>\n` : `<h${depth} id="${id}">${text} <a class="anchor" href="#${id}" aria-label="Link to this section">#</a></h${depth}>\n`;
+    },
+  },
+});
+
+/** A description from a page's own opening: its first real paragraph, trimmed. */
+function describe(md) {
+  const para = md.split(/\n{2,}/).map((p) => p.trim()).find((p) => p && !/^(#|\||```|-|\*\*Status)/.test(p)) ?? "";
+  const plain = para.replace(/`([^`]*)`/g, "$1").replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/\s+/g, " ");
+  return plain.length > 158 ? `${plain.slice(0, 155).replace(/\s+\S*$/, "")}…` : plain;
+}
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
@@ -23,7 +46,10 @@ const NAV = [
   [REPO, "GitHub"],
 ];
 
-function page(path, title, body, description = "CRUBAL: a language and engine for data about any kind of thing.") {
+function page(path, title, body, description = "CRUBAL: a language and engine for data about any kind of thing.", ld = null) {
+  const url = `${ORIGIN}${path}`;
+  if (!path.startsWith("/404")) pages.push(url);
+  const jsonld = ld ? `<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>` : "";
   const nav = NAV.map(([href, label]) => `<a href="${href}"${href !== "/" && path.startsWith(href) ? ' aria-current="page"' : path === href ? ' aria-current="page"' : ""}>${label}</a>`).join("");
   const html = `<!doctype html>
 <html lang="en">
@@ -32,15 +58,34 @@ function page(path, title, body, description = "CRUBAL: a language and engine fo
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(description)}">
+<link rel="canonical" href="${url}">
+<meta property="og:type" content="${path === "/" ? "website" : "article"}">
+<meta property="og:site_name" content="CRUBAL">
+<meta property="og:title" content="${esc(title)}">
+<meta property="og:description" content="${esc(description)}">
+<meta property="og:url" content="${url}">
+<meta property="og:image" content="${ORIGIN}/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${esc(title)}">
+<meta name="twitter:description" content="${esc(description)}">
+<meta name="twitter:image" content="${ORIGIN}/og.png">
+<meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e131a" media="(prefers-color-scheme: dark)">
+<link rel="alternate" type="text/plain" href="/llms.txt" title="llms.txt">${jsonld}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Public+Sans:wght@400;600;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Instrument+Sans:wght@500;600&family=Public+Sans:wght@400;600;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
 <link rel="stylesheet" href="/site.css">
 </head>
 <body>
 <header class="site"><div class="wrap"><a class="brand" href="/">CRUBAL</a><nav class="top">${nav}</nav></div></header>
 <main><div class="wrap">${body}</div></main>
-<footer class="site"><div class="wrap">CRUBAL 2, working draft. Spec and corpus CC-BY-4.0; code Apache-2.0. <a href="${REPO}">Source</a>.</div></footer>
+<footer class="site"><div class="wrap foot">
+  <div class="steward"><span class="it-mark" aria-hidden="true"></span><span class="it-line">A project of <strong>Infinite Token</strong>, development company</span></div>
+  <div>CRUBAL 2, working draft. Spec and corpus CC-BY-4.0; code Apache-2.0. <a href="${REPO}">Source</a>.</div>
+</div></footer>
 </body>
 </html>
 `;
@@ -73,9 +118,28 @@ const toc = (current) =>
     .join("")}</ol></nav>`;
 
 const specReadme = readFileSync(join(root, "spec", "README.md"), "utf8");
-page("/spec/", "CRUBAL 2: the specification", `<div class="layout">${toc("")}<article class="prose">${links(marked.parse(specReadme))}</article></div>`);
+const specLd = (name, description, path) => ({
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  headline: name,
+  description,
+  url: `${ORIGIN}${path}`,
+  isPartOf: { "@type": "CreativeWork", name: "CRUBAL 2: the specification", url: `${ORIGIN}/spec/` },
+  license: "https://creativecommons.org/licenses/by/4.0/",
+  publisher: STEWARD,
+  inLanguage: "en",
+});
+const specDesc = "The CRUBAL 2 specification: data and values, the text and JSON forms, facets, classes, rules, contracts, provenance, intake, migrations, packages, views and conformance.";
+page("/spec/", "CRUBAL 2: the specification", `<div class="layout">${toc("")}<article class="prose">${links(marked.parse(specReadme))}</article></div>`, specDesc, specLd("CRUBAL 2: the specification", specDesc, "/spec/"));
 for (const c of chapters) {
-  page(`/spec/${c.slug}/`, `${c.title} · CRUBAL 2`, `<div class="layout">${toc(c.slug)}<article class="prose">${links(marked.parse(c.md))}<p><a href="${REPO}/blob/main/spec/${c.file}">Edit on GitHub</a></p></article></div>`);
+  const d = describe(c.md);
+  page(
+    `/spec/${c.slug}/`,
+    `${c.title.replace(/^\d+\.\s*/, "")} · CRUBAL 2 spec, chapter ${Number(c.slug.slice(0, 2))}`,
+    `<div class="layout">${toc(c.slug)}<article class="prose">${links(marked.parse(c.md))}<p><a href="${REPO}/blob/main/spec/${c.file}">Edit on GitHub</a> · <a href="${RAW}/spec/${c.file}">Markdown</a></p></article></div>`,
+    d,
+    specLd(c.title, d, `/spec/${c.slug}/`),
+  );
 }
 
 // ─── The corpus ──────────────────────────────────────────────────────────────
@@ -94,10 +158,11 @@ const rows = folders
 const total = folders.reduce((n, f) => n + readdirSync(join(corpusDir, f)).filter((c) => !c.startsWith("_") && statSync(join(corpusDir, f, c)).isDirectory()).length, 0);
 page(
   "/corpus/",
-  "The CRUBAL test corpus",
+  "The CRUBAL conformance test corpus",
   `<article class="prose" style="max-width:none"><h1>The test corpus</h1><p class="lede">${total} cases. A conformance claim is proven by passing a level's folders; the corpus is part of the spec.</p>
 <table><thead><tr><th>Folder</th><th>Cases</th><th>Cases</th></tr></thead><tbody>${rows}</tbody></table>
-${links(marked.parse(readFileSync(join(corpusDir, "README.md"), "utf8")).replace(/<h1>.*?<\/h1>/, ""))}</article>`,
+${links(marked.parse(readFileSync(join(corpusDir, "README.md"), "utf8")).replace(/<h1[^>]*>.*?<\/h1>/, ""))}</article>`,
+  `${total} conformance cases for CRUBAL implementations, level by level: Reader, Dictionary, Rules, Store, Exchange and Views.`,
 );
 
 // ─── The playground ──────────────────────────────────────────────────────────
@@ -119,6 +184,7 @@ page(
 </div>
 <p>Aliases fold (<code>name</code> → <code>title</code>, <code>dvd video</code> → <code>DVD</code>), accepted units convert (<code>1.6h</code> → <code>96min</code>), and the checks show what the Dictionary level says about each value.</p>
 <script type="module" src="/play/play.js"></script>`,
+  "Try CRUBAL in your browser: write facet definitions and data, and see the JSON form, the canonical text and every value check, as you type.",
 );
 
 // ─── Home ────────────────────────────────────────────────────────────────────
@@ -160,10 +226,41 @@ page(
 </ol>
 <h2>Use it</h2>
 <pre><code>npm install @cruba/crubal</code></pre>
-<p>Read the <a href="/spec/">specification</a>, try the <a href="/play/">playground</a>, or read the <a href="${REPO}">source</a>. <span class="pill">Working draft</span></p>`,
+<p>Read the <a href="/spec/">specification</a>, try the <a href="/play/">playground</a>, or read the <a href="${REPO}">source</a>. <span class="pill">Working draft</span></p>
+<h2>Who's behind it</h2>
+<p>CRUBAL is an open specification, stewarded by <strong>Infinite Token</strong>, a development company. The spec, the corpus and the reference implementation are open to anyone to read, implement and build on.</p>`,
+  "CRUBAL is an open language and engine for data about any kind of thing: facets, rules, provenance and contracts, with a conformance test corpus and a reference implementation.",
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      { "@type": "WebSite", name: "CRUBAL", url: `${ORIGIN}/`, publisher: STEWARD },
+      {
+        "@type": "SoftwareSourceCode",
+        name: "@cruba/crubal",
+        description: "The CRUBAL reference implementation: read, print, check and run CRUBAL.",
+        codeRepository: REPO,
+        programmingLanguage: "TypeScript",
+        license: "https://www.apache.org/licenses/LICENSE-2.0",
+        author: STEWARD,
+      },
+    ],
+  },
 );
 
 page("/404/", "Not found · CRUBAL", `<h1>Not found</h1><p>That page doesn't exist. Try the <a href="/spec/">spec</a> or the <a href="/">home page</a>.</p>`);
 cpSync(join(here, "static"), out, { recursive: true });
 if (existsSync(join(out, "404", "index.html"))) cpSync(join(out, "404", "index.html"), join(out, "404.html"));
+// ─── For crawlers and agents (chapter 12.5) ──────────────────────────────────
+
+const today = new Date().toISOString().slice(0, 10);
+writeFileSync(
+  join(out, "sitemap.xml"),
+  `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${pages.map((u) => `  <url><loc>${u}</loc><lastmod>${today}</lastmod></url>`).join("\n")}\n</urlset>\n`,
+);
+// The site's terms, as chapter 12.5.1 asks: search yes, answer yes, train yes for an open standard.
+writeFileSync(join(out, "robots.txt"), `# terms: public: search yes, answer yes, train yes\nUser-agent: *\nAllow: /\n\nSitemap: ${ORIGIN}/sitemap.xml\n`);
+writeFileSync(
+  join(out, "llms.txt"),
+  `# CRUBAL\n\n> An open language and engine for data about any kind of thing. Everything is a key and a value. Stewarded by Infinite Token.\n\nThe specification is CC-BY-4.0. Read the chapters as Markdown:\n\n${chapters.map((c) => `- [${c.title}](${RAW}/spec/${c.file})`).join("\n")}\n\n## Implementing it\n\n- [Conformance test corpus](${REPO}/tree/main/corpus): ${total} cases, level by level\n- [Reference implementation](${REPO}/tree/main/packages/crubal): npm \`@cruba/crubal\`\n`,
+);
 console.log(`built ${chapters.length} chapters, ${total} corpus cases, playground → site/dist`);

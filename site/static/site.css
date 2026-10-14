@@ -75,3 +75,10 @@ th { font-weight: 600; color: var(--muted); font-size: 13px; text-transform: upp
 .tabs button { font: 600 13px var(--body); border: 1px solid var(--rule); background: var(--sheet); color: var(--muted); padding: 5px 12px; border-radius: 999px; cursor: pointer; }
 .tabs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
 footer.site { border-top: 1px solid var(--rule); color: var(--muted); font-size: 14px; padding: 22px 0 40px; }
+.anchor { color: var(--muted); text-decoration: none; opacity: 0; font-weight: 400; margin-left: 4px; }
+h2:hover .anchor, h3:hover .anchor, .anchor:focus { opacity: 1; }
+.foot { display: flex; flex-wrap: wrap; gap: 10px 32px; align-items: center; justify-content: space-between; }
+.steward { display: flex; align-items: center; gap: 10px; }
+.it-mark { width: 36px; height: 24px; background: currentColor; -webkit-mask: url(/brand/it-mark.png) center / contain no-repeat; mask: url(/brand/it-mark.png) center / contain no-repeat; color: var(--ink); flex: none; }
+.it-line { font-family: "Instrument Sans", var(--body); font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink); }
+.it-line strong { font-weight: 600; }
