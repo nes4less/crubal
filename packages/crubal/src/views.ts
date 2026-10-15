@@ -204,7 +204,7 @@ export type ProjectOptions = {
 };
 export type Projection = { rows: JsonObject[]; records: string[]; counts: { [filter: string]: { [bucket: string]: number } }; pages: number; indexable: boolean };
 /** One entry of a view's projection stream (12.6, 12.7). */
-export type StreamEntry = { projection: string; audience: string; seq: number; record: string; row?: JsonObject; removed?: true; reset?: true };
+export type StreamEntry = { projection: string; audience: string; seq: number; record: string; row?: JsonObject; buckets?: JsonObject; removed?: true; reset?: true };
 
 /** A view's partition: what it declares, else `controlled` above member and `none` otherwise (12.2). */
 export function partitionOf(v: View): string {
@@ -314,6 +314,27 @@ export class Views {
     return this.fit(s.from, v, audience) ? v : undefined;
   }
 
+  /**
+   * What a condition reads of a record (6.3): the envelope under `crubal:`, and bare `id` and `status`
+   * too unless a facet of that name holds a value, which then wins.
+   */
+  private conditionValues(r: Record): JsonObject {
+    const status = r.status?.state ?? "active";
+    return { id: r.id, status, "crubal:id": r.id, "crubal:status": status, ...this.effective(r) };
+  }
+
+  /** The buckets a record falls into, per filter of the view (12.6): what an index counts from. */
+  bucketsFor(v: View, r: Record): JsonObject {
+    const out: JsonObject = {};
+    for (const fname of v.filters) {
+      const f = this.set.filters.get(fname);
+      if (!f) continue;
+      const names = this.bucketsOf(f).filter((b) => this.inBucket(r, f, b)).map((b) => b.name);
+      if (names.length) out[fname] = names;
+    }
+    return out;
+  }
+
   private inBucket(r: Record, f: Filter, b: Bucket): boolean {
     return this.valuesAt(r, f.facet).some((v) => {
       const t = plainText(v);
@@ -335,14 +356,16 @@ export class Views {
     const pool = opts.only ? opts.only.flatMap((id) => this.records.get(id) ?? []) : v.level ? this.records.atLevel(v.level) : this.records.all();
     let rows = pool.filter((r) => {
       if (v.level && r.level !== v.level) return false;
+      // An archived record is left out unless the view selects on status explicitly (1.12).
+      if (r.status?.state === "archived" && !(v.when && /\bstatus\b/.test(v.when))) return false;
       if (v.wears.some((w) => !this.wearsOf(r).includes(w))) return false;
       if (v.hide.includes(r.id)) return false;
-      const vals = { ...this.effective(r), id: r.id };
+      const vals = this.conditionValues(r);
       if (v.when && evaluate(parseCondition(v.when), vals) !== true) return false;
       if (v.of) {
         const ctx = opts.context;
         if (!ctx) return false;
-        const cvals: JsonObject = { ...this.effective(ctx), id: ctx.id };
+        const cvals: JsonObject = this.conditionValues(ctx);
         const cond = v.of.replace(/context\.(\w+)/g, (_, k: string) => JSON.stringify(cvals[k] === undefined ? "" : plainText(cvals[k] as Json)));
         if (evaluate(parseCondition(cond), vals) !== true) return false;
       }
@@ -458,9 +481,11 @@ export class Views {
     const out: StreamEntry[] = [];
     const next = { version, rows: new Map<string, string>(), seq: last.seq, log: [...last.log], published: true };
     for (const [id, row] of now) {
-      const s = serialize(row);
+      const rec = this.records.get(id);
+      const buckets = rec ? this.bucketsFor(v, rec) : {};
+      const s = serialize({ row, buckets });
       next.rows.set(id, s);
-      if (last.rows.get(id) !== s) out.push({ projection, audience, seq: ++next.seq, record: id, row });
+      if (last.rows.get(id) !== s) out.push({ projection, audience, seq: ++next.seq, record: id, row, ...(Object.keys(buckets).length ? { buckets } : {}) });
     }
     for (const id of last.rows.keys()) if (!now.has(id)) out.push({ projection, audience, seq: ++next.seq, record: id, removed: true });
     if (reset && out[0]) out[0].reset = true;

@@ -59,7 +59,7 @@ function loadDictionary(root: string, folder: string): Dictionary {
 }
 
 function copy(d: Dictionary): Dictionary {
-  return { facets: new Map(d.facets), classes: new Map(d.classes), levels: new Map(d.levels), vary: new Map(d.vary), trust: [...d.trust], facetTrust: new Map(d.facetTrust), identify: new Map(d.identify), match: new Map(d.match), archive: new Map(d.archive) };
+  return { facets: new Map(d.facets), classes: new Map(d.classes), levels: new Map(d.levels), vary: new Map(d.vary), varyLines: new Map(d.varyLines), trust: [...d.trust], facetTrust: new Map(d.facetTrust), identify: new Map(d.identify), match: new Map(d.match), archive: new Map(d.archive) };
 }
 
 /** Each expected entry must match an actual one on every field it states; entry sets must be the same. */
@@ -508,7 +508,10 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
     if (folder === "exchange-errors" || folder === "package-errors") {
       const want = Number(readFileSync(file("error.txt"), "utf8").trim().split(/\s/)[0]);
       try {
-        if (folder === "package-errors") checkPackages(input);
+        if (folder === "package-errors") {
+          checkPackages(input);
+          checkPackage(readDefinitions(input));
+        }
         else if (/^(edge|permissions|ownership): /m.test(input)) {
           // Access (14.12, 14.13): the declarations, every record's owner, and every edge, in order.
           const { defs, data } = splitCaseInput(input);

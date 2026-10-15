@@ -39,7 +39,8 @@ rule: soldHasNoStock
 
 class: Offer
   label: Offer
-  for: item, service
+  describe: What an item's units are offered for; prices vary per unit (5.3.3).
+  for: item
   facets:
     unit::price
     unit::compareAt
@@ -50,4 +51,16 @@ class: Offer
     section: Shipping
     shippingWeight
     shipsFrom
+    taxCode
+
+class: ServiceOffer
+  label: Service offer
+  describe: What a service's bookings are offered for; prices vary per booking.
+  for: service
+  facets:
+    booking::price
+    booking::compareAt
+    booking::cost
+    booking::sku
+    !booking::offerStatus
     taxCode

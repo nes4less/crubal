@@ -1,0 +1,26 @@
+// A level prefix names a level of every kind the class is for (5.10): work has no unit level.
+package: mine /2026-10-14
+  owner: mine.example
+  crubal: 2
+
+kind: item
+  levels: group, product, unit
+  base: Item
+kind: work
+  levels: work
+  base: Work
+title$
+price#USD
+
+class: Item
+  for: item
+  facets:
+    title
+class: Work
+  for: work
+  facets:
+    title
+class: Priced
+  for: item, work
+  facets:
+    unit::price

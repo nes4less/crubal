@@ -84,6 +84,7 @@ export type ClassDef = {
   name: string;
   line: number;
   label?: string;
+  describe?: string;
   for: string[];
   uses: string[];
   lines: ClassLine[];
@@ -99,6 +100,8 @@ export type Dictionary = {
   levels: Map<string, string>;
   /** level name → the facets that vary at the step into it (11.2) */
   vary: Map<string, Set<string>>;
+  /** level name → the line its vary step was written at, for a refusal */
+  varyLines: Map<string, number>;
   /** The package's trust order and facets' own orders (11.3); empty means the default order. */
   trust: string[];
   facetTrust: Map<string, string[]>;
@@ -111,7 +114,7 @@ export type Dictionary = {
 };
 
 export function emptyDictionary(): Dictionary {
-  const d: Dictionary = { facets: new Map(), classes: new Map(), levels: new Map(), vary: new Map(), trust: [], facetTrust: new Map(), identify: new Map(), match: new Map(), archive: new Map() };
+  const d: Dictionary = { facets: new Map(), classes: new Map(), levels: new Map(), vary: new Map(), varyLines: new Map(), trust: [], facetTrust: new Map(), identify: new Map(), match: new Map(), archive: new Map() };
   // Core facets (spec 1.6, 5.6).
   d.facets.set("crubal:count", { ...blank("crubal:count", "number") });
   const notables = blank("crubal:notables", "compound");
@@ -502,6 +505,9 @@ function readClass(node: Node): ClassDef {
       case "label":
         c.label = child.value;
         break;
+      case "describe":
+        c.describe = child.value;
+        break;
       case "version":
         c.version = child.value;
         break;
@@ -578,6 +584,7 @@ export function readDefinitions(source: string, into: Dictionary = emptyDictiona
           const set = into.vary.get(step.key) ?? new Set<string>();
           for (const k of splitTop(step.value, ",", step.line)) if (k) set.add(k);
           into.vary.set(step.key, set);
+          into.varyLines.set(step.key, step.line);
         }
         // Arrival keys (9.2a) and the archive cascade (1.12).
         const identify = node.children.find((c) => c.key === "identify");

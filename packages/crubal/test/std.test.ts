@@ -5,11 +5,14 @@ import { checkPackage, checkPackages, checkRecord, checkRules, foldRecord, readD
 
 const std = (p: string) => readFileSync(new URL(`../../../std/${p}`, import.meta.url), "utf8");
 
+// A package is checked with the packages it extends in the dictionary (11.4), as a publish does.
+const EXTENDS: { [name: string]: string[] } = { commerce: ["product", "service"], media: ["product"] };
 for (const name of ["core", "units", "product", "service", "commerce", "media"]) {
   test(`the standard package ${name} passes its publish checks`, () => {
     const src = std(`${name}/package.crubal`);
     checkPackages(src);
-    const d = readDefinitions(src);
+    const d = readDefinitions((EXTENDS[name] ?? []).map((e) => std(`${e}/package.crubal`)).join("\n"));
+    readDefinitions(src, d);
     checkPackage(d);
     checkRules(readRules(src), d);
   });

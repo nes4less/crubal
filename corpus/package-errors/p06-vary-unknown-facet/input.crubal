@@ -1,0 +1,19 @@
+// A kind's vary step names facets the package defines (11.2): nothing defines colour here.
+package: mine /2026-10-14
+  owner: mine.example
+  crubal: 2
+
+kind: item
+  levels: group, product, unit
+  base: Item
+  vary:
+    product: edition
+    unit: condition, colour
+title$
+edition$
+condition{new|used} ranked
+
+class: Item
+  for: item
+  facets:
+    title

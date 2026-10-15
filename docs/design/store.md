@@ -43,8 +43,7 @@ unchanged, so what the database holds is what the border carries.
 |---|---|---|
 | `chains` | `owner`, `chain`, `head_seq`, `head_hash` | one row per chain; locked by a writer for the length of one entry |
 | `log` | `owner`, `chain`, `seq`, `log_id`, `prev`, `hash`, `at`, `by`, `intake`, `source`, `writes`, `crubal`, `witnessed`, `sig` | append-only; the one update allowed is redaction (below) |
-| `records` | `owner`, `id`, `kind`, `level`, `of`, `within`, `ancestors[]`, `status`, `applied`, `wears[]`, `created`, `updated`, `doc` | `doc` is `{values, parts, sources, alternatives, suggestions, held}`; GIN index on `doc->'values'`; `ancestors` is the lookup spec 14.2 requires |
-| `record_keys` | `owner`, `level`, `facet`, `key`, `record` | one row per value of a facet that is `unique`, `identify` or `match`; `is unique` and arrival resolve here with an index, never a scan |
+| `records` | `owner`, `id`, `kind`, `level`, `of`, `within`, `ancestors[]`, `status`, `applied`, `wears[]`, `created`, `updated`, `doc` | `doc` is `{values, parts, sources, alternatives, suggestions, held}`; GIN index on `doc->'values'`; `ancestors` is the lookup spec 14.2 requires; `is unique` and arrival resolve through the values index (a keys table is an optimization for later, not a design need) |
 | `definitions` | `owner`, `member`, `name`, `json`, `retired`, `since` | the working package, built from `define` writes (spec 11.4) |
 | `installed` | `owner`, `package`, `version`, `bundle`, `at` | published packages the owner pins; the standard packages are installed like any other |
 | `edges` | `owner`, `edge`, `who`, `relation`, `mode`, `on`, `grants[]`, `where`, `until`, `gate`, `reviewer`, `by`, `json`, `removed` | live-ness is computed (grantor chain, `until`, `where`), never stored |

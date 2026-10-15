@@ -35,6 +35,7 @@ colour$ ~color =schema:color
 weight#kg accepts: g, lb, oz =schema:weight
 serial$ =schema:serialNumber
 unitNotes$
+condition{new|like new|very good|good|fair|poor} ranked =schema:itemCondition
 
 facet: dimensions
   type: compound

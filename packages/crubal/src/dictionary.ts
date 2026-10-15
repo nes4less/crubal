@@ -126,6 +126,15 @@ export function checkPackage(dict: Dictionary): Warning[] {
       if (!dict.classes.has(slot.wears)) throw new CrubalError(`the part slot ${slot.slot} wears ${slot.wears}, which isn't a class`, slot.line);
     }
   }
+  // 5.10 (4): a level prefix names a level of every kind in `for` (every kind, when `for` is absent).
+  const kindsAll = [...new Set(dict.levels.values())];
+  const levelsOf = (kind: string) => [...dict.levels].filter(([, k]) => k === kind).map(([l]) => l);
+  for (const c of dict.classes.values()) {
+    for (const l of c.lines) {
+      if (!l.level) continue;
+      for (const kind of c.for.length ? c.for : kindsAll) if (!levelsOf(kind).includes(l.level)) throw new CrubalError(`${c.name}: ${l.level}:: isn't a level of ${kind}`, l.line);
+    }
+  }
   for (const c of dict.classes.values()) {
     findCycle(c.name, dict, []);
     resolve(dict, [c.name], c.line);

@@ -1,4 +1,18 @@
 [
-  { "ask": "may: C-CO edit score on T-1", "result": true },
-  { "ask": "may: C-CO edit score on T-2", "result": false }
+  {
+    "ask": "may: C-CO edit score on T-1",
+    "result": true
+  },
+  {
+    "ask": "may: C-CO edit score on T-2",
+    "result": false
+  },
+  {
+    "ask": "may: C-CO2 edit score on T-1",
+    "result": true
+  },
+  {
+    "ask": "may: C-CO2 edit score on T-2",
+    "result": false
+  }
 ]

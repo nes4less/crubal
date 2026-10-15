@@ -37,7 +37,7 @@ contract: ebayListing
   reads:
     itemId -> ebay:itemId
   gives: ebay:itemId
-  when: unit::status is listed
+  when: unit::offerStatus is listed
   who: caller wears Staff
   auth: oauth2
   scope: https://api.ebay.com/oauth/api_scope/sell.inventory
@@ -241,7 +241,7 @@ contract: catalogTake
   ],
   "reads": [ { "from": "itemId", "to": "ebay:itemId" } ],
   "gives": ["ebay:itemId"],
-  "when": "unit::status is listed",
+  "when": "unit::offerStatus is listed",
   "who": "caller wears Staff",
   "auth": "oauth2",
   "credential": "ebay-seller",

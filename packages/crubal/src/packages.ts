@@ -73,6 +73,15 @@ function sameDefinition(base: Facet, mine: Facet): string | null {
 
 /** Check every package in a file (11.1, 11.3, 11.4). Throws the first problem. */
 export function checkPackages(source: string): PackageInfo[] {
+  // 11.2: a kind's vary step names a level of its kind and facets of this package (a key of another package
+  // carries its prefix and is checked where that package is resolved).
+  {
+    const d = readDefinitions(source);
+    for (const [level, keys] of d.vary) {
+      if (!d.levels.has(level)) throw new CrubalError(`vary names ${level}, which isn't a level`, d.varyLines.get(level));
+      for (const k of keys) if (!k.includes(":") && !d.facets.has(k)) throw new CrubalError(`vary at ${level} names ${k}, which isn't a facet`, d.varyLines.get(level));
+    }
+  }
   const pkgs = readPackages(source);
   const byName = new Map(pkgs.map((p) => [p.name, p]));
   for (const p of pkgs) {

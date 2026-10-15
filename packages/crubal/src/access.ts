@@ -229,7 +229,8 @@ export class Access {
     if (!e.where) return true;
     const r = this.records.get(recordId);
     // A record with no status is active (1.12), so `not status is archived` holds for it.
-    const vals: JsonObject = { ...(r?.values ?? {}), id: recordId, status: r?.status?.state ?? "active" };
+    const status = r?.status?.state ?? "active";
+    const vals: JsonObject = { id: recordId, status, "crubal:id": recordId, "crubal:status": status, ...(r?.values ?? {}) };
     return evaluate(parseCondition(e.where), vals) === true;
   }
 

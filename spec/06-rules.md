@@ -69,7 +69,10 @@ aggregate = combine " of " address                 ; "worst of parts[*].conditio
   7.6) or `context.` (a page's record, chapter 12.2) to read another record than the one the condition is
   on; `caller` and `context` alone, before `wears` or `may`, name that record itself.
 - **Envelope fields** read as paths: `status` is `active` for a record that has none, so `not status is
-  archived` holds for it; `wears` is tested with `wears`, never read as a value.
+  archived` holds for it; `wears` is tested with `wears`, never read as a value. They are always readable
+  with the core prefix (`crubal:status`, `crubal:id`); a bare `status` or `id` reads the envelope unless the
+  package defines a facet of that name, which then wins. A package SHOULD NOT name a facet after an envelope
+  field.
 - **Values** are written as in the text form (chapter 2), read by the facet at the path.
 - **`now`** is the moment the rule is evaluated, supplied by the caller so results stay reproducible:
   `when: auctionEnds before now`. Moments compare by instant; a local date or time of day compared with a

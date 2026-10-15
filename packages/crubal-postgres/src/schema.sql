@@ -51,16 +51,6 @@ create index if not exists records_within on records (owner, within);
 create index if not exists records_ancestors on records using gin (ancestors);
 create index if not exists records_values on records using gin ((doc -> 'values'));
 
--- One row per value of a facet a kind declares unique, identify or match: `is unique` and arrival look here.
-create table if not exists record_keys (
-  owner text not null,
-  level text not null,
-  facet text not null,
-  key text not null,
-  record text not null,
-  primary key (owner, level, facet, key, record)
-);
-
 create table if not exists definitions (
   owner text not null,
   key text not null,
