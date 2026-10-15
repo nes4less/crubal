@@ -9,7 +9,8 @@ The engine is universal at the kind level: commerce, media and the rest are pack
 
 ## Chapters
 
-The chapters follow the stack from the bottom. Each refers only to the chapters before it.
+The chapters follow the stack from the bottom. Each refers only to the chapters before it, except chapter 14
+(Access), which chapters 1, 7 and 12 point to.
 
 | # | Chapter | State |
 |---|---|---|
@@ -26,6 +27,7 @@ The chapters follow the stack from the bottom. Each refers only to the chapters 
 | 11 | [Packages](11-packages.md) | draft |
 | 12 | [Views](12-views.md) | draft |
 | 13 | [Conformance](13-conformance.md) | draft |
+| 14 | [Access](14-access.md) | draft |
 
 ## Conventions
 

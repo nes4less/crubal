@@ -133,8 +133,11 @@ filter: edition
 `show` rules (chapter 6, `then: key shown to member`) decide what each audience sees: per record, per facet,
 per value. A view's `show` says which audience its stored projection is built for.
 
+Which callers belong to an audience is decided by edges (chapter 14.4).
+
 **Roles** are itemized permissions that sit on top of an audience as a filter. They never change projections,
-caches or indexes.
+caches or indexes. A role is a **preset** of the permission menu (chapter 14.6), which is where the full set
+of verbs, scopes and narrowing is defined; the form below is the short way to write one.
 
 ```crubal
 role: buyer
@@ -156,8 +159,8 @@ role: buyer
   `member` can.
 - Contracts use the same grants: `who: caller may run ebayListing` (chapter 7.6). A form shows or locks each
   field by `see` and `edit`.
-- Roles are definitions in a package, versioned like classes. Which person holds which role is data: a link
-  facet on the person's record, with a source like any other value, so every grant has a history.
+- Roles are definitions in a package, versioned like classes. Which person holds which role is data: an edge
+  (chapter 14.3) whose `grants` name it, logged like any other write, so every grant has a history.
 
 ## 12.5 Pages, search engines and structured data
 

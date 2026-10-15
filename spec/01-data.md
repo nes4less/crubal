@@ -20,6 +20,7 @@ engine makes it on behalf of whoever decided it.
 | `level` | which of the kind's levels this record sits at | `product`, `unit` … (1.2) |
 | `of` | the record one level up, by ID | optional at every level; absent when the record stands alone (1.7) |
 | `owner` | who controls the record | a domain (`mediaencyclopedia.com`) |
+| `within` | the record this one belongs to for access, by ID | optional; any depth; chapter 14.2 |
 | `status` | `active` or `archived`, with a `reason`, and `into` for a merge | 1.12 |
 | `applied` | for a record below the top level: the last of its parent's instructions it has applied | chapter 10.7 |
 | `wears` | the classes the record wears, in order | classes refine the kind (chapter 5) |

@@ -138,7 +138,8 @@ Every run has a **run ID** (`R-118`), and the log entry for its writes names it 
 a person, an organization or a system. Its values are read with the `caller` prefix
 (`caller.role is staff`), `caller wears Staff` tests its classes, and `caller may run ebayListing` tests
 its roles' grants (chapter 12.4). What a caller sees is decided by
-`show` rules (chapter 12).
+`show` rules (chapter 12). Who may do what to which record (ownership, delegated control, containment and
+the grantor chain) is chapter 14.
 
 **Authentication is the host's job.** Sign-in, OAuth flows and API keys belong to whatever runs the
 contracts. A contract only declares what the other side requires:
