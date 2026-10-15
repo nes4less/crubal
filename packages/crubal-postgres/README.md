@@ -49,7 +49,24 @@ and audience, and clears the marks. `entriesSince(view, seq)` is what an index r
 With `fresh: "write"` every commit publishes as soon as it returns. The test replays the corpus stream case
 (views/010) and the erasure removal (views/013) and gets the memory `Views.stream` entries byte for byte.
 
+## The border
+
+`PgBorder` runs contracts over the store (`src/border.ts`): each run builds the engine's `Exchange` over
+the commit's draft, with the store's edges, its run count and the keys it has acted on, so a run is one
+entry and never acts twice across restarts. `receive` and `arrive` keep the intake record with its bytes
+and hash in the `intake` table; `send` acts at most once per contract, record and payload; `streamRun`
+reads the projection stream from the store's tables since the index's cursor (or the caller's), refuses a
+view above public to a party without `run`, and logs each batch as a run; `ack` keeps the cursor;
+`tick` runs a scheduled contract's due ticks from the `schedules` table, each keyed by contract and
+tick. `store.erase(record)` redacts every value write to a record across the log and leaves its shell.
+
+## The command
+
+`bin/crubal-pg.ts`, with `CRUBAL_PG_URL` set: `migrate`, `rebuild <owner>`, `verify <owner>`,
+`export <owner>`, `redact <owner> <log> [<write>]`, `erase <owner> <record>`, `project <owner> --defs
+<file>…` and `tick <owner> <contract> --now <moment> --defs <file>…`.
+
 ## Not yet here
 
-Intake rows with raw bytes, cursors and schedules on their tables, the stream contract run from the
-store, and the operations command. Each lands with a test of the same kind.
+The host: authentication, secrets, acting on a contract's payload, and installing a published package so
+the store reads its definitions from `installed` and `definitions` instead of being handed them.

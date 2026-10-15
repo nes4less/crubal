@@ -165,9 +165,12 @@ export class Exchange {
   private cursors = new Map<string, { [view: string]: { version: string; seq: number } }>();
   /** The rules a run's step 6 applies (7.4): the package's, plus the facet shortcuts the engine adds. */
   readonly engine: Engine;
-  private sent = new Set<string>();
-  private runs = 0;
-  private minted = 0;
+  /** Idempotency keys acted on (7.5); a store that outlives the instance seeds and keeps them. */
+  readonly sent = new Set<string>();
+  /** Runs so far, which numbers the next run's log; a store continues the count across instances. */
+  runs = 0;
+  /** Records minted by arrivals (9.2a), likewise. */
+  minted = 0;
 
   constructor(dict: Dictionary, contracts: Contract[], roles: Role[] = [], rules: Rule[] = []) {
     this.dict = dict;

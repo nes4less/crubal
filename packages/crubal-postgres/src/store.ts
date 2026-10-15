@@ -149,6 +149,14 @@ export class PgStore {
    * same transaction. Nothing happens when nothing changed; a throw inside `mutate` rolls everything back.
    */
   async commit(by: JsonObject, mutate: (draft: Draft) => void, at?: string, extra: JsonObject[] = []): Promise<Entry | null> {
+    return (await this.commitFrom((d) => { mutate(d); return { by, extra, out: undefined }; }, at)).entry;
+  }
+
+  /**
+   * The same, for an operation that decides its own cause and extra writes as it runs (a border run): it
+   * returns `by`, `extra` and an outcome, and the outcome comes back beside the entry.
+   */
+  async commitFrom<T>(run: (draft: Draft) => { by: JsonObject; extra?: JsonObject[]; out: T }, at?: string): Promise<{ entry: Entry | null; out: T }> {
     return transaction(this.pool, async (client) => {
       const head = await this.lockChain(client);
       const before = await this.base(client);
@@ -159,12 +167,13 @@ export class PgStore {
       let draft: Draft;
       let after: State;
       let entry: Entry;
+      let result: { by: JsonObject; extra?: JsonObject[]; out: T };
       for (;;) {
         const had = needs.needs.loaded.size;
-        draft = (await settle(client, this.owner, before, (s) => { const d = draftOf(s); mutate(d); return d; })).out;
-        const writes = [...diffWrites(before, draft), ...extra];
-        if (!writes.length) return null;
-        entry = { log: `L-${head.seq + 1}`, owner: this.owner, at: at ?? new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), by, writes };
+        ({ draft, result } = (await settle(client, this.owner, before, (s) => { const d = draftOf(s); const r = run(d); return { draft: d, result: r }; })).out);
+        const writes = [...diffWrites(before, draft), ...(result.extra ?? [])];
+        if (!writes.length) return { entry: null, out: result.out };
+        entry = { log: `L-${head.seq + 1}`, owner: this.owner, at: at ?? new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), by: result.by, writes };
         const e = entry;
         after = (await settle(client, this.owner, before, (s) => applyEntry(s, e))).state;
         if (needs.needs.loaded.size === had) break;
@@ -174,11 +183,39 @@ export class PgStore {
       if (problem) throw new Error(`the log doesn't describe the change: ${problem}`);
       await persist(client, this.owner, before, after);
       await this.afterPersist(client, before, after, head.seq + 1);
-      return linked;
-    }).then(async (e) => {
-      if (e) await this.freshen();
-      return e;
+      return { entry: linked, out: result.out };
+    }).then(async (r) => {
+      if (r.entry) await this.freshen();
+      return r;
     });
+  }
+
+  /**
+   * Erase a record's values from the log (8.5.2): every value write to it, and every observation on it, in
+   * every entry, is redacted in place; creations, envelopes and everything else stay. The state is rebuilt.
+   */
+  async erase(recordId: string): Promise<{ redacted: number; witnessed: string[] }> {
+    const witnessed: string[] = [];
+    let redacted = 0;
+    await transaction(this.pool, async (client) => {
+      await this.lockChain(client);
+      const { rows } = await client.query("select log_id, entry from log where owner = $1 and chain = $2 and not (entry ? 'redacted') order by seq for update", [this.owner, this.chain]);
+      for (const row of rows as { log_id: string; entry: Entry }[]) {
+        const writes = Array.isArray(row.entry.writes) ? row.entry.writes : [];
+        const hits = writes.map((w, i) => (isObj(w) && ((w.record === recordId && typeof w.address === "string") || (isObj(w.observation) && w.observation.on === recordId)) ? i : -1)).filter((i) => i >= 0);
+        if (!hits.length) continue;
+        if (row.entry.witnessed === true) {
+          witnessed.push(row.log_id);
+          continue;
+        }
+        const next = [...writes];
+        for (const i of hits) next[i] = { redacted: `sha256:${writeHash(writes[i] as JsonObject)}` };
+        await client.query("update log set entry = $3 where owner = $1 and log_id = $2", [this.owner, row.log_id, { ...row.entry, writes: next }]);
+        redacted += hits.length;
+      }
+    });
+    if (redacted) await this.rebuild();
+    return { redacted, witnessed };
   }
 
   /** Check the chain's links and, with the owner's key, its signatures (8.5). */

@@ -12,11 +12,12 @@ import { archive, attach, merge, type Store } from "../../crubal/src/lifecycle.t
 import { type Draft, Journal, rebuild, stateJson, type Entry } from "../../crubal/src/log.ts";
 import type { JsonObject, Record } from "../../crubal/src/model.ts";
 import { serialize } from "../../crubal/src/canonical.ts";
-import { verifyChain } from "../../crubal/src/store.ts";
+import { readContracts, sha256, verifyChain } from "../../crubal/src/store.ts";
 import { foldRecord } from "../../crubal/src/dictionary.ts";
 import { readText } from "../../crubal/src/read-text.ts";
-import { readViews, Views } from "../../crubal/src/views.ts";
+import { readViews, type StreamEntry, Views } from "../../crubal/src/views.ts";
 import { connect, testSchema, type Pool } from "../src/db.ts";
+import { PgBorder } from "../src/border.ts";
 import { PgStore } from "../src/store.ts";
 
 const url = process.env.CRUBAL_PG_URL;
@@ -195,4 +196,102 @@ test("projections and the stream match the memory views, rebuilding only stale r
   const third = await store.project("discs");
   assert.deepEqual(third, [{ projection: "discs", audience: "public", seq: first.length + second.length + 1, record: "P-1", removed: true }]);
   assert.equal((await pool.query("select count(*)::int as n from projections where owner = $1 and record = 'P-1'", [owner])).rows[0].n, 0);
+});
+
+test("the border over the store: intake kept, runs idempotent across transactions", { skip: !url }, async () => {
+  const dict = emptyDictionary();
+  readDefinitions(readFileSync(join(corpus, "..", "reader", "_package.crubal"), "utf8"), dict);
+  readDefinitions("title$\nruntime#min\n", dict);
+  const text = 'contract: ocr\n  kind: receive\n  origin: observed\n  reads:\n    "Run Time" -> runtime\n\ncontract: label\n  kind: send\n  writes:\n    title -> Title\n';
+  readDefinitions(text, dict);
+  const owner = "border.example";
+  const store = new PgStore(pool, owner);
+  await store.commit({ migration: "backfill" }, (d) => { d.records.set("P-1", { id: "P-1", kind: "item", level: "product", owner, values: { title: "Christmas Vacation" }, sources: { "*": { origin: "declared", via: "L-0" } } }); }, "2026-10-15T17:00:00Z");
+  const border = new PgBorder(store, { dict, contracts: readContracts(text) });
+  const body = '{"Run Time":"97 min"}';
+  const got = await border.receive("ocr", "P-1", body, undefined, "2026-10-15T17:00:01Z");
+  assert.equal(got.landed, "value");
+  assert.deepEqual((await store.state()).records.get("P-1")?.values.runtime, { $qty: "97", unit: "min" });
+  const intake = (await pool.query("select intake, contract, sha256, raw, json from intake where owner = $1", [owner])).rows[0];
+  assert.ok(intake, "the intake record is kept");
+  assert.equal(Buffer.from(intake.raw).toString("utf8"), body, "its bytes are as received");
+  assert.equal(intake.sha256, sha256(body));
+  assert.equal(intake.json.outcomes[0].outcome, "absorbed");
+  const first = await border.send("label", "P-1", undefined, "2026-10-15T17:00:02Z");
+  assert.equal(first.acted, true);
+  const again = await border.send("label", "P-1", undefined, "2026-10-15T17:00:03Z");
+  assert.equal(again.acted, false, "the same payload is never sent twice, even by a fresh border");
+  const entries = await store.entries();
+  assert.equal(entries.length, 3, "backfill, the receive, the one send");
+  assert.deepEqual(await store.verify(), { valid: true });
+});
+
+test("stream contracts read the projection stream and keep the index's cursor; schedules tick once", { skip: !url }, async () => {
+  const viewsDir = join(corpus, "..", "views");
+  const dict = emptyDictionary();
+  readDefinitions(readFileSync(join(corpus, "..", "reader", "_package.crubal"), "utf8"), dict);
+  readDefinitions(readFileSync(join(corpus, "..", "reader", "_facets.crubal"), "utf8"), dict);
+  const viewText = readFileSync(join(viewsDir, "_views.crubal"), "utf8");
+  readDefinitions(viewText, dict);
+  const text = "contract: idx\n  kind: send\n  stream: discs\n  to: index.example\n  when: entry\n\ncontract: nightly\n  kind: send\n  when: every hour\n  writes:\n    title -> Title\n";
+  readDefinitions(text, dict);
+  const set = readViews(viewText);
+  const owner = "stream.example";
+  const records = readText(readFileSync(join(viewsDir, "_records.crubal"), "utf8"), dict).records.map((r) => ({ ...foldRecord(r, dict), owner }));
+  const store = new PgStore(pool, owner, { projecting: { dict, views: set } });
+  await store.commit({ migration: "backfill" }, (d) => { for (const r of records) d.records.set(r.id, structuredClone(r)); }, "2026-10-15T18:00:00Z");
+  await store.project();
+  const border = new PgBorder(store, { dict, contracts: readContracts(text) });
+  const push = await border.streamRun("idx", undefined, undefined, "2026-10-15T18:00:01Z");
+  const batch = (push.entries as { discs: StreamEntry[] }).discs;
+  assert.equal(batch.length, 3);
+  assert.deepEqual(push.cursor, { discs: 3 });
+  assert.ok(String(push.key).startsWith("idx|discs||1-3"));
+  // Until the index acknowledges, the same entries come again; after, nothing.
+  assert.equal((await border.streamRun("idx")).entries && ((await border.streamRun("idx")).entries as { discs: StreamEntry[] }).discs.length, 3);
+  await border.ack("idx", { discs: 3 });
+  assert.deepEqual(((await border.streamRun("idx")).entries as { discs: StreamEntry[] }).discs, []);
+  await store.commit({ person: "staff-1" }, (d) => {
+    const was = d.records.get("P-2") as Record;
+    d.records.set("P-2", { ...was, values: { ...was.values, title: "Home Alone 2" }, sources: { ...was.sources, title: { origin: "declared", via: "L-9" } } });
+  }, "2026-10-15T18:00:02Z");
+  await store.project();
+  const next = ((await border.streamRun("idx")).entries as { discs: StreamEntry[] }).discs;
+  assert.equal(next.length, 1);
+  assert.equal(next[0]?.seq, 4);
+  assert.equal(next[0]?.record, "P-2");
+
+  // The schedule begins at the first reading; two hours later one tick runs (missed: once); a reading
+  // before the next tick runs nothing; the tick's key is in the runs table.
+  const began = await border.tick("nightly", "2026-10-15T18:00:00Z");
+  assert.equal(began.began, "2026-10-15T18:00:00Z");
+  const two = await border.tick("nightly", "2026-10-15T20:00:30Z");
+  assert.equal((two.ticks as string[]).length, 2);
+  assert.equal((two.runs as JsonObject[]).filter((r) => r.acted === true).length, 1, "once: only the latest tick runs");
+  const quiet = await border.tick("nightly", "2026-10-15T20:30:00Z");
+  assert.deepEqual(quiet.runs, []);
+  const keys = (await pool.query("select json->>'key' as key from runs where owner = $1 and json->>'tick' is not null", [owner])).rows.map((r: { key: string }) => r.key);
+  assert.deepEqual(keys, ["nightly|2026-10-15T20:00Z"]);
+});
+
+test("erase redacts every value write to a record across the log and leaves the shell", { skip: !url }, async () => {
+  const owner = "person.example";
+  const store = new PgStore(pool, owner);
+  await store.commit({ contract: "signup", run: "R-1" }, (d) => {
+    d.records.set("C-1", { id: "C-1", kind: "person", level: "person", owner, values: { name: "Pat", email: "pat@example.com" }, sources: { "*": { origin: "declared", via: "L-1" } } });
+    d.records.set("K-1", { id: "K-1", kind: "collection", level: "collection", owner, values: { name: "Pat's discs" }, sources: { "*": { origin: "declared", via: "L-1" } } });
+  }, "2026-10-15T19:00:00Z");
+  await store.commit({ person: "C-1" }, (d) => {
+    const r = d.records.get("C-1") as Record;
+    d.records.set("C-1", { ...r, values: { ...r.values, note: "Prefers pickup" }, sources: { ...r.sources, note: { origin: "declared", via: "L-2" } } });
+  }, "2026-10-15T19:01:00Z");
+  const r = await store.erase("C-1");
+  assert.equal(r.redacted, 3);
+  assert.deepEqual(r.witnessed, []);
+  const state = await store.state();
+  assert.deepEqual(state.records.get("C-1")?.values, {}, "the shell stays, the values are gone");
+  assert.deepEqual(state.records.get("K-1")?.values, { name: "Pat's discs" }, "nothing else is touched");
+  assert.deepEqual(await store.verify(), { valid: true });
+  const log = await store.entries();
+  assert.equal((log[0]?.writes as JsonObject[]).filter((w) => typeof w.redacted === "string").length, 2);
 });
