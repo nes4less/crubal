@@ -186,8 +186,8 @@ in CRUBAL, it is not host code.
 
 ## Order of work
 
-1. **Definitions from the store** (call 7): `installed` bundles + `define` writes → dictionary, views,
-   contracts, permissions; `store.install`; the corpus's store cases exercised through it. Engine and store
+1. **Publishing and installing** (call 7, designed in `publishing.md`): the bundle, the publish command,
+   `store.install`, and definitions built from `installed` bundles and `define` writes. Engine and store
    only.
 2. **The send split** (call 5) in the engine, with corpus cases for `started`/`acted`/`failed`, retry and a
    late answer.
