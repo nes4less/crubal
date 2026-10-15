@@ -18,6 +18,12 @@ import type { PgStore } from "./store.ts";
 
 export type BorderOptions = { dict: Dictionary; contracts: Contract[]; roles?: Role[]; rules?: Rule[]; perms?: Permissions };
 
+/** The border's options from the store's own definitions (docs/design/publishing.md). */
+export async function borderOptions(store: PgStore): Promise<BorderOptions> {
+  const p = await store.definitions();
+  return { dict: p.dict, contracts: p.contracts, rules: p.rules, perms: p.perms };
+}
+
 type Row = { [column: string]: unknown };
 
 export class PgBorder {
@@ -29,6 +35,11 @@ export class PgBorder {
     this.store = store;
     this.o = o;
     this.contracts = new Map(o.contracts.map((c) => [c.name, c]));
+  }
+
+  /** A border over a store's own definitions. */
+  static async over(store: PgStore): Promise<PgBorder> {
+    return new PgBorder(store, await borderOptions(store));
   }
 
   private get owner() {
@@ -123,7 +134,7 @@ export class PgBorder {
     const c = this.contracts.get(name);
     if (!c) throw new Error(`no contract ${name}`);
     if (!c.stream.length) throw new Error(`${name} carries no stream`);
-    const p = this.store.options.projecting;
+    const p = await this.store.projecting();
     if (!p) throw new Error("the store has no views to stream from");
     const party = callerId ?? c.parts.to ?? "";
     const head: RunResult = { contract: name, caller: party };
@@ -159,7 +170,7 @@ export class PgBorder {
   async ack(name: string, cursor: { [view: string]: number }): Promise<RunResult> {
     const c = this.contracts.get(name);
     if (!c) throw new Error(`no contract ${name}`);
-    const p = this.store.options.projecting;
+    const p = await this.store.projecting();
     if (!p) throw new Error("the store has no views");
     for (const [v, seq] of Object.entries(cursor)) {
       const view = p.views.views.get(v);

@@ -66,6 +66,17 @@ create table if not exists installed (
   primary key (owner, ord)
 );
 
+-- The bundle of every installed version, whole: the install write names it by hash, and definitions are
+-- rebuilt from it (docs/design/publishing.md).
+create table if not exists bundles (
+  owner text not null,
+  package text not null,
+  version text not null,
+  hash text not null,
+  json jsonb not null,
+  primary key (owner, package, version)
+);
+
 create table if not exists edges (
   owner text not null,
   edge text not null,

@@ -3,6 +3,7 @@
 // journaled operations must write the same entries; redaction must hold the chain and forget the value.
 
 import assert from "node:assert/strict";
+import { generateKeyPairSync } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
@@ -17,6 +18,7 @@ import { foldRecord } from "../../crubal/src/dictionary.ts";
 import { readText } from "../../crubal/src/read-text.ts";
 import { readViews, type StreamEntry, Views } from "../../crubal/src/views.ts";
 import { connect, testSchema, type Pool } from "../src/db.ts";
+import { publish } from "../../crubal/src/publish.ts";
 import { PgBorder } from "../src/border.ts";
 import { PgStore } from "../src/store.ts";
 
@@ -294,4 +296,86 @@ test("erase redacts every value write to a record across the log and leaves the 
   assert.deepEqual(await store.verify(), { valid: true });
   const log = await store.entries();
   assert.equal((log[0]?.writes as JsonObject[]).filter((w) => typeof w.redacted === "string").length, 2);
+});
+
+test("install: verified bundles in dependency order, definitions from the store, a pin move restamping", { skip: !url }, async () => {
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const key = { d: privateKey.export({ format: "jwk" }).d as string, x: publicKey.export({ format: "jwk" }).x as string };
+  const keys = { "shop.example": { alg: "Ed25519", public: key.x } };
+  const baseV1 = `package: base /2026-10-01
+  owner: shop.example
+  crubal: 2
+
+kind: item
+  levels: product, unit
+  base: Item
+title$
+format{DVD|Blu-ray}
+
+class: Item
+  for: item
+  facets:
+    !title
+    format
+`;
+  const shopV1 = `package: shop /2026-10-01
+  owner: shop.example
+  crubal: 2
+  extends: shop.example/base /2026-10-01
+  prefixes:
+    base: shop.example/base
+
+price#USD
+
+shape: card
+  slots:
+    !title -> heading
+    format -> format
+
+view: discs
+  select:
+    level: product
+  shape: card
+`;
+  const base1 = publish(baseV1, { date: "2026-10-01", key }).bundle;
+  const shop1 = publish(shopV1, { date: "2026-10-01", key }).bundle;
+  const owner = "install.example";
+  const store = new PgStore(pool, owner);
+  // Refusals: unsigned, tampered, a dependency not installed.
+  await assert.rejects(store.install(publish(baseV1, { date: "2026-10-01" }).bundle, keys), /unsigned/);
+  await assert.rejects(store.install({ ...base1, label: "x" }, keys), /doesn't verify \(hash\)/);
+  await assert.rejects(store.install(shop1, keys), /extends shop.example\/base \/2026-10-01, which isn't installed/);
+  await store.install(base1, keys, "2026-10-15T20:00:00Z");
+  await store.install(shop1, keys, "2026-10-15T20:00:01Z");
+  const defs = await store.definitions();
+  assert.ok(defs.dict.facets.has("title") && defs.dict.facets.has("price") && defs.dict.classes.has("Item"));
+  assert.ok(defs.views.views.has("discs"));
+  assert.deepEqual((await store.state()).installed.map((i) => `${i.package} /${i.version}`), ["shop.example/base /2026-10-01", "shop.example/shop /2026-10-01"]);
+  // Records under the installed definitions, projected with no definitions handed in.
+  await store.commit({ person: "staff-1" }, (d) => {
+    d.records.set("P-1", { id: "P-1", kind: "item", level: "product", owner, values: { title: "Christmas Vacation", format: "Blu-ray" }, sources: { "*": { origin: "declared", via: "L-1" } } });
+  }, "2026-10-15T20:00:02Z");
+  const first = await store.project("discs");
+  assert.deepEqual(first.map((e) => e.row), [{ record: "P-1", heading: "Christmas Vacation", format: "Blu-ray" }]);
+  // The owner's own definition: a define write, checked with the rest; a bad one is refused and writes nothing.
+  await assert.rejects(store.define({ view: "bad", select: { level: "product" }, shape: "nope" }), /nope/);
+  await store.define({ shape: "line", slots: [{ from: "title", to: "line" }] }, { person: "staff-1" }, "2026-10-15T20:00:03Z");
+  await store.define({ view: "lines", select: { level: "product" }, shape: "line" }, { person: "staff-1" }, "2026-10-15T20:00:04Z");
+  assert.ok((await store.definitions()).views.views.has("lines"));
+  assert.deepEqual((await store.project("lines")).map((e) => e.row), [{ record: "P-1", line: "Christmas Vacation" }]);
+  // A pin move: base v2 merges Blu-ray into DVD with a recipe; installing it restamps P-1 by migration.
+  const baseV2 = `${baseV1.replace("base /2026-10-01", "base /2026-11-01").replace("format{DVD|Blu-ray}", "format{DVD}")}
+migration: base /2026-10-01 -> base /2026-11-01
+  facet: format
+    merge: Blu-ray -> DVD
+`;
+  const base2 = publish(baseV2, { date: "2026-11-01", previous: base1, key }).bundle;
+  const entry = await store.install(base2, keys, "2026-10-15T20:00:05Z");
+  assert.deepEqual(entry.by, { migration: "base /2026-10-01 -> base /2026-11-01" });
+  assert.equal((await store.state()).records.get("P-1")?.values.format, "DVD");
+  assert.ok((await store.definitions()).dict.facets.get("format")?.values?.every((v) => v.value === "DVD"));
+  assert.deepEqual(await store.verify(), { valid: true });
+  // The border reads its contracts from the store too.
+  const border = await PgBorder.over(store);
+  assert.equal(border.contracts.size, 0);
 });

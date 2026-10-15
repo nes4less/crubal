@@ -471,6 +471,38 @@ export function readBundleInto(b: JsonObject, into: Dictionary = emptyDictionary
   return readDefinitions(printBundle(b), into);
 }
 
+/** An empty Parsed to read packages onto, in order. */
+export function emptyParsed(): Parsed {
+  const { perms } = readAccess("");
+  return { info: { name: "", version: "", owner: "", line: 0, crubal: 2, crubalLine: 0, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {} }, dict: emptyDictionary(), rules: [], contracts: [], views: { shapes: new Map(), filters: new Map(), views: new Map(), roles: new Map(), shown: new Map() }, perms, edges: [], recipes: [] };
+}
+
+/**
+ * Read a bundle onto what is already read (the packages it extends, or the installed packages before the
+ * owner's own definitions): the dictionary grows, and a member of the same name replaces the earlier one.
+ */
+export function readBundleOnto(bundle: JsonObject, base: Parsed): Parsed {
+  const text = printBundle(bundle);
+  readDefinitions(text, base.dict);
+  const [info] = readPackages(text);
+  if (info) base.info = { ...info, dict: base.dict };
+  const byName = <T extends { name: string }>(have: T[], next: T[]) => [...have.filter((h) => !next.some((n) => n.name === h.name)), ...next];
+  base.rules = byName(base.rules, readRules(text));
+  base.contracts = byName(base.contracts, readContracts(text));
+  const views = readViews(text);
+  for (const k of ["shapes", "filters", "views", "roles", "shown"] as const) for (const [key, val] of views[k]) (base.views[k] as Map<string, unknown>).set(key, val);
+  const { perms, edges } = readAccess(text);
+  if (perms.name) base.perms.name = perms.name;
+  for (const [k, v] of perms.menu) base.perms.menu.set(k, v);
+  for (const [k, v] of perms.presets) base.perms.presets.set(k, v);
+  for (const [k, v] of perms.relations) base.perms.relations.set(k, v);
+  for (const [k, v] of perms.ownership) base.perms.ownership.set(k, v);
+  if (perms.emergency) base.perms.emergency = perms.emergency;
+  base.edges.push(...edges);
+  base.recipes.push(...readRecipes(text));
+  return base;
+}
+
 // ─── Hash, sign, verify ──────────────────────────────────────────────────────
 
 export function bundleHash(b: JsonObject): string {

@@ -66,7 +66,21 @@ tick. `store.erase(record)` redacts every value write to a record across the log
 `export <owner>`, `redact <owner> <log> [<write>]`, `erase <owner> <record>`, `project <owner> --defs
 <file>…` and `tick <owner> <contract> --now <moment> --defs <file>…`.
 
+## Installing, and definitions from the store
+
+`store.install(bundle, keys)` takes a published version (docs/design/publishing.md): it refuses an unsigned
+bundle unless the store allows them for development, a bundle whose hash or signature doesn't verify, a
+language version above the store's, and a bundle whose `extends` aren't installed at their pinned
+versions; it checks the definitions that would result with every publish check; then it writes one
+`install` entry, keeps the bundle in `bundles`, and, when an earlier version of the package was installed,
+restamps every record through the bundle's recipes from that version, each write `by: migration`, and
+leaves every view to be rebuilt. `store.define(member)` is the owner's own change: checked with the rest,
+then one `define` write. `store.definitions()` builds what the engine runs with from the installed bundles
+in order and then the define writes, cached per chain head; the projector and `PgBorder.over(store)` take
+their dictionary, views, contracts and permissions from it, so nothing is handed in any more except in
+tests.
+
 ## Not yet here
 
-The host: authentication, secrets, acting on a contract's payload, and installing a published package so
-the store reads its definitions from `installed` and `definitions` instead of being handed them.
+The send split with a real act between `started` and `acted` (docs/design/runs.md), and the host:
+authentication, secrets, adapters, signing, loops and the HTTP surface (docs/design/host.md).
