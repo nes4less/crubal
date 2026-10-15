@@ -8,6 +8,9 @@ carries a version, and nothing is translated on read.
 
 - A breaking change MUST ship a recipe in the same package version (chapter 11).
 - A store MUST restamp before it accepts data written under the new version.
+- **Restamp or pend.** A step that changes the shape or meaning of stored values (10.3) restamps. A change
+  to which keys lower records are projected (a `level::` line added or removed, chapter 5.3.3) is an
+  instruction (10.7): it pends per record and never blocks the store.
 - **Mapping on read is banned.** A store MUST NOT serve data at a version other than its own by translating it
   as it is read. Everything it serves is current.
 - At a border, the wrapper names the package version the data was written under (chapter 3.8). A receiver
@@ -117,9 +120,13 @@ A package MUST be refused at publish when a recipe breaks these:
 
 ## 10.7 Instructions
 
-A recipe changes everything a package holds. An **instruction** changes the records below one record: what a
-product tells its units when it changes the keys it projects (chapter 1.7). A lower record never changes
-because its parent's definition now looks different; it changes only when an instruction reaches it.
+A recipe changes values. An **instruction** changes which keys lower records hold: what the record above
+tells the records below it when the keys it projects change (chapter 1.7). A lower record never changes
+because something above it now looks different; it changes only when an instruction reaches it.
+
+Instructions have two **issuers**, because projection comes from two places (chapter 1.7): a record, when
+its own `wears` change; and a class version, when a package publish adds or removes a `level::` line, which
+reaches every wearer's lower records at once.
 
 ```crubal
 instructions: P-4QX7
@@ -127,7 +134,9 @@ instructions: P-4QX7
   2: -graded -> grade
        yes -> Graded
        no -> -
-  3: -sealed
+
+instructions: class OpticalDisc /2026-11-01
+  1: -sealed
 ```
 
 | Instruction | Does |
@@ -136,15 +145,15 @@ instructions: P-4QX7
 | `-key` | the key and its value leave the lower record; the value stays in the log |
 | `-key -> other` | the value moves to another key, with value maps written below it as in a contract's map (chapter 7.3) |
 
-- **Numbered and pending.** A record's instructions are numbered in order. Each lower record's envelope says
-  the last one it has `applied` (chapter 1.1); the rest are pending. A change above writes one instruction,
-  however many records are below.
+- **Numbered and pending.** An issuer's instructions are numbered in order. Each lower record's envelope says,
+  per issuer, the last one it has `applied` (chapter 1.1); the rest are pending. A change above writes one
+  instruction, however many records are below.
 - **Applied by touch, drain or hand.** Pending instructions are applied, in order, before anything else
   touches the lower record: a form opens it, a write reaches it, a contract runs on it. A store MAY also drain
   them in the background at a rate it chooses, and a person MAY apply them to one record or many.
 - **Readers see what is applied.** Until a record applies an instruction, it shows its keys as they were.
 - **Archived records are skipped** (chapter 1.12). Unarchiving makes their pending instructions apply again.
-- Applying an instruction is a write, logged with `by: {"instruction": "<record> #<n>"}`. A value that a
+- Applying an instruction is a write, logged with `by: {"instruction": "<issuer> #<n>"}`. A value that a
   value map can't place goes to the review queue and is held, as in a recipe (10.4).
-- A record's publish of a change that stops projecting a key its lower records hold values for MUST carry the
-  instruction for it.
+- A change that stops projecting a key lower records hold values for MUST carry the instruction for it: a
+  class version in its package (chapter 5.11), a record in its own `wears` write.

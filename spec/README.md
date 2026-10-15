@@ -39,6 +39,9 @@ The chapters follow the stack from the bottom. Each refers only to the chapters 
   comments.
 - `me:` in examples is the Media Encyclopedia package, CRUBAL's first adopter. `wd:` is Wikidata. `crubal:`
   is the core, `crubal.com/core` (chapter 11.7).
+- **Product, unit, catalog, disc and the like are the media and product packages' words.** They appear in
+  this spec only as examples. The core knows kinds, levels, records, classes and views; nothing in it is
+  defined in terms of a product or a unit.
 
 ## Conformance levels
 

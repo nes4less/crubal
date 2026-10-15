@@ -155,7 +155,8 @@ Every one of these is a rule of the shape above; no other mechanism exists.
 ## 6.6 Global rules
 
 A **global rule** reads other records: `is unique` (no other record in the scope holds the same value) and
-catalog membership (chapter 12). Its scope is the rule's `for`. Global rules are their own class of rule
+view membership (chapter 12). Its scope is the rule's `for`; `is unique` compares against every record there,
+active or archived, but one archived as `merged` (chapter 1.12). Global rules are their own class of rule
 because they need indexes; a conforming store at the Rules level MUST enforce `must`-strength global rules
 at write.
 

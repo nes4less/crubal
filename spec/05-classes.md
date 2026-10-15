@@ -251,7 +251,7 @@ and narrows nothing: redundant lines hide drift.
 |---|---|---|
 | `label`, `describe`, order, sections, `frame` | safe | no |
 | add a facet line, add a used class, widen a narrowing | safe | no |
-| remove a facet line or a used class | safe for data; values become unasked (5.5) | no; a `level::` line that lower records hold values for needs an instruction (chapter 10.7) |
+| remove a facet line or a used class | safe for data; values become unasked (5.5) | no; a `level::` line that lower records hold values for needs an instruction from the class version (chapter 10.7), which pends and never blocks |
 | narrow a line, add `!`, add a level prefix | breaking for data that breaks it | `review` |
 | narrow `for` | breaking for records of the dropped kinds | `review` |
 | remove a part slot | breaking for records with those parts | `review` |

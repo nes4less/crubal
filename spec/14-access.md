@@ -26,9 +26,11 @@ the same checks, history and revocation apply to every one of them.
   ```
 
   A person's owned records live in the host's store but in **their own log chain** (chapter 8.5), so they
-  can be exported or moved whole, and erased by them alone. The host owns everything else, including the
-  catalog facts a person contributes to shared records: those are values with sources (chapter 1.9), not
-  owned records.
+  can be exported or moved whole, and erased by them alone. The host signs that chain on their behalf until
+  they publish a key of their own, which the host lists under its well-known `keys` by the person's ID
+  (chapter 11.7). When the host installs a package version, it restamps their records too, in their chain,
+  with `by: migration` (chapter 10.4). The host owns everything else, including the facts a person
+  contributes to shared records: those are values with sources (chapter 1.9), not owned records.
 - **The platform above owners has no default access.** A service that hosts many owners reaches an owner's
   records only through an edge that owner grants (14.8), or, for a legal order or a security incident only,
   an emergency edge under published terms (14.13). Every use of either is logged.
@@ -41,8 +43,9 @@ kinds.
 
 - A record is `within` at most one record. The links MUST NOT form a cycle.
 - **`within` is not `of`.** `of` is a level of one kind, where values fold (chapter 1.7). `within` carries
-  access and never moves a value. A unit is `of` its product without being `within` it: whoever administers
-  the catalog doesn't administer every seller's units.
+  access and never moves a value. A lower record is `of` the record above without being `within` it (a
+  seller's unit is `of` a shared product): whoever administers the shared record doesn't administer every
+  record below it.
 - **Ancestors.** A record's ancestors are every record up its `within` chain. A store MUST keep each record's
   ancestors so that an access check is a lookup, never a walk, at any depth. Changing a `within` link is an
   envelope write (chapter 8.5), and the store updates the ancestors of everything below it.
@@ -87,7 +90,7 @@ history.
 |---|---|---|
 | **admin** | administer everything on the record and what is within it, including deciding who else controls it | a facility's operator; a team's captain |
 | **control** | what its `grants` list, on the record and what is within it | front-desk staff with `checkIn`; a league coordinator |
-| **consume** | take part: run the contracts and forms the package opens to consumers, and see and change only their own part | a player submitting availability; a customer buying |
+| **consume** | take part: run the contracts and forms the package opens to consumers, and see and change only their own part: the records and rows a contract created for them | a player submitting availability; a customer buying |
 | **view** | read, as the views built for them allow | a fan; the public |
 | **none** | nothing; the edge is a relation only (14.9) | a follower |
 
@@ -101,9 +104,17 @@ archived records and the trust order still apply.
 the record or on any of its ancestors: the highest mode among them, and for `control`, every item they carry
 together. An edge whose `where` doesn't hold for the record, or whose `until` has passed, doesn't count.
 
-**Audiences** (chapter 12.4) are edges every caller of a kind holds implicitly: `public` is `view` for
-everyone, `member` is `view` for every signed-in person, `staff` is anyone with a `control` or `admin` edge on
-the owner's records, and `owner` is the owner.
+**Audiences** (chapter 12.4) are read off edges: `public` is `view` for everyone; `member` is every person
+the owner has admitted (the signup contract grants their first edge, `consume` or `view`, on the owner's
+root); `staff` is anyone with a `control` or `admin` edge on any of the owner's records; `owner` is the
+owner. An audience says which projection a caller may read; which *rows* of it they see is the view's
+partition (chapter 12.6), so a `control` edge over one league admits its holder to staff views and shows
+them that league only.
+
+**A contract grants the consumer's edge.** A contract that creates a record for a caller (an order, a
+booking, a submission) also writes that caller's edge on it, `mode: consume` with the contract's relation,
+under the running system's own edge as `by`. The owner owns the record; the consumer holds their part, and
+that is what "their own part" means above.
 
 ## 14.5 The grantor chain
 
@@ -138,8 +149,11 @@ permissions: facility
     frontDesk: checkIn, sellPasses               audience: staff
     coordinator: scheduleGames, recordScores     audience: staff
     seller: sellPasses, archiveUnits, seeCost    audience: member
+  relations: operator, coordinator, captain, player, subscriber, follower only
 ```
 
+- **Relations** are the names an edge's `relation` may take on the package's records. One marked `only` is
+  relation-only: an edge with it has `mode: none` (14.10).
 - **Menu items** are the only things that can be granted. Each is a verb with its targets, and optionally
   an `on` scope.
 - **The verbs:** `see` (a value is shown), `edit` (a form may write it), `run` (a contract may start),
@@ -157,7 +171,8 @@ permissions: facility
   edit price only on units in NM or VG condition") is an item plus a `where`.
 
 A package MUST be refused at publish when an item names a verb, facet, class, view, contract or queue that
-doesn't exist, a preset names an item that doesn't exist, or a preset grants anything its audience can't see.
+doesn't exist, a preset names an item that doesn't exist, a preset grants anything its audience can't see, or
+a contract's relation isn't declared.
 
 ## 14.7 Gated edges
 
@@ -225,8 +240,9 @@ release.
 ```
 
 A gated edge adds `"gate": "review"` and, when it isn't the grantor, `"reviewer"`. Permissions hold `menu`
-(name → `{"verbs": {"run": ["checkIn"]}, "on": "administered"}`) and `presets` (name → `{"items": […],
-"audience": "staff"}`); `ownership` maps `person` to the kinds and classes a person may own.
+(name → `{"verbs": {"run": ["checkIn"]}, "on": "administered"}`), `presets` (name → `{"items": […],
+"audience": "staff"}`) and `relations` (name → `{"only": true}` or `{}`); `ownership` maps `person` to the
+kinds and classes a person may own.
 
 ## 14.12 Well-formed access
 
@@ -268,7 +284,8 @@ other.
 - **Reads are logged too.** Everything read under an emergency edge is written to the log, record by record,
   which no other edge requires.
 - **Witnessed on both sides.** The edge, its approvals and every read and write are in the owner's signed log
-  and, as a copy, in the platform's own log. Neither side can redact them (chapter 8.5.2).
+  and, as a copy, in the platform's own log, each entry marked `witnessed: true`, which neither side can
+  redact (chapter 8.5).
 - **The owner is told.** At once, unless a legal order requires a delay. A delay is recorded with the order's
   reference and its end, and the owner is told when it ends.
 - **The owner can end it**, unless it cites a legal order; then ending it is the order's matter, and the

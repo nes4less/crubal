@@ -38,8 +38,8 @@ package: me /2026-10-13
 | `trust` · `facet-trust` | the trust order (11.3) |
 | `terms` | how each audience may use what it's shown: `public: search yes, answer yes, train no` (chapter 12.5.1) |
 
-The rest of the package is its member files: `facet:`, `class:`, `rule:`, `contract:`, `kind:`, `view:` and
-`migration:` blocks, in any number of files. A package MAY also publish **reference records** (data files in
+The rest of the package is its member files: `facet:`, `class:`, `rule:`, `contract:`, `kind:`, `view:`,
+`migration:`, `permissions:` and `ownership:` (chapter 14) blocks, in any number of files. A package MAY also publish **reference records** (data files in
 the text form, chapter 2) that others read but don't own copies of: the units table is one.
 
 **Prefixes are nicknames.** Identity is always the full `domain/name`; a prefix only abbreviates it inside a
@@ -84,7 +84,7 @@ kind: item
 | `follows` | facets that follow a fork (Label follows Edition): they are dependent, so filters count them together |
 | `identify` | per level, the **strong** keys: a value held by one record names that record, so an arrival carrying it is bound there (chapter 9.2a). Each MUST also be `unique` within the level |
 | `match` | per level, the **weak** keys, separated by `;`: an arrival sharing one is probably the same record and goes to review, never bound by itself. `a + b` means all of them together. A key that real data reuses (a recycled barcode) belongs here, not in `identify` |
-| `archive` | what archiving a record does to the records below it: `cascade` (they are archived too, with reason `parent archived`) or `independent` (the default) (chapter 1.12) |
+| `archive` | what archiving a record does to the records below it: `cascade of`, `cascade within` or `cascade both` (they are archived too, with reason `parent archived`, along that link) or `independent` (the default) (chapter 1.12) |
 
 Classes add vary steps for their wearers with level prefixes (chapter 5.3.3). A package that `extends`
 another MAY add levels' vary steps to that package's kinds; it MUST NOT remove any.
@@ -182,6 +182,7 @@ shape `crubal:portable`) are fixed by this specification.
 |---|---|
 | `crubal.com/core` | the core's names |
 | `crubal.com/units` | the units table: units by dimension, with conversion factors and accepted spellings, and ISO 4217 currencies |
+| `crubal.com/party` | the `person`, `organization` and `system` kinds, their base classes, and the caller facets that edges, contracts and the trust order read (chapter 14) |
 | `crubal.com/product` | the `item` kind (group > product > unit) and the base product facets |
 | `crubal.com/service` | the `service` kind (service > booking) and the base service facets |
 | `crubal.com/commerce` | stock, offers, prices and shipping, attached to products and services |
@@ -205,8 +206,8 @@ https://<domain>/.well-known/crubal.json
 }
 ```
 
-- `keys` holds the owner's published signing keys (chapter 8.5); a party with no published key has unsigned
-  data, which readers MAY refuse.
+- `keys` holds the owner's published signing keys (chapter 8.5), and MAY list keys of the people it hosts
+  by their IDs (chapter 14.1); a party with no published key has unsigned data, which readers MAY refuse.
 - `emergency`, for a platform that hosts owners: its emergency-access terms (chapter 14.13), as
   `{"approvers": 2, "longest": "PT24H", "notify": "…", "keys": {…}}`, with the separate keys its approvers
   sign with. A platform without it can make no emergency edge.

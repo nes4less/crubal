@@ -61,7 +61,8 @@ view: dvds
 
 | Part | Holds | Default |
 |---|---|---|
-| `select` | which records: a `level`, the classes they `wear` (all of them must be worn), and a `when` condition (chapter 6.3); or `list: L-…`, a hand-made list | required |
+| `select` | which records: the classes they `wear` (all of them must be worn), a `level`, and a `when` condition (chapter 6.3); or `list: L-…`, a hand-made list. `level` is optional when `wears` is given: the view then selects wearers at every level, standing-alone ones included (chapter 1.7) | required |
+| `partition` | what a caller must stand in to a record to be served its row: `administered`, `controlled`, `owned`, `relation <name>` (chapter 14.10), or `none` for every row | `controlled` above `member`; `none` otherwise |
 | `of` | for a view inside a page: how the page's record narrows the selection, as a condition over `context` (`work is context.work and not id is context.id`) | none |
 | `pin` · `hide` | curation: records shown first, in this order · records never shown | none |
 | `order` | keys to sort by, in priority order; `after` means newest or largest first, `before` the reverse | ID |
@@ -73,8 +74,8 @@ view: dvds
 | `fresh` | `write`, or a delay such as `5m` (12.6) | `write` |
 | `terms` | how each audience may use what it's shown (12.5.1) | the package's `terms` |
 
-**Catalogs** are views whose selection is by worn classes, so "which catalog is this in" is a global rule
-(chapter 6.6) the engine answers from the views' selections. **"Also on other formats"** is a view inside a
+A **catalog** (the media package's word for a view selected by worn classes) makes "which catalog is this
+in" a global rule (chapter 6.6) the engine answers from the views' selections. **"Also on other formats"** is a view inside a
 product page: `select: level: product`, `of: work is context.work and not id is context.id`. **Related-by-facet
 carousels** are views selected by a shared facet value. **Hand-made lists** are records (an ordered set of
 links with a name and an owner), and a view shows one with `select: list: L-…`.
@@ -157,7 +158,7 @@ role: buyer
 - A person MAY hold several roles; their grants add up, each capped by its own audience.
 - **Default deny above `member`.** A person in the `staff` audience with no role sees and does only what
   `member` can.
-- Contracts use the same grants: `who: caller may run ebayListing` (chapter 7.6). A form shows or locks each
+- Contracts use the same grants: running one needs its `run` item (chapter 14.6). A form shows or locks each
   field by `see` and `edit`.
 - Roles are definitions in a package, versioned like classes. Which person holds which role is data: an edge
   (chapter 14.3) whose `grants` name it, logged like any other write, so every grant has a history.
@@ -214,6 +215,12 @@ ones, held, new and unknown values left out, and `show` rules applied.
 - **Staleness.** A write to a key in a view's read set, on a record or on anything it reads through (upper
   levels, shared parts, rollups from lower levels), marks that record's projection stale. Only stale rows are
   rebuilt.
+- **Partitions.** In a partitioned view (12.2), every projection row carries its record's ID and ancestors
+  (chapter 14.2). The host hands the index the verified caller's live edges, and the index serves a row only
+  when one of those edges stands in the partition's relation to the record or an ancestor: an edge on the
+  owner's root matches every row, an edge on one league matches that league's rows. Views above `member`
+  are partitioned by default, so a caller with `control` over one corner of the owner's data never sees the
+  rest of a staff projection. The store decides the rows and their ancestors; the index only matches.
 - **Role marks.** In a view above `member`, a slot whose value only some roles may `see` (12.4) carries the
   role it needs. The store decides the marks; the index only drops a marked slot for a caller without that
   role, using the roles of the verified caller the host hands it (chapter 7.6). Roles never add a slot a
@@ -236,7 +243,8 @@ choice.
 
 - An index MUST read only the projection streams of the views it serves. It never reads records, the log or
   another view's rows, so it can't show anything a view leaves out.
-- It MUST drop role-marked slots for callers without the role, and decides nothing else about visibility.
+- It MUST serve only the rows the caller's edges match in a partitioned view, MUST drop role-marked slots
+  for callers without the role, and decides nothing else about visibility.
 - Its pages and counts MUST follow 12.2 and 12.3, over the rows it holds.
 - An index MAY be behind the store, and MUST say which entry number it reflects.
 - **Actions check again.** Nothing that acts relies on an index. A contract checks its `needs` against the

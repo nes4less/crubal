@@ -22,7 +22,7 @@ engine makes it on behalf of whoever decided it.
 | `owner` | who holds the record's key | a domain (`mediaencyclopedia.com`), or a person hosted by one (chapter 14.1) |
 | `within` | the record this one belongs to for access, by ID | optional; any depth; chapter 14.2 |
 | `status` | `active` or `archived`, with a `reason`, and `into` for a merge | 1.12 |
-| `applied` | for a record below the top level: the last of its parent's instructions it has applied | chapter 10.7 |
+| `applied` | for a record below the top level: for each issuer of instructions (the record above, each class version), the last one it has applied | chapter 10.7 |
 | `wears` | the classes the record wears, in order | classes refine the kind (chapter 5) |
 | `created` · `updated` | times, UTC | RFC 3339, `Z` |
 | `parts` | owned parts (1.6) | absent when there are none |
@@ -219,8 +219,11 @@ Every key on an attached record is one of two kinds:
 A record that wears a class of its own (5.5) owns that class's keys, whatever the record above projects.
 
 **Standing alone.** A record without `of` reads nothing from above, so it stores every value itself, folded
-keys included, and wears only its own classes. Rules and templates read its own values the same way they
-read through.
+keys included, and wears only its own classes. Its classes' lines with no level prefix are asked of it at its
+own level. Rules and templates read its own values the same way they read through.
+
+**Writing a folded key** is writing the record that stores it. A caller who may not `edit` that record
+(chapter 14) makes a suggestion there (chapter 7.5), never a change.
 
 **Attaching** a standing-alone record folds its values into the record above, key by key, as observations do
 (chapter 9.7.1):
@@ -229,10 +232,12 @@ read through.
 |---|---|---|
 | holds the same value | | the lower copy is dropped and read through; it counts as support |
 | holds no value | | the lower value moves up, keeping its source |
-| holds a different value | | a conflict (chapter 9.3); it goes to review, and may signal a version split (9.7.3) |
+| holds a different value | | a conflict (chapter 9.3): the trust order picks, the other is kept as an alternative; a cluster of such differences across instances is the version-split signal (9.7.3) |
 
-Owned keys stay where they are. Attaching is refused, and goes to review, when the two records' worn classes
-have an empty meet (chapter 5.5).
+Owned keys stay where they are. Attaching needs `edit` on the lower record; a value that would move up to a
+record the caller may not edit lands there as a suggestion instead, and the lower record keeps its own value
+until it is accepted. Attaching is refused, and goes to review, when the two records' worn classes have an
+empty meet (chapter 5.5).
 
 **Detaching** copies every folded value onto the lower record, with its source, so the record keeps working as
 it was. Attaching and detaching are envelope writes (1.1), logged.
@@ -316,13 +321,15 @@ mistake. The `reason` says which; a package MAY name reasons of its own.
   sold). Rules MAY suggest archiving; they never archive.
 - **It keeps history true.** Archiving copies every folded value onto the record, with its source, so a later
   change above never rewrites what an archived record says.
-- **An archived record is left alone:** pending instructions skip it, arrivals never bind to it, rules don't
-  recompute its produced values, and views leave it out unless they select archived records explicitly.
+- **An archived record is left alone:** pending instructions skip it, weak keys never propose it as a
+  candidate (a bound reference or a strong key still reaches it, and what lands doesn't change its status,
+  chapter 9.2a), rules don't recompute its produced values, and views leave it out unless they select
+  archived records explicitly.
 - **It is reversible.** Unarchiving returns the record to `active` as it was archived; if it is attached, its
   copied values fold up again as in attaching (1.7), differences going to review.
 - **Cascade is the package's rule** (chapter 11.2, `archive`): archiving a record either archives the records
-  below it, each with reason `parent archived`, or leaves them alone. Unarchiving undoes only what the cascade
-  did.
+  below it, along `of`, along `within` or both, each with reason `parent archived`, or leaves them alone.
+  Unarchiving undoes only what the cascade did.
 
 **Merge.** The survivor keeps its ID. The merged record's values fold into it under the trust order (chapter
 8.4), losers kept as alternatives; its bindings (chapter 9.2a) and lower records move to the survivor; links

@@ -108,6 +108,9 @@ Each write is one of these:
 | **instruction** | `record`, its number and the instruction | the record's instructions (chapter 10.7) |
 | **run** | `run`, `contract`, its idempotency key and `state`: `started`, `acted`, `failed`, `closed` | the run's state (chapter 7.5) |
 | **install** | the package identity and version | the store's package; the restamp that follows is its own entries |
+| **read** | `record`, under an emergency edge only (chapter 14.13) | nothing; it is the record that a read happened |
+
+An entry MAY carry `witnessed: true` (chapter 14.13); such an entry MUST NOT be redacted.
 
 What can be computed from the log and the package versions it installs is never logged: completeness and the
 other rule results (chapter 6.9), projections (chapter 12.6), and whether instructions are pending.
@@ -124,6 +127,10 @@ A hop can be hidden without breaking the chain. A **redacted entry** keeps only 
 `sig` and `"redacted": "sha256:…"`, the hash of the full entry. Its hash is that value, so the next entry's
 `prev` still matches and the signature still verifies. Redaction is how private hops are shared and how data
 is erased when the law requires it.
+
+Only value, observation and read writes are redacted. An entry that created a record or changed its envelope
+is never redacted, so a rebuild (8.5.3) never meets a write to a record it hasn't seen: erasure leaves the
+record's shell and takes its values.
 
 ### 8.5.3 Rebuild and replay
 

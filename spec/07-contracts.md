@@ -105,7 +105,8 @@ anything that isn't a map, a value map or a literal is the other side's work.
 
 A run goes through seven steps, in order. Only step 4 has an effect.
 
-1. **Trigger and permission.** `when` holds (or a caller asked), and `who` holds for the caller.
+1. **Permission and trigger.** The caller holds `run` for the contract on the record (chapter 14.6), `who`
+   holds for the caller when the contract has one, and `when` holds (or a caller asked).
 2. **Needs.** The record satisfies `needs` as a class: every `!` line has a value, and every value fits its
    narrowing. If not, the run stops before acting, naming what is missing.
 3. **Map out.** `writes` builds the payload.
@@ -121,8 +122,9 @@ A run goes through seven steps, in order. Only step 4 has an effect.
 
 Every run has a **run ID** (`R-118`), and the log entry for its writes names it (chapter 8).
 
-- **Idempotency.** A run's key is the contract, the record and the hash of its mapped-out payload. A host
-  MUST NOT act twice for the same key unless the earlier run failed before acting.
+- **Idempotency.** A run's key is the contract, the record (or the `ref` when the run has no record yet,
+  chapter 9.2a) and the hash of its mapped-out payload. A host MUST NOT act twice for the same key unless the
+  earlier run failed before acting.
 - **Retry.** `retry: 3 every 10m` retries a failed act up to three times, ten minutes apart. With no `retry`,
   a failed act is not retried.
 - **Late answers.** An answer that arrives after its run closed is taken as intake against that run, and
@@ -134,12 +136,12 @@ Every run has a **run ID** (`R-118`), and the log entry for its writes names it 
 
 ## 7.6 Authorization and authentication
 
-**Authorization is inside CRUBAL.** `who` is a condition (chapter 6.3) over the **caller**, which is a record:
-a person, an organization or a system. Its values are read with the `caller` prefix
-(`caller.role is staff`), `caller wears Staff` tests its classes, and `caller may run ebayListing` tests
-its roles' grants (chapter 12.4). What a caller sees is decided by
-`show` rules (chapter 12). Who may do what to which record (ownership, delegated control, containment and
-the grantor chain) is chapter 14.
+**Authorization is inside CRUBAL.** Whether a caller may run a contract, edit a value or see one is decided
+by the caller's edges and the package's permission menu (chapter 14): that is the one spelling of
+permission. `who` is a further condition (chapter 6.3) over the **caller**, which is a record: a person, an
+organization or a system. Its values are read with the `caller` prefix (`caller.role is staff`), and
+`caller wears Staff` tests its classes. `who` narrows what the menu allows and never widens it. What a caller
+sees is decided by `show` rules (chapter 12) and the view's partition (chapter 12.6).
 
 **Authentication is the host's job.** Sign-in, OAuth flows and API keys belong to whatever runs the
 contracts. A contract only declares what the other side requires:

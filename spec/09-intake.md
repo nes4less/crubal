@@ -57,7 +57,9 @@ reference it has decided: `(ebayCatalog, 110245563)` is `P-4QX7`.
   is never confirmed, leaves nothing behind.
 - **A person decides on the spot.** In a form, the candidates are shown to the person, and their choice is the
   review decision.
-- **Archived records are never candidates** (chapter 1.12).
+- **Status.** A bound reference reaches its record whatever the record's status, and a strong key matches
+  archived records too: the arrival lands there and the record stays archived (chapter 1.12). A record
+  archived as `merged` resolves through `into`. Weak keys consider active records only.
 
 **Levels.** A payload for a lower level resolves its own record first, then its parent the same way. A parent
 that resolves to one record is attached (chapter 1.7). No parent, or candidates only, is not a reason to
@@ -113,8 +115,9 @@ A `keep-raw` field whose last name isn't a valid key name (chapter 1.3) must be 
 Review works **by key across all objects**, never object by object: `market:Studio`: 40,112 objects, 812
 distinct values.
 
-- A review decision changes a contract's map or the vocabulary (add a value, add an alias, map a value,
-  reject a value). It never edits objects directly.
+- A vocabulary decision changes a contract's map or the vocabulary (add a value, add an alias, map a value,
+  reject a value); it never edits objects directly. An arrival decision is a binding (9.2a), and a migration
+  item's decision resolves one held value (chapter 10.4); both are logged review writes (chapter 8.5).
 - After a decision, the held intake records are **replayed** (9.6), and the objects change through the fold
   like any other intake.
 - New and unknown values are searchable by staff and never shown in customer filters or pages.

@@ -54,8 +54,11 @@ JSON here is RFC 8259 JSON in UTF-8. A document MUST NOT contain duplicate membe
 | `id` | string, chapter 1.1's ID grammar | yes |
 | `kind` | string | yes |
 | `level` | string | yes |
-| `of` | string, an ID | when the level isn't the top one |
-| `owner` | string, a domain | yes |
+| `of` | string, an ID | when the record is attached (chapter 1.2); absent when it stands alone |
+| `owner` | string, a domain or a hosted person's `domain:ID` (chapter 14.1) | yes |
+| `within` | string, an ID | when the record belongs to another for access (chapter 14.2) |
+| `status` | `{"state": "active"}` or `{"state": "archived", "reason": "sold", "into"?: ID}` | when archived; absent means active |
+| `applied` | object: issuer → integer (chapter 10.7) | when the record has applied an instruction |
 | `wears` | array of strings (class names, in order) | when the record wears more than its base class |
 | `created` · `updated` | string, RFC 3339 in UTC with `Z` | yes in a store; MAY be left out at a border |
 | `values` | object: key → value (3.3) | yes; `{}` when the record has no values |
