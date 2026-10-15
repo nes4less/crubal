@@ -2,35 +2,18 @@
 // chain, build the entry, apply it with the engine's applyEntry, persist the difference, append the log.
 // The log is the truth; `rebuild` gives every other table back from it.
 
-import { applyEntry, diffWrites, differs, emptyState, type Draft, type Entry, type State } from "../../crubal/src/log.ts";
+import { applyEntry, diffWrites, differs, type Draft, type Entry, type State } from "../../crubal/src/log.ts";
 import type { JsonObject } from "../../crubal/src/model.ts";
-import { MemoryRecords } from "../../crubal/src/records.ts";
 import { entryHash, verifyChain, writeHash, type Keys } from "../../crubal/src/store.ts";
 import { type Client, type Pool, transaction } from "./db.ts";
 import { isObj, loadState, persist, wipeState } from "./state.ts";
-
-const clone = <T>(v: T): T => structuredClone(v);
+import { copyWorking, loadWhole, Needs, settle, type WorkingRecords, workingState } from "./working.ts";
 
 /** A state's maps copied, so a draft can be changed without touching what was loaded. */
 function draftOf(state: State): Draft {
-  const records = new MemoryRecords();
-  for (const [id, r] of state.records) records.set(id, clone(r));
-  return { records, bindings: new Map(state.bindings), instructions: new Map([...state.instructions].map(([k, v]) => [k, clone(v)])) as Draft["instructions"], edges: new Map([...state.edges].map(([k, v]) => [k, clone(v)])), review: clone(state.reviews) };
-}
-
-function copyState(state: State): State {
-  const s = emptyState();
-  for (const [id, r] of state.records) s.records.set(id, clone(r));
-  for (const [k, v] of state.edges) s.edges.set(k, clone(v));
-  for (const [k, v] of state.bindings) s.bindings.set(k, v);
-  for (const [k, v] of state.instructions) s.instructions.set(k, clone(v));
-  s.observations.push(...clone(state.observations));
-  s.reviews.push(...clone(state.reviews));
-  for (const [k, v] of state.runs) s.runs.set(k, clone(v));
-  s.installed.push(...clone(state.installed));
-  s.reads.push(...clone(state.reads));
-  for (const [k, v] of state.definitions) s.definitions.set(k, clone(v));
-  return s;
+  // A copy of the working state is itself a working state, so the draft notes what it lacks.
+  const s = copyWorking(state);
+  return { records: s.records, bindings: s.bindings, instructions: s.instructions as Draft["instructions"], edges: s.edges, review: s.reviews };
 }
 
 export class PgStore {
@@ -90,14 +73,25 @@ export class PgStore {
   async append(entry: Entry): Promise<Entry> {
     return transaction(this.pool, async (client) => {
       const head = await this.lockChain(client);
-      const before = await loadState(client, this.owner);
-      const after = copyState(before);
+      const base = await this.base(client);
       const linked = await this.link(client, entry, head);
-      applyEntry(after, linked);
-      await persist(client, this.owner, before, after);
+      const { state: after } = await settle(client, this.owner, base, (s) => applyEntry(s, linked));
+      await persist(client, this.owner, base, after);
       return linked;
     });
   }
+
+  /** An empty working state with the whole small tables in it; records, bindings and runs load as needed. */
+  private async base(client: Client): Promise<State> {
+    const needs = new Needs();
+    this.trace = needs;
+    const base = workingState(needs);
+    await loadWhole(client, this.owner, base);
+    return base;
+  }
+
+  /** What the last operation loaded, for tests and for watching a store's cost. */
+  trace: Needs | undefined;
 
   /**
    * One operation, one entry (8.5): the engine runs on a draft of the state, what it changed becomes the
@@ -107,15 +101,25 @@ export class PgStore {
   async commit(by: JsonObject, mutate: (draft: Draft) => void, at?: string, extra: JsonObject[] = []): Promise<Entry | null> {
     return transaction(this.pool, async (client) => {
       const head = await this.lockChain(client);
-      const before = await loadState(client, this.owner);
-      const draft = draftOf(before);
-      mutate(draft);
-      const writes = [...diffWrites(before, draft), ...extra];
-      if (!writes.length) return null;
-      const entry: Entry = { log: `L-${head.seq + 1}`, owner: this.owner, at: at ?? new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), by, writes };
-      const after = copyState(before);
+      const before = await this.base(client);
+      const needs = before.records as WorkingRecords;
+      // The operation runs until the working set holds everything it asked for (working.ts); so does the
+      // entry's application. Both run on copies of the same base, so the draft and the applied state
+      // hold the same records and `differs` compares like with like.
+      let draft: Draft;
+      let after: State;
+      let entry: Entry;
+      for (;;) {
+        const had = needs.needs.loaded.size;
+        draft = (await settle(client, this.owner, before, (s) => { const d = draftOf(s); mutate(d); return d; })).out;
+        const writes = [...diffWrites(before, draft), ...extra];
+        if (!writes.length) return null;
+        entry = { log: `L-${head.seq + 1}`, owner: this.owner, at: at ?? new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), by, writes };
+        const e = entry;
+        after = (await settle(client, this.owner, before, (s) => applyEntry(s, e))).state;
+        if (needs.needs.loaded.size === had) break;
+      }
       const linked = await this.link(client, entry, head);
-      applyEntry(after, linked);
       const problem = differs(after, draft);
       if (problem) throw new Error(`the log doesn't describe the change: ${problem}`);
       await persist(client, this.owner, before, after);
@@ -133,11 +137,13 @@ export class PgStore {
     return transaction(this.pool, async (client) => {
       await this.lockChain(client);
       await wipeState(client, this.owner);
-      const state = emptyState();
       const { rows } = await client.query("select entry from log where owner = $1 and chain = $2 order by seq", [this.owner, this.chain]);
-      for (const row of rows as { entry: Entry }[]) applyEntry(state, row.entry);
-      await persist(client, this.owner, emptyState(), state);
-      return state;
+      for (const row of rows as { entry: Entry }[]) {
+        const base = await this.base(client);
+        const { state } = await settle(client, this.owner, base, (s) => applyEntry(s, row.entry));
+        await persist(client, this.owner, base, state);
+      }
+      return loadState(client, this.owner);
     });
   }
 

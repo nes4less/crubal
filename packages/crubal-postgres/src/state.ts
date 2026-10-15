@@ -9,10 +9,10 @@ import type { Client } from "./db.ts";
 
 const isObj = (v: unknown): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);
 
-type Row = { [column: string]: unknown };
+export type Row = { [column: string]: unknown };
 
 /** A record as the engine holds it, from its row. Absent members stay absent. */
-function recordOf(row: Row): Record {
+export function recordOf(row: Row): Record {
   const doc = (row.doc ?? {}) as JsonObject;
   // The row's owner is the store's; the record's own owner (a hosted person's, another owner's) is in doc.
   const r: Record = { id: String(row.id), kind: String(row.kind), level: String(row.level), owner: String(doc.owner ?? row.owner), values: (doc.values ?? {}) as JsonObject };
@@ -72,10 +72,11 @@ export async function loadState(client: Client, owner: string): Promise<State> {
 /** Write what changed between two states of one owner: upserts, deletes, and appends to the lists. */
 export async function persist(client: Client, owner: string, before: State, after: State): Promise<void> {
   const changed = (a: unknown, b: unknown) => serialize((a ?? null) as Json) !== serialize((b ?? null) as Json);
-  for (const [id, r] of after.records) {
-    const was = before.records.get(id);
+  const beforeRecords = new Map<string, Record>(Map.prototype.entries.call(before.records) as Iterable<[string, Record]>);
+  for (const [id, r] of Map.prototype.entries.call(after.records) as Iterable<[string, Record]>) {
+    const was = beforeRecords.get(id);
     const ancestors = ancestorsOf(after.records, r);
-    const wasAncestors = was ? ancestorsOf(before.records, was) : undefined;
+    const wasAncestors = was ? ancestorsOf(beforeRecords, was) : undefined;
     if (was && !changed(was, r) && !changed(wasAncestors, ancestors)) continue;
     await client.query(
       `insert into records (owner, id, kind, level, "of", within, ancestors, status, applied, wears, created, updated, doc)
@@ -86,7 +87,11 @@ export async function persist(client: Client, owner: string, before: State, afte
       [owner, id, r.kind, r.level, r.of ?? null, r.within ?? null, ancestors, r.status ?? null, r.applied ?? null, r.wears ?? [], r.created ?? null, r.updated ?? null, docOf(r)],
     );
   }
-  const upsertMap = async (table: string, keyCol: string, valCol: string, was: Map<string, unknown>, now: Map<string, unknown>, asJson = true) => {
+  // Plain copies: a working map notes every walk and miss, and persisting is neither.
+  const plain = <V>(m: Map<string, V>) => new Map<string, V>(Map.prototype.entries.call(m) as Iterable<[string, V]>);
+  const upsertMap = async (table: string, keyCol: string, valCol: string, wasMap: Map<string, unknown>, nowMap: Map<string, unknown>, asJson = true) => {
+    const was = plain(wasMap);
+    const now = plain(nowMap);
     for (const [k, v] of now) {
       if (was.has(k) && !changed(was.get(k), v)) continue;
       await client.query(`insert into ${table} (owner, ${keyCol}, ${valCol}) values ($1, $2, $3) on conflict (owner, ${keyCol}) do update set ${valCol} = excluded.${valCol}`, [owner, k, asJson ? v : String(v)]);

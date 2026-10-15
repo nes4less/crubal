@@ -116,6 +116,24 @@ test("redacting a write holds the chain and the rebuilt state forgets the value"
   assert.equal(verifyChain((await store.entries()) as unknown as JsonObject[]).valid, true);
 });
 
+test("an operation loads only what it touches", { skip: !url }, async () => {
+  const dict = emptyDictionary();
+  readDefinitions(readFileSync(join(corpus, "..", "reader", "_package.crubal"), "utf8"), dict);
+  readDefinitions("title$\nkind: item\n  levels: group, product, unit\n", dict);
+  const store = new PgStore(pool, "many.example");
+  const owner = "many.example";
+  await store.commit({ migration: "backfill" }, (d) => {
+    for (let i = 1; i <= 60; i++) d.records.set(`P-${i}`, { id: `P-${i}`, kind: "item", level: "product", owner, values: { title: `Title ${i}` }, sources: { "*": { origin: "declared", via: "L-0" } } });
+    d.records.set("U-1", { id: "U-1", kind: "item", level: "unit", owner, values: { title: "Title 7" }, sources: { "*": { origin: "observed", via: "L-0" } } });
+  }, "2026-10-15T15:00:00Z");
+  await store.commit({ person: "staff-1" }, (d) => attach(d as unknown as Store, "U-1", "P-7", dict), "2026-10-15T15:00:01Z");
+  const loaded = [...(store.trace?.loaded ?? [])];
+  assert.ok(loaded.length < 10, `attach loaded ${loaded.length} records: ${loaded.join(", ")}`);
+  assert.ok(loaded.includes("U-1") && loaded.includes("P-7"));
+  assert.equal((await store.state()).records.get("U-1")?.of, "P-7");
+  assert.deepEqual((await store.state()).records.get("U-1")?.values, {}, "the shared title folded up and is read through");
+});
+
 test("owners never see each other", { skip: !url }, async () => {
   const a = new PgStore(pool, "a.example");
   const b = new PgStore(pool, "a.example:C-7");

@@ -1,7 +1,7 @@
 # The persistent store
 
 **Status:** design, 2026-10-15; first version in `packages/crubal-postgres` (schema, write path, rebuild,
-verify, redaction, owner isolation; the working set is the owner's whole state for now). Not part of the specification: how a store keeps its data is not part of
+verify, redaction, owner isolation, and the working set loaded as an operation needs it). Not part of the specification: how a store keeps its data is not part of
 conformance (spec chapter 13.6). This is the design of one conforming store, the one crubal.com ships.
 
 ## What it is
@@ -78,9 +78,11 @@ One entry is one database transaction (spec 8.5):
    the number of views, spec 12.6).
 6. Commit. The host signs the entry's hash with the owner's key before step 5 when it holds one.
 
-What the engine needs in step 2 is the `Backend` interface: a small set of loads (records by ID, by key,
-by selection; definitions; edges by caller and by record; bindings; instructions by issuer; runs by key)
-and one apply. The memory backend answers them from its maps; the Postgres backend from the tables.
+What the engine needs in step 2 is answered as it asks: the engine is synchronous and pure, so it runs on
+a working set that answers what it has and notes what it lacks (a record by ID, the records at a level, a
+record's children, a `for`'s targets, the holders of a key, a binding, a run); the store loads what was
+lacking and runs the operation again on a fresh copy, until a run asks for nothing new. The memory backend
+has everything from the start; the Postgres backend loads only what the operation touched.
 
 ## Reads
 

@@ -26,10 +26,18 @@ memory, that journaled operations (attach, merge, archive with cascade) write th
 memory journal and leave the same state, that redacting a write keeps the chain valid and the rebuilt
 state without the value while the trigger refuses any other change, and that owners never see each other.
 
-## This version
+## The working set
 
-The working set an operation runs over is the owner's whole state, loaded at the start of the
-transaction. `RecordSet` already carries the questions a loader needs (`atLevel`, `childrenOf`,
-`forTarget`, `byKey`), so loading only what an operation touches is the next step, not a redesign. Not
-yet here: the projector and the projection stream tables in use, intake rows with raw bytes, cursors and
-schedules, the operations command. Each lands with a test of the same kind.
+An operation runs over a working set that loads as it is needed (`src/working.ts`). The engine is
+synchronous and pure, so the operation runs on a set that answers what it has and notes what it lacks (a
+record by ID, the records at a level, a record's children, a `for`'s targets, the holders of a key, a
+binding, a run); the store loads what was lacking and runs the operation again on a fresh copy, until a
+run asks for nothing new. Edges, instructions and definitions are loaded whole, being small. The entry's
+application settles the same way, so an attach among sixty records loads the two it touches and their
+neighbours, never the sixty. `store.trace` says what the last operation loaded. An operation passed to
+`commit` MUST therefore be a pure function of the draft it is given: it may be run more than once.
+
+## Not yet here
+
+The projector and the projection stream tables in use, intake rows with raw bytes, cursors and schedules,
+the operations command. Each lands with a test of the same kind.
