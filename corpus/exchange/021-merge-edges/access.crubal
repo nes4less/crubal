@@ -1,0 +1,12 @@
+permissions: shop
+  menu:
+    retitle: edit title
+  relations: seller
+
+edge: E-1
+  who: C-SELL
+  relation: seller
+  mode: control
+  on: P-2
+  grants: retitle
+  by: owner

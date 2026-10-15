@@ -1,0 +1,4 @@
+instruct: P-1
+  -graded -> grade
+    yes -> Graded
+apply: U-1

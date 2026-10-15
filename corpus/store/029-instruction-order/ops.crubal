@@ -1,0 +1,10 @@
+instruct: class:Disc/2026-11-01
+  -gradeB -> gradeC
+    B -> C
+instruct: kind:item/2026-11-01
+  -gradeA -> gradeB
+    A -> B
+instruct: P-1
+  -graded -> gradeA
+    yes -> A
+apply: U-1

@@ -1,0 +1,22 @@
+permissions: facility
+  menu:
+    rename: edit name
+  relations: emergency
+
+emergency:
+  approvers: 2
+  longest: PT24H
+
+edge: E-9001
+  who: platform.example:S-14
+  relation: emergency
+  mode: view
+  on: F-1
+  until: 2026-10-16T12:00Z
+  by: platform
+  emergency:
+    kind: incident
+    reason: Card-skimming script reported on the storefront
+    reference: INC-2026-114
+    approvals: platform.example:S-02, platform.example:S-31
+    at: 2026-10-15T18:00Z

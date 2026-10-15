@@ -1,0 +1,13 @@
+// The `role:` block is the short form of a preset (12.4, 14.6): one preset of its name, one menu item per
+// verb line. Granting it as a preset works like any other.
+kind: person
+  levels: person
+cost#USD
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+person: C-B [origin: declared, via: L-1]
+product: P-1 [origin: declared, via: L-1]
+  cost: 3.10USD

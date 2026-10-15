@@ -1,0 +1,14 @@
+// `is unique` compares records of the same level (6.6): a unit holding the product's ASIN (a snapshot or a
+// detached copy) never collides with the product.
+asin$ unique
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  asin: B000001
+
+unit: U-1 of P-1 [origin: observed, via: L-2]
+  asin: B000001
+  price: 12.50USD

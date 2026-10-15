@@ -1,0 +1,45 @@
+// A view edge admits to member and no higher (14.4): a paid subscriber reads a member view partitioned by
+// their relation and sees the games of the league they subscribed to; a follower, whose edge is a relation
+// only, sees none.
+view: stats
+callers: C-SUB, C-FAN
+
+kind: person
+  levels: person
+kind: league
+  levels: league
+kind: game
+  levels: game
+name$
+
+shape: gameCard
+  slots:
+    !name -> heading
+
+view: stats
+  select:
+    level: game
+  shape: gameCard
+  show: member
+  partition: relation subscriber
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+person: C-SUB [origin: declared, via: L-1]
+person: C-FAN [origin: declared, via: L-1]
+
+league: L-1 [origin: declared, via: L-1]
+  name: Rec
+league: L-2 [origin: declared, via: L-1]
+  name: Masters
+game: G-1 [origin: declared, via: L-1]
+  crubal:within: L-1
+  name: Comets v Rockets
+game: G-2 [origin: declared, via: L-1]
+  crubal:within: L-1
+  name: Rockets v Comets
+game: G-3 [origin: declared, via: L-1]
+  crubal:within: L-2
+  name: Sharks v Rays

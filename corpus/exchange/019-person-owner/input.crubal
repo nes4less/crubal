@@ -1,0 +1,19 @@
+// A hosted person owns their own records (14.1): they hold admin over their collection and nobody else
+// does; `partition: owned` reads the same ownership.
+kind: person
+  levels: person
+kind: collection
+  levels: collection
+name$
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+person: C-1 [origin: declared, via: L-1]
+  name: One
+person: C-2 [origin: declared, via: L-1]
+  name: Two
+collection: K-1 [origin: declared, via: L-1]
+  crubal:owner: test.example:C-1
+  name: My discs

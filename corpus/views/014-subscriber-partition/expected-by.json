@@ -1,0 +1,7 @@
+{
+  "C-SUB": [
+    { "record": "G-1", "heading": "Comets v Rockets", "ancestors": ["L-1"] },
+    { "record": "G-2", "heading": "Rockets v Comets", "ancestors": ["L-1"] }
+  ],
+  "C-FAN": []
+}

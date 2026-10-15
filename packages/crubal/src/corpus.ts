@@ -11,7 +11,7 @@ import { checkRecipe, readRecipes, restamp } from "./migrate.ts";
 import { checkContracts, Exchange, readRoles, verifyBorder } from "./exchange.ts";
 import { checkPackages } from "./packages.ts";
 import { checkViews, readViews, Views } from "./views.ts";
-import { Journal, rebuild, stateJson } from "./log.ts";
+import { Journal, rebuild, redactable, stateJson } from "./log.ts";
 import { arrive, decide, type Arrival, type ArrivalStore } from "./arrival.ts";
 import { apply as applyInstructions, archive, attach, detach, emptyStore, issue, merge, unarchive } from "./lifecycle.ts";
 import { Access, checkPermissions, readAccess } from "./access.ts";
@@ -264,6 +264,15 @@ function runStoreCase(folder: string, caseDir: string, name: string, shared: Dic
         return e.line === want ? pass : fail(`refused at line ${e.line} (${e.message}), expected line ${want}`);
       }
     }
+    // Redaction (8.5.2): which entries of a log may be redacted, and why not.
+    if (existsSync(file("expected-redact.json"))) {
+      const entries = json("log.json") as JsonObject[];
+      const got: JsonObject = {};
+      for (const e of entries) got[String(e.log)] = redactable(e) ?? "redactable";
+      const want = json("expected-redact.json") as JsonObject;
+      for (const [k, v] of Object.entries(want)) if (serialize((got[k] ?? "∅") as Json) !== serialize(v)) return fail(`${k}: got ${serialize((got[k] ?? "∅") as Json)}`);
+      return pass;
+    }
     // Rebuild (8.5.3): the log alone gives back the state.
     if (existsSync(file("expected-state.json"))) {
       const got = stateJson(rebuild(json("log.json") as JsonObject[]));
@@ -504,8 +513,13 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
           checkPermissions(perms, d, new Set(readContracts(defs).map((c) => c.name)));
           const recs = data.trim() ? readText(data, d).records.map((r) => foldRecord(r, d)) : [];
           const access = new Access(d, perms, new Map(recs.map((r) => [r.id, r])), [], "test.example");
-          access.checkWithin();
-          for (const r of recs) access.checkOwnership(r);
+          // A record's refusal names the line its header was written at.
+          const lineOf = (id: string) => {
+            const i = input.split("\n").findIndex((l) => new RegExp(`^\\w+: ${id}(\\s|$)`).test(l));
+            return i < 0 ? undefined : i + 1;
+          };
+          access.checkWithin(lineOf);
+          for (const r of recs) access.checkOwnership(r, lineOf(r.id));
           for (const e of edges) {
             access.checkEdge(e);
             access.edges.set(e.edge, e);
@@ -563,6 +577,8 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
           got.push({ ask, result: access.gated(caller, record)?.edge ?? false });
         } else if (q.key === "ancestors") {
           got.push({ ask, result: access.ancestors(words[0] ?? "") });
+        } else if (q.key === "audience") {
+          got.push({ ask, result: access.audienceOf(words[0] ?? "") });
         } else return fail(`unknown ask ${q.key}`);
       }
       const want = json("expected-access.json") as JsonObject[];
@@ -850,6 +866,10 @@ export function runCorpus(root: string, level: string): CaseResult[] {
     for (const name of readdirSync(dir).sort()) {
       if (name.startsWith("_")) continue;
       if (!["input.crubal", "log.json", "border.json"].some((f) => existsSync(join(dir, name, f)))) continue;
+      if (folder === "store" && existsSync(join(dir, name, "expected-redact.json"))) {
+        results.push(runStoreCase(folder, join(dir, name), name, dict));
+        continue;
+      }
       const r = folder.startsWith("views")
         ? runViewsCase(folder, join(dir, name), name, dict, root)
         : folder.startsWith("exchange") || folder === "package-errors"

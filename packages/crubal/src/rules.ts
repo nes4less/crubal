@@ -250,12 +250,16 @@ export class Engine {
     return this.pathOf(e.a);
   }
 
+  /** `is unique` compares records of the same level, and never one archived as merged (6.6). */
   private uniqueClash(r: Rule, rec: Record): boolean {
     const key = r.thenText.replace(/ is unique$/, "");
     const mine = rec.values[key];
     if (emptyOf(mine) || (isObj(mine) && "$empty" in mine)) return false;
     const want = JSON.stringify(mine);
-    for (const [id, s] of this.store) if (id !== rec.id && JSON.stringify(s.rec.values[key]) === want) return true;
+    for (const [id, s] of this.store) {
+      if (id === rec.id || s.rec.level !== rec.level || s.rec.status?.reason === "merged") continue;
+      if (JSON.stringify(s.rec.values[key]) === want) return true;
+    }
     return false;
   }
 

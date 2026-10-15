@@ -1,0 +1,23 @@
+// Three issuers apply in a fixed order (10.7): the record above, then the kind's versions, then the class
+// versions. Each moves the value on; only that order ends at gradeC.
+graded?
+gradeA{A}
+gradeB{B}
+gradeC{C}
+
+class: Disc
+  for: item
+  facets:
+    title
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  crubal:wears: Disc
+  title: Christmas Vacation
+
+unit: U-1 of P-1 [origin: observed, via: L-2]
+  graded: yes
+  price: 12.50USD

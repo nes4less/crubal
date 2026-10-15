@@ -1,0 +1,23 @@
+contract: listing
+  kind: send
+  writes:
+    cost -> price
+
+role: buyer
+  audience: staff
+  may:
+    see: cost
+    run: listing
+
+permissions: shop
+  menu:
+    other: edit cost
+  relations: buyer
+
+edge: E-1
+  who: C-B
+  relation: buyer
+  mode: control
+  on: P-1
+  grants: buyer
+  by: owner

@@ -499,6 +499,10 @@ export class Views {
     if (!v) return [];
     const reads = this.readSet(name);
     const out = new Set<string>();
+    // The envelope is in every read set (12.6): a status, wears, within or of change stales the row.
+    const was = this.records.get(write.id);
+    const envelope = (["status", "wears", "within", "of"] as const).some((m) => serialize((write[m] ?? "") as Json) !== serialize((was?.[m] ?? "") as Json));
+    if (envelope) out.add(write.id);
     for (const key of Object.keys(write.values)) {
       if (reads.has(key) && (!v.level || write.level === v.level)) out.add(write.id);
       if (reads.has(`${write.level}::${key}`) && write.of) out.add(write.of);

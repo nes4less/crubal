@@ -1,0 +1,13 @@
+permissions: facility
+  menu:
+    recordScores: edit score
+  relations: coordinator
+
+edge: E-3
+  who: C-CO
+  relation: coordinator
+  mode: control
+  on: L-1
+  grants: recordScores
+  where: not status is archived
+  by: owner

@@ -1,0 +1,13 @@
+{
+  "crubal": "2",
+  "records": [
+    {
+      "id": "U-1", "kind": "item", "level": "unit", "of": "P-1", "owner": "test.example",
+      "applied": { "P-1": 1 },
+      "values": { "price": { "$money": "12.50", "currency": "USD" } },
+      "sources": { "*": { "origin": "observed", "via": "L-2" } },
+      "held": { "graded": { "value": false, "instruction": "P-1#1" } }
+    }
+  ],
+  "review": [ { "record": "U-1", "address": "graded", "instruction": "P-1#1 -graded -> grade", "value": false, "reason": "no value map for this value", "held": true } ]
+}

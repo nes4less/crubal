@@ -1,0 +1,7 @@
+{
+  "crubal": "2",
+  "records": [
+    { "id": "F-1", "kind": "facility", "level": "facility", "owner": "test.example", "status": { "state": "archived", "reason": "closed" }, "values": { "name": "Northside" }, "sources": { "*": { "origin": "declared", "via": "L-1" } } },
+    { "id": "S-1", "kind": "session", "level": "session", "owner": "test.example", "within": "F-1", "status": { "state": "archived", "reason": "parent archived" }, "values": { "name": "Fall" }, "sources": { "*": { "origin": "declared", "via": "L-1" } } }
+  ]
+}

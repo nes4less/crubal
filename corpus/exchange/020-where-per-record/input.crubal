@@ -1,0 +1,21 @@
+// An edge's `where` holds per record covered (14.4): the coordinator may edit the active team's score and
+// not the archived one's, under one edge on the league.
+kind: person
+  levels: person
+kind: league
+  levels: league
+kind: team
+  levels: team
+score#
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+person: C-CO [origin: declared, via: L-1]
+league: L-1 [origin: declared, via: L-1]
+team: T-1 [origin: declared, via: L-1]
+  crubal:within: L-1
+team: T-2 [origin: declared, via: L-1]
+  crubal:within: L-1
+  crubal:status: archived [reason: folded]

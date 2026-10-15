@@ -1,0 +1,5 @@
+[
+  { "ask": "may: C-B run listing on P-1", "result": true },
+  { "ask": "may: C-B see cost on P-1", "result": true },
+  { "ask": "may: C-B edit cost on P-1", "result": false }
+]

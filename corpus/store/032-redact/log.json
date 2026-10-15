@@ -1,0 +1,6 @@
+[
+  { "log": "L-1", "owner": "test.example", "at": "2026-10-15T09:00:00Z", "by": { "person": "C-1" }, "writes": [ { "record": "P-1", "envelope": "created", "value": { "kind": "item", "level": "product", "owner": "test.example" } }, { "record": "P-1", "address": "title", "value": "A" } ] },
+  { "log": "L-2", "owner": "test.example", "at": "2026-10-15T09:01:00Z", "by": { "person": "C-1" }, "writes": [ { "record": "P-1", "address": "title", "value": "B" } ] },
+  { "log": "L-3", "owner": "test.example", "at": "2026-10-15T09:02:00Z", "by": { "person": "C-1" }, "witnessed": true, "writes": [ { "record": "P-1", "address": "title", "value": "C" } ] },
+  { "log": "L-4", "owner": "test.example", "at": "2026-10-15T09:03:00Z", "by": { "person": "C-1" }, "writes": [ { "edge": { "edge": "E-1", "who": "C-2", "relation": "seller", "mode": "view", "on": "P-1", "grants": [], "by": "owner" } } ] }
+]

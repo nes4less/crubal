@@ -1,0 +1,12 @@
+{
+  "crubal": "2",
+  "records": [
+    {
+      "id": "U-1", "kind": "item", "level": "unit", "of": "P-1", "owner": "test.example",
+      "applied": { "P-1": 1, "kind:item/2026-11-01": 1, "class:Disc/2026-11-01": 1 },
+      "values": { "price": { "$money": "12.50", "currency": "USD" }, "gradeC": "C" },
+      "sources": { "*": { "origin": "observed", "via": "L-2" }, "gradeC": { "origin": "observed", "via": "L-2" } }
+    }
+  ],
+  "review": []
+}

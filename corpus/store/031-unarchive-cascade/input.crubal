@@ -1,0 +1,19 @@
+// Unarchiving undoes only what the cascade did (1.12): the unit archived as `parent archived` comes back,
+// the unit sold before stays sold, and the copied values fold up again.
+kind: item
+  levels: group, product, unit
+  archive: cascade of
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+
+unit: U-1 of P-1 [origin: observed, via: L-2]
+  price: 12.50USD
+
+unit: U-2 of P-1 [origin: observed, via: L-2]
+  crubal:status: archived [reason: sold]
+  price: 8.00USD

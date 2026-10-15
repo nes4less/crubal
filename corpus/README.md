@@ -76,10 +76,14 @@ hold a signed wrapper in `border.json`, the presenter's key in `keys.json` and `
   status, alternatives and suggestions included) and may list the `review` queue.
 - **Access (chapter 14):** an `exchange/` case with `access.crubal` (contracts, `permissions:`, `edge:`
   blocks), an optional `now.txt`, and `ask.crubal`: `may: CALLER VERB TARGET on RECORD`, `mode: CALLER on
-  RECORD`, `stands: CALLER PARTITION… on RECORD`, `gated: CALLER on RECORD`, `ancestors: RECORD`.
+  RECORD`, `stands: CALLER PARTITION… on RECORD`, `gated: CALLER on RECORD`, `ancestors: RECORD`, `audience:
+  CALLER`.
   `expected-access.json` holds one `{"ask", "result"}` per question. An `exchange-errors/` case whose
   input holds `permissions:`, `ownership:` or `edge:` blocks checks the declarations, every record's owner
-  and every edge in order, and expects the refusal at the given line.
+  and every edge in order, and expects the refusal at the given line; a record's refusal names the line of
+  its header.
+- **Redaction (8.5.2):** a `store/` case with `log.json` and `expected-redact.json`: for each entry, by its
+  `log` id, `"redactable"` or the reason it never is.
 - **The border and access (7.4, 14.4, 14.7):** an `exchange/` run case may add `access.crubal`; the border
   then needs the caller's `run` item (a run stops at `permission`), lands a receive run as suggestions when
   the caller's access is gated (`landed`, `gated`, `reviewer` on the result), and an `arrive: CONTRACT`

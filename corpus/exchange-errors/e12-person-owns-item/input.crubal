@@ -1,0 +1,13 @@
+// A person may own only what the package's ownership declares (14.1, 14.12): a collection, not a product.
+title$
+
+ownership:
+  person: Collection
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  crubal:owner: test.example:C-1
+  title: Christmas Vacation

@@ -1,0 +1,14 @@
+// An emergency edge that meets the platform's published terms (14.13): two approvers, neither the
+// requester, view only, within the longest allowed; its holder is in the staff audience for what it covers.
+kind: person
+  levels: person
+kind: facility
+  levels: facility
+name$
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+facility: F-1 [origin: declared, via: L-1]
+  name: Northside

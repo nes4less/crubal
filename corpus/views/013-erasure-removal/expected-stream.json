@@ -1,0 +1,10 @@
+[
+  [
+    { "projection": "discs", "audience": "public", "seq": 1, "record": "P-3", "row": { "record": "P-3", "heading": "Die Hard", "line": "4K · 1988" } },
+    { "projection": "discs", "audience": "public", "seq": 2, "record": "P-2", "row": { "record": "P-2", "heading": "Home Alone", "line": "Blu-ray · 1990", "price": { "$money": "5.00", "currency": "USD" } } },
+    { "projection": "discs", "audience": "public", "seq": 3, "record": "P-1", "row": { "record": "P-1", "heading": "Christmas Vacation", "line": "DVD · 1989", "price": { "$money": "8.00", "currency": "USD" } } }
+  ],
+  [
+    { "projection": "discs", "audience": "public", "seq": 4, "record": "P-1", "removed": true }
+  ]
+]

@@ -1,0 +1,7 @@
+permissions: shop
+  menu:
+    curate: edit name
+  relations: owner
+
+ownership:
+  person: collection

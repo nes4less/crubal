@@ -1,0 +1,18 @@
+// Cascade along `within` (1.12, 11.2): archiving the facility archives the session within it, with reason
+// `parent archived`; a record `of` it is left alone.
+kind: facility
+  levels: facility
+  archive: cascade within
+kind: session
+  levels: session
+name$
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+facility: F-1 [origin: declared, via: L-1]
+  name: Northside
+session: S-1 [origin: declared, via: L-1]
+  crubal:within: F-1
+  name: Fall

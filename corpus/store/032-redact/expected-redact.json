@@ -1,0 +1,6 @@
+{
+  "L-1": "an entry that created a record, changed its envelope or a definition, or wrote an edge, binding, instruction, run or install is never redacted",
+  "L-2": "redactable",
+  "L-3": "a witnessed entry is never redacted",
+  "L-4": "an entry that created a record, changed its envelope or a definition, or wrote an edge, binding, instruction, run or install is never redacted"
+}

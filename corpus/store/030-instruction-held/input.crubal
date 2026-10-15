@@ -1,0 +1,14 @@
+// A value an instruction's map can't place is held and goes to review (10.7, 10.4): nothing is dropped.
+graded?
+grade{Graded|Ungraded}
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+
+unit: U-1 of P-1 [origin: observed, via: L-2]
+  graded: no
+  price: 12.50USD

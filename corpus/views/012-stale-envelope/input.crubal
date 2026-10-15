@@ -1,0 +1,2 @@
+// The envelope is in every read set (12.6): archiving P-1 stales its row; P-2 is untouched.
+view: discs

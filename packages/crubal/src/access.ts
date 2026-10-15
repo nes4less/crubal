@@ -103,6 +103,18 @@ export function readAccess(source: string): { perms: Permissions; edges: Edge[] 
           }
         }
       }
+    } else if (n.key === "role") {
+      // The `role:` short form (12.4): one preset of that name, one menu item per verb line.
+      const name = n.value.trim();
+      const audience = n.children.find((c) => c.key === "audience")?.value.trim() ?? "member";
+      const items: string[] = [];
+      for (const v of n.children.find((c) => c.key === "may")?.children ?? []) {
+        if (!v.key) continue;
+        const item = `${name}.${v.key}`;
+        perms.menu.set(item, { name: item, verbs: { [v.key]: list(v.value) }, line: v.line });
+        items.push(item);
+      }
+      perms.presets.set(name, { name, items, audience, line: n.line });
     } else if (n.key === "ownership") {
       for (const c of n.children) if (c.key) perms.ownership.set(c.key, list(c.value));
     } else if (n.key === "emergency") {
@@ -181,13 +193,13 @@ export class Access {
     return out;
   }
 
-  /** Refuse a `within` cycle (14.12). */
-  checkWithin(): void {
+  /** Refuse a `within` cycle (14.12). `lineOf` names the line a record was written at, for the refusal. */
+  checkWithin(lineOf?: (id: string) => number | undefined): void {
     for (const r of this.records.values()) {
       const seen = new Set<string>([r.id]);
       let cur = r.within;
       while (cur) {
-        if (seen.has(cur)) throw new CrubalError(`${r.id} is within itself through ${cur}`);
+        if (seen.has(cur)) throw new CrubalError(`${r.id} is within itself through ${cur}`, lineOf?.(r.id));
         seen.add(cur);
         cur = this.records.get(cur)?.within;
       }
@@ -215,7 +227,8 @@ export class Access {
   holds(e: Edge, recordId: string): boolean {
     if (!e.where) return true;
     const r = this.records.get(recordId);
-    const vals: JsonObject = { ...(r?.values ?? {}), id: recordId, ...(r?.status ? { status: r.status.state } : {}) };
+    // A record with no status is active (1.12), so `not status is archived` holds for it.
+    const vals: JsonObject = { ...(r?.values ?? {}), id: recordId, status: r?.status?.state ?? "active" };
     return evaluate(parseCondition(e.where), vals) === true;
   }
 
@@ -399,11 +412,11 @@ export class Access {
   }
 
   /** Refuse a person owning a record the package doesn't let a person own (14.1, 14.12). */
-  checkOwnership(r: Record): void {
+  checkOwnership(r: Record, line?: number): void {
     if (!foreign(r.owner, "") || r.owner.split(":")[0] !== this.owner) return; // a domain owner, or another owner's record
     const allowed = this.perms.ownership.get("person") ?? [];
     const names = [r.kind, ...(r.wears ?? [])];
-    if (!names.some((n) => allowed.includes(n))) throw new CrubalError(`${r.id}: a person may own ${allowed.join(", ") || "nothing"}, not a ${r.kind}`);
+    if (!names.some((n) => allowed.includes(n))) throw new CrubalError(`${r.id}: a person may own ${allowed.join(", ") || "nothing"}, not a ${r.kind}`, line);
   }
 }
 

@@ -1,0 +1,19 @@
+permissions: facility
+  menu:
+    recordScores: edit score
+  relations: subscriber, follower only
+
+edge: E-7
+  who: C-SUB
+  relation: subscriber
+  mode: view
+  on: L-1
+  until: 2027-01-01T00:00Z
+  by: owner
+
+edge: E-8
+  who: C-FAN
+  relation: follower
+  mode: none
+  on: L-1
+  by: owner
