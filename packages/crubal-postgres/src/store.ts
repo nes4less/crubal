@@ -27,6 +27,8 @@ export type StoreOptions = {
   projecting?: Projecting;
   /** Install an unsigned bundle (development only; refused by default, docs/design/publishing.md). */
   allowUnsigned?: boolean;
+  /** Sign each entry's hash with the owner's key (8.5): the host holds the key, the store never sees it. */
+  signer?: (hash: string) => string;
   /** Publish every view right after each write commits (`fresh: write`); else the host calls `project`. */
   fresh?: "write" | "asked";
 };
@@ -212,6 +214,7 @@ export class PgStore {
     if (head.hash) linked.prev = `sha256:${head.hash}`;
     else delete linked.prev;
     const hash = entryHash(linked);
+    if (this.options.signer) linked.sig = this.options.signer(hash);
     const seq = head.seq + 1;
     await client.query(
       "insert into log (owner, chain, seq, log_id, prev, hash, at, witnessed, entry) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)",

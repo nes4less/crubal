@@ -120,7 +120,9 @@ export function contractJson(c: Contract): JsonObject {
   if (c.writes.length) o.writes = c.writes.map(mapJson);
   if (c.reads.length) o.reads = c.reads.map(mapJson);
   if (c.stream.length) o.stream = [...c.stream];
-  for (const k of ["when", "who", "from", "to", "mode", "undo", "ref", "origin", "prefix"] as const) if (c[k]) o[k] = c[k] as string;
+  for (const k of ["when", "who", "from", "to", "mode", "undo", "ref", "prefix"] as const) if (c[k]) o[k] = c[k] as string;
+  // origin is a part of the kinds that bring values in (7.2); the reader defaults it for the rest.
+  if (c.origin && ["receive", "form", "take"].includes(c.kind)) o.origin = c.origin;
   if (c.lands !== "value") o.lands = c.lands;
   if (!c.absorb) o.absorb = false;
   if (c.ignore.length) o.ignore = [...c.ignore];

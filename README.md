@@ -9,6 +9,8 @@ The engine is universal at the kind level; commerce, media and the rest are pack
 | [`spec/`](spec/README.md) | the specification, CRUBAL 2, in 13 chapters | CC-BY-4.0 |
 | [`corpus/`](corpus/README.md) | the conformance test corpus | CC-BY-4.0 |
 | `packages/crubal/` | the reference implementation, `@cruba/crubal` (TypeScript first; a Rust core compiled to WebAssembly once the language freezes) | Apache-2.0 |
+| `packages/crubal-postgres/` | the persistent store on Postgres: the log as the truth, every other table rebuilt from it (docs/design/store.md) | Apache-2.0 |
+| `packages/crubal-host/` | the reference host: identity, secrets, adapters, signing, the loops and the HTTP surface (docs/design/host.md) | Apache-2.0 |
 
 **Status:** the spec is a complete working draft. The reference implementation passes **every conformance level**, Reader through Views (87 corpus cases); it was built level by level
 (Reader, Dictionary, Rules, Store, Exchange, Views); each level is done when its corpus folders pass.

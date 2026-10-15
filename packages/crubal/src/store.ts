@@ -173,6 +173,8 @@ export function readContracts(source: string): Contract[] {
     }
     if (!c.origin) c.origin = c.kind === "form" ? "declared" : "reported";
     if (c.keepRaw.length && !c.prefix) throw new CrubalError(`${c.name} keeps raw fields, so it needs a prefix`, c.line);
+    // A form's fields are its needs (7.7): with no reads of its own, each answer lands on its facet by name.
+    if (c.kind === "form" && !c.reads.length && c.needs.length) c.reads = c.needs.map((l) => ({ from: l.facet, to: l.facet, values: [] as [string, string][], line: l.line, valueLines: [] }));
     out.push(c);
   }
   return out;
