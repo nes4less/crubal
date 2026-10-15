@@ -85,7 +85,10 @@ hold a signed wrapper in `border.json`, the presenter's key in `keys.json` and `
   the caller's access is gated (`landed`, `gated`, `reviewer` on the result), and an `arrive: CONTRACT`
   run (with `level:`, `caller:`, optional `on:` for the parent and `answer:` for the payload file) makes or
   finds a record and grants the caller's consumer edge when the contract names a `relation`.
-  `expected-edges.json` lists edges to find afterwards, compared as subsets. A case that defines views in
+  `expected-edges.json` lists edges to find afterwards, compared as subsets. Rules in a case's input run on
+  what a receive or arrival lands (7.4 step 6): a value a `must` rule won't have comes back as a
+  `contradiction` citing the rule, fills and derivations show under `rules` on the result, and
+  `expected-entries.json` pins the entries the runs journal. A case that defines views in
   its input may run stream contracts (12.6.2): `stream: CONTRACT` (push from the acknowledged cursor;
   with `caller:` and `cursor: view=seq` a pull), `ack: CONTRACT` with `cursor: view=seq`, and
   `revise: VIEW /VERSION` to start a view's stream over.

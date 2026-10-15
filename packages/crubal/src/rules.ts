@@ -259,6 +259,43 @@ export class Engine {
     return false;
   }
 
+  /** Keep a record as it stands, without running the rules: how a store keeps the engine in step (7.4). */
+  put(rec: Record) {
+    const was = this.store.get(rec.id);
+    this.store.set(rec.id, { rec: { ...rec, values: { ...rec.values } }, produced: new Set(was?.produced ?? []), held: new Set(was?.held ?? []) });
+    if (!this.order.includes(rec.id)) this.order.push(rec.id);
+  }
+
+  /** A record as the engine last left it: its values with what the rules produced, and the keys held. */
+  get(id: string): { rec: Record; produced: Set<string>; held: Set<string> } | undefined {
+    return this.store.get(id);
+  }
+
+  /**
+   * Would this write break a `must` rule on a value it touches (6.2)? Nothing is stored. Intake uses it to
+   * park such a value as a contradiction citing the rule (9.3) instead of landing it.
+   */
+  probe(incoming: Record): Result | null {
+    const before = this.store.get(incoming.id);
+    const rec: Record = before ? { ...before.rec, values: { ...before.rec.values, ...incoming.values } } : { ...incoming, values: { ...incoming.values } };
+    const touched = new Set(Object.keys(incoming.values));
+    const none = new Set<string>();
+    for (const r of this.rules) {
+      if (r.strength !== "must" || r.produces || !this.applies(r, rec)) continue;
+      const vals = this.effective(rec);
+      if (r.when && evaluate(r.when, vals, this.states(rec, none), this.now) !== true) continue;
+      if (r.thenText.endsWith(" is unique")) {
+        const key = r.thenText.replace(/ is unique$/, "");
+        if (touched.has(key) && this.uniqueClash(r, rec)) return { record: rec.id, result: "refused", address: key, rule: r.name };
+        continue;
+      }
+      const path = this.pathOf(r.then) as string;
+      if (!touched.has(path) || emptyOf(vals[path])) continue;
+      if (r.then && evaluate(r.then, vals, this.states(rec, none), this.now) === false) return { record: rec.id, result: "refused", address: path, rule: r.name };
+    }
+    return null;
+  }
+
   /** Write a record (a create, or values merged onto one already stored). Returns its results. */
   write(incoming: Record): Result[] {
     const before = this.store.get(incoming.id);

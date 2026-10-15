@@ -1,0 +1,27 @@
+[
+  {
+    "log": "J-1",
+    "by": { "migration": "backfill" },
+    "writes": [
+      { "record": "P-1", "envelope": "created", "value": { "kind": "item", "level": "product", "owner": "test.example" } },
+      { "record": "P-1", "address": "title", "value": "Christmas Vacation", "source": { "origin": "declared", "via": "L-1" } }
+    ]
+  },
+  {
+    "log": "J-2",
+    "by": { "contract": "catalogLookup", "run": "L-R1" },
+    "writes": [
+      { "record": "P-1", "address": "runtime", "value": { "$qty": "97", "unit": "min" }, "source": { "origin": "reported", "via": "L-R1" } },
+      { "record": "P-1", "address": "format", "value": "DVD", "source": { "origin": "reported", "via": "L-R1" } },
+      { "record": "P-1", "address": "videoCodec", "value": "MPEG-2", "source": { "origin": "derived", "via": "dvdIsMpeg2" } },
+      { "run": "L-R1", "contract": "catalogLookup", "record": "P-1", "state": "closed" }
+    ]
+  },
+  {
+    "log": "J-3",
+    "by": { "contract": "catalogLookup", "run": "L-R2" },
+    "writes": [
+      { "run": "L-R2", "contract": "catalogLookup", "record": "P-1", "state": "closed" }
+    ]
+  }
+]

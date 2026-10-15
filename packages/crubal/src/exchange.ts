@@ -11,6 +11,7 @@ import { serialize } from "./canonical.ts";
 import { evaluate, parseCondition, type StateOf } from "./conditions.ts";
 import type { ClassLine, Dictionary } from "./defs.ts";
 import type { Json, JsonObject, Record, Source } from "./model.ts";
+import { Engine, type Result, type Rule } from "./rules.ts";
 import { type Contract, fieldPath, type IntakeOutcome, type Keys, land, receive, sha256, verifyChain } from "./store.ts";
 import { CrubalError, readTree } from "./tree.ts";
 
@@ -152,14 +153,56 @@ export class Exchange {
   views?: Views;
   /** Per stream contract, the cursor each view's index has acknowledged, with the version it was for. */
   private cursors = new Map<string, { [view: string]: { version: string; seq: number } }>();
+  /** The rules a run's step 6 applies (7.4): the package's, plus the facet shortcuts the engine adds. */
+  readonly engine: Engine;
   private sent = new Set<string>();
   private runs = 0;
   private minted = 0;
 
-  constructor(dict: Dictionary, contracts: Contract[], roles: Role[] = []) {
+  constructor(dict: Dictionary, contracts: Contract[], roles: Role[] = [], rules: Rule[] = []) {
     this.dict = dict;
     this.contracts = new Map(contracts.map((c) => [c.name, c]));
     this.roles = roles;
+    this.engine = new Engine(dict, rules);
+  }
+
+  /**
+   * Step 6 of a run (7.4): what came in runs through the rules (chapter 6). A `must` the write breaks
+   * refuses it and nothing changes; a hold takes the value out of the current values; a fill or derivation
+   * lands with `origin: derived` and the rule as its `via`. Returns the record to keep, or the refusal.
+   */
+  private applyRules(landed: Record, touched: JsonObject): { record: Record; summary: JsonObject } | { refused: Result } {
+    const results = this.engine.write({ ...landed, values: touched });
+    const refused = results.find((r) => r.result === "refused");
+    if (refused) return { refused };
+    const after = this.engine.get(landed.id);
+    if (!after) return { record: landed, summary: {} };
+    const values: JsonObject = { ...landed.values };
+    const sources: { [a: string]: Source } = { ...(landed.sources ?? {}) };
+    const summary: JsonObject = {};
+    const held: { [a: string]: JsonObject } = { ...((landed as unknown as { held?: { [a: string]: JsonObject } }).held ?? {}) };
+    for (const r of results) {
+      if ((r.result === "filled" || r.result === "derived") && r.address && r.value !== undefined && r.rule) {
+        values[r.address] = r.value;
+        sources[r.address] = { origin: "derived", via: r.rule };
+        const bag = (summary[r.result] ?? {}) as JsonObject;
+        bag[r.address] = r.value;
+        summary[r.result] = bag;
+      }
+      if (r.result === "held" && r.address && r.rule) {
+        const v = values[r.address];
+        if (v !== undefined) {
+          held[r.address] = { value: v, rule: r.rule };
+          delete values[r.address];
+          delete sources[r.address];
+        }
+        summary.held = [...((summary.held as Json[]) ?? []), r.address];
+      }
+      if (r.result === "flagged" && r.rule) summary.flagged = [...((summary.flagged as Json[]) ?? []), r.rule];
+    }
+    const record = { ...landed, values, sources, ...(Object.keys(held).length ? { held } : {}) } as unknown as Record;
+    this.engine.put(record);
+    return { record, summary };
   }
 
   /** Work on a journal's draft, so every run the border makes is one logged entry (8.5). */
@@ -210,6 +253,7 @@ export class Exchange {
 
   put(r: Record) {
     this.records.set(r.id, r);
+    this.engine.put(r);
   }
 
   get(id: string): Record | undefined {
@@ -300,16 +344,29 @@ export class Exchange {
     const intake = receive(c, body, recordId, this.dict, `I-${log.slice(2)}`);
     const outcomes: IntakeOutcome[] = intake.outcomes.map((o) => {
       if (o.outcome !== "absorbed" || !o.to) return o;
+      // A value a must rule won't have is a contradiction citing the rule (9.3): parked, never landed.
+      const broken = this.engine.probe({ ...r, values: { [o.to]: o.value as Json } });
+      if (broken) return { ...o, outcome: "contradiction", cites: { rule: broken.rule ?? "" } };
       const current = r.values[o.to];
       if (current === undefined || (isObj(current) && "$empty" in current)) return o;
       return serialize(current) === serialize(o.value as Json) ? o : { ...o, outcome: "conflict" };
     });
     const source: Source = { origin: c.origin, via: log };
     const gate = this.gate(recordId, callerId);
+    let summary: JsonObject = {};
     if (c.lands === "suggestion" || gate) this.put(suggest(r, outcomes, source));
-    else this.put(land(r, { outcomes, contract: name }, source, this.dict.trust, this.dict.facetTrust));
+    else {
+      const landed = land(r, { outcomes, contract: name }, source, this.dict.trust, this.dict.facetTrust);
+      // 6. Rules, over what this run changed.
+      const touched: JsonObject = {};
+      for (const [k, v] of Object.entries(landed.values)) if (serialize(r.values[k] ?? "∅") !== serialize(v)) touched[k] = v;
+      const ruled = this.applyRules(landed, touched);
+      if ("refused" in ruled) return { ...head, stopped: "rule", rule: ruled.refused.rule ?? "", address: ruled.refused.address ?? "", log };
+      this.put(ruled.record);
+      summary = ruled.summary;
+    }
     this.commit({ contract: name, run: log }, log, { contract: name, record: recordId, state: "closed" });
-    return { ...head, outcomes: outcomes as unknown as Json, sources: { origin: c.origin }, log, landed: gate || c.lands === "suggestion" ? "suggestion" : "value", ...(gate ? { gated: gate.edge, reviewer: gate.reviewer ?? gate.by } : {}) };
+    return { ...head, outcomes: outcomes as unknown as Json, sources: { origin: c.origin }, log, landed: gate || c.lands === "suggestion" ? "suggestion" : "value", ...(gate ? { gated: gate.edge, reviewer: gate.reviewer ?? gate.by } : {}), ...(Object.keys(summary).length ? { rules: summary } : {}) };
   }
 
   /**
@@ -321,8 +378,28 @@ export class Exchange {
     if (!c) throw new Error(`no contract ${name}`);
     const log = this.nextLog();
     const owner = this.access?.owner ?? [...this.records.values()][0]?.owner ?? "";
+    // A refusal by the rules puts everything back: the arrival never happened.
+    const prevRecords = new Map(this.records);
+    const prevBindings = new Map(this.bindings);
     const { arrival, record } = arrive(c, body, level, this, this.dict, { mint: () => `${level.charAt(0).toUpperCase()}-NEW${++this.minted}`, owner, ...(of ? { of } : {}), intakeId: `I-${log.slice(2)}` });
     const out: RunResult = { contract: name, ...(callerId ? { caller: callerId } : {}), arrival: arrival as unknown as Json, log };
+    if (record) {
+      // 6. Rules, over what landed (everything, for a new record).
+      const was = prevRecords.get(record.id);
+      const touched: JsonObject = {};
+      for (const [k, v] of Object.entries(record.values)) if (!was || serialize(was.values[k] ?? "∅") !== serialize(v)) touched[k] = v;
+      const ruled = this.applyRules(record, touched);
+      if ("refused" in ruled) {
+        this.records.clear();
+        for (const [k, v] of prevRecords) this.records.set(k, v);
+        this.bindings.clear();
+        for (const [k, v] of prevBindings) this.bindings.set(k, v);
+        if (was) this.engine.put(was);
+        return { contract: name, ...(callerId ? { caller: callerId } : {}), stopped: "rule", rule: ruled.refused.rule ?? "", address: ruled.refused.address ?? "", log };
+      }
+      this.put(ruled.record);
+      if (Object.keys(ruled.summary).length) out.rules = ruled.summary;
+    }
     if (record && arrival.outcome === "new" && callerId) {
       const edge = this.grantConsumer(c, record.id, callerId);
       if (edge) out.granted = { edge: edge.edge, relation: edge.relation, mode: edge.mode, on: edge.on };

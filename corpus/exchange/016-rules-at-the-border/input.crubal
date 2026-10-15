@@ -1,0 +1,23 @@
+// Step 6 of a run (7.4): what came in runs through the rules. The first lookup lands, and a suggest rule
+// fills the codec from the format, with origin derived and the rule as its via. The second lookup brings a
+// runtime a must rule won't have: a contradiction citing the rule (9.3), parked on the intake record; the
+// run closes with nothing landed, and the log holds only the run.
+rule: runtimeMax
+  for: everywhere
+  then: runtime in 1..600
+  strength: must
+  version: 2026-10-14
+
+rule: dvdIsMpeg2
+  for: everywhere
+  when: format is DVD
+  then: videoCodec is MPEG-2
+  strength: suggest
+  version: 2026-10-14
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation

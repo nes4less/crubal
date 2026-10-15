@@ -1,0 +1,7 @@
+[
+  { "contract": "catalogLookup", "record": "P-1", "landed": "value", "rules": { "filled": { "videoCodec": "MPEG-2" } } },
+  {
+    "contract": "catalogLookup", "record": "P-1", "landed": "value",
+    "outcomes": [ { "from": "aspects.\"Run Time\"", "to": "runtime", "outcome": "contradiction", "cites": { "rule": "runtimeMax" } } ]
+  }
+]

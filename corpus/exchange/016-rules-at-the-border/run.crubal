@@ -1,0 +1,5 @@
+run: catalogLookup
+on: P-1
+run: catalogLookup
+on: P-1
+answer: bad.json

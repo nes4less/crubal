@@ -40,10 +40,11 @@ the internals later behind the same API.
   stream and stream subscriptions with cursors and resets (`views.ts`, `exchange.ts`); and a border that
   consults access, journals every run, and grants a consumer's edge (`exchange.ts`).
 
-Not yet: a run doesn't apply rules (7.4 step 6), so a `must` rule never refuses or holds a value at the
-border; the rules engine runs on its own.
+A run applies the rules (7.4 step 6): a value a `must` rule won't have is parked as a contradiction citing
+the rule and never lands, a `suggest` fills and a derivation lands with `origin: derived` and the rule as
+its `via`, a changed verdict holds, and each is a logged effect.
 
-It passes every corpus folder (117 cases). The corpus and this package name no adopter and no third party:
+It passes every corpus folder (118 cases). The corpus and this package name no adopter and no third party:
 `test.example` owns the data, `market:` stands for any marketplace, `bench` for any in-house tool, and
 product, unit and the like are the test package's own kinds, never the core's.
 

@@ -579,7 +579,7 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
     // A case that defines views lets its stream contracts (12.6.2) carry their projection streams.
     const ownViews = readViews(defs);
     checkContracts(contracts, dict, "", ownViews.views.size ? new Set(ownViews.views.keys()) : undefined);
-    const ex = new Exchange(dict, contracts, readRoles(defs));
+    const ex = new Exchange(dict, contracts, readRoles(defs), readRules(defs));
     if (ownViews.views.size) {
       checkViews(ownViews, dict);
       ex.views = new Views(dict, ownViews);
