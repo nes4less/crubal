@@ -202,7 +202,8 @@ entry's (chapter 8.5).
 
 `by` names exactly one of `person`, `contract` (with `run`), `rule`, `migration`, `instruction` or `take` (with `from`,
 chapter 8.5). A write that removes a value has
-`"removed": true` in place of `value`.
+`"removed": true` in place of `value`. A write taken out by redaction is `{"redacted": "sha256:…"}`
+(chapter 8.5.2).
 
 **Observation.** An evidence-backed claim made on one instance (chapter 9).
 

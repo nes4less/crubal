@@ -7,12 +7,21 @@ function serialize(v: unknown): string {
   if (isObj(v)) return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${serialize(v[k])}`).join(",")}}`;
   return JSON.stringify(v);
 }
+// An entry hashes with each write replaced by its own hash (8.5), so a write can be redacted in place.
+const writeHash = (w: unknown) => `sha256:${createHash("sha256").update(serialize(w)).digest("hex")}`;
 const hash = (e: Record<string, unknown>) => {
   const { sig: _s, ...rest } = e;
+  if (Array.isArray(rest.writes)) rest.writes = rest.writes.map(writeHash);
   return createHash("sha256").update(serialize(rest)).digest();
 };
 
-const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+// Reuse the published test key when there is one, so the cases stay stable; mint one only the first time.
+import { existsSync, readFileSync } from "node:fs";
+import { createPrivateKey as keyFrom } from "node:crypto";
+const kept = existsSync("_keys.json") ? (JSON.parse(readFileSync("_keys.json", "utf8")).keys["test.example"] as { public: string; "private-test-only": string } | undefined) : undefined;
+const { privateKey, publicKey } = kept
+  ? (() => { const k = keyFrom({ key: { kty: "OKP", crv: "Ed25519", x: kept.public, d: kept["private-test-only"] }, format: "jwk" }); return { privateKey: k, publicKey: createPublicKey(k) }; })()
+  : generateKeyPairSync("ed25519");
 const pub = publicKey.export({ format: "jwk" }).x as string;
 const priv = privateKey.export({ format: "jwk" }).d as string;
 const other = generateKeyPairSync("ed25519").privateKey;

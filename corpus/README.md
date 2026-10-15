@@ -83,7 +83,9 @@ hold a signed wrapper in `border.json`, the presenter's key in `keys.json` and `
   and every edge in order, and expects the refusal at the given line; a record's refusal names the line of
   its header.
 - **Redaction (8.5.2):** a `store/` case with `log.json` and `expected-redact.json`: for each entry, by its
-  `log` id, `"redactable"` or the reason it never is.
+  `log` id, `"redactable"` when it may go whole, the reason when nothing in it may (witnessed), else one
+  answer per write. A redacted write is `{"redacted": "sha256:…"}` in place; rebuild and chain cases
+  (033, 034) cover an erasure inside the entry that created the record.
 - **The border and access (7.4, 14.4, 14.7):** an `exchange/` run case may add `access.crubal`; the border
   then needs the caller's `run` item (a run stops at `permission`), lands a receive run as suggestions when
   the caller's access is gated (`landed`, `gated`, `reviewer` on the result), and an `arrive: CONTRACT`

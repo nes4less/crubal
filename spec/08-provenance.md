@@ -83,8 +83,11 @@ results and pending instructions are read off the state. Nor is a read, except u
 (chapter 14.13). An event in the world (a sale, a reading) is not a transaction either: it is a **record**
 of a kind with a moment facet, and the transaction is the write that records it (chapter 6.11).
 
-- **Hash-linked.** An entry's **hash** is the SHA-256 of its canonical form (chapter 3.9) without `sig`.
-  `prev` is `sha256:` and the previous entry's hash, in hex. The first entry of a chain has no `prev`.
+- **Hash-linked.** Each write has a **hash**: the SHA-256 of its canonical form (chapter 3.9). An entry's
+  **hash** is the SHA-256 of its canonical form without `sig`, with each item of `writes` replaced by the
+  string `sha256:` and that write's hash in hex. So the entry's hash covers every write through the write's
+  own hash, and a write can be taken out (8.5.2) without moving it. `prev` is `sha256:` and the previous
+  entry's hash. The first entry of a chain has no `prev`.
 - **Signed.** `sig` is the owner's Ed25519 signature over the entry's hash (its 32 bytes, not the hex
   text), written as base64url without padding, made with the key published for the owner's domain (chapter
   7.8). A redacted entry carries no `owner`; it is checked against its chain's owner. When the owner's key is
@@ -139,14 +142,25 @@ against the presenter's own log.
 
 ### 8.5.2 Redaction
 
-A hop can be hidden without breaking the chain. A **redacted entry** keeps only `log`, `prev`, `chain`,
-`sig` and `"redacted": "sha256:…"`, the hash of the full entry. Its hash is that value, so the next entry's
-`prev` still matches and the signature still verifies. Redaction is how private hops are shared and how data
-is erased when the law requires it.
+A write, or a whole hop, can be hidden without breaking the chain.
 
-Only value, observation and read writes are redacted. An entry that created a record or changed its envelope
-is never redacted, so a rebuild (8.5.3) never meets a write to a record it hasn't seen: erasure leaves the
-record's shell and takes its values.
+- **A redacted write** is replaced, inside its entry, by `{"redacted": "sha256:…"}`, the hash of the write
+  it replaces. The entry's hash is unchanged (8.5), so `prev` of the next entry still matches, the
+  signature still verifies, and every write the entry kept is still checked by its own hash.
+- **A redacted entry** keeps only `log`, `prev`, `chain`, `sig` and `"redacted": "sha256:…"`, the hash of
+  the full entry. Its hash is that value. This is how a whole hop is hidden when an owner shares part of a
+  log.
+
+**What may be redacted.** Only value, observation and read writes, and only in an entry that isn't
+witnessed (chapter 14.13). An envelope, edge, binding, review, instruction, run, define or install write is
+never redacted, so a rebuild (8.5.3) never meets a write to a record it hasn't seen; an entry holding one of
+those is redacted write by write, never whole.
+
+**Erasure** is redaction applied to a person: every value write that holds their data, in every entry that
+holds one, is redacted, whatever else the entry holds. The entry that created their record keeps the
+creation and loses the values beside it, so the record's shell stays and its values are gone, and the log
+still proves what happened and when without saying what was written. Erasure is the owner's power (chapter
+14.1), and a person's own records (14.1) are erased by them.
 
 ### 8.5.3 Rebuild and replay
 
@@ -154,8 +168,8 @@ Two different things, never to be confused:
 
 - **Rebuild** applies the log's entries, in order, to an empty store. It needs no rules, no contracts and no
   engine of a particular version, and it MUST give exactly the state the store had. A store MUST be able to
-  rebuild; the state it keeps is a cache of the log. Rebuilding from a log with redacted entries gives the
-  state without what they held, which is what erasure means.
+  rebuild; the state it keeps is a cache of the log. A redacted write or entry is skipped, so rebuilding
+  gives the state without what they held, which is what erasure means.
 - **Replay** (chapter 9.6) folds kept intake records again under the *current* definitions. It is new work,
   and it writes new entries.
 

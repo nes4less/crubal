@@ -16,8 +16,8 @@
   },
   {
     "log": "L-2",
-    "prev": "sha256:945000e5ed2c3fd08f09f38d9d49a4c16e87c41edc6c77bb73d8feb454f2c96c",
-    "redacted": "sha256:1ad067bf75cec69205d2a895f37912ec0388f0f455d08fe3f81438bb36410ebc"
+    "prev": "sha256:febe01f636c4b610a5b7b7db8799671498bdd23bbdbb5208078e18ad57590e84",
+    "redacted": "sha256:67a25acd6bfb4f8a5f7cfc0b83679bfc36f38a893d52835cc1f5863b3167fe51"
   },
   {
     "log": "L-3",
@@ -33,6 +33,6 @@
         "value": "Christmas Vacation [DVD]"
       }
     ],
-    "prev": "sha256:1ad067bf75cec69205d2a895f37912ec0388f0f455d08fe3f81438bb36410ebc"
+    "prev": "sha256:67a25acd6bfb4f8a5f7cfc0b83679bfc36f38a893d52835cc1f5863b3167fe51"
   }
 ]

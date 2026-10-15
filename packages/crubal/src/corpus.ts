@@ -11,7 +11,7 @@ import { checkRecipe, readRecipes, restamp } from "./migrate.ts";
 import { checkContracts, Exchange, readRoles, verifyBorder } from "./exchange.ts";
 import { checkPackages } from "./packages.ts";
 import { checkViews, readViews, Views } from "./views.ts";
-import { Journal, rebuild, redactable, stateJson } from "./log.ts";
+import { Journal, rebuild, redactable, redactableWrite, stateJson } from "./log.ts";
 import { arrive, decide, type Arrival, type ArrivalStore } from "./arrival.ts";
 import { apply as applyInstructions, archive, attach, detach, emptyStore, issue, merge, unarchive } from "./lifecycle.ts";
 import { Access, checkPermissions, readAccess } from "./access.ts";
@@ -264,11 +264,15 @@ function runStoreCase(folder: string, caseDir: string, name: string, shared: Dic
         return e.line === want ? pass : fail(`refused at line ${e.line} (${e.message}), expected line ${want}`);
       }
     }
-    // Redaction (8.5.2): which entries of a log may be redacted, and why not.
+    // Redaction (8.5.2): per entry, whether it may go whole, else which of its writes may, and why not.
     if (existsSync(file("expected-redact.json"))) {
       const entries = json("log.json") as JsonObject[];
       const got: JsonObject = {};
-      for (const e of entries) got[String(e.log)] = redactable(e) ?? "redactable";
+      for (const e of entries) {
+        const whole = redactable(e);
+        const writes = Array.isArray(e.writes) ? e.writes.filter((w): w is JsonObject => typeof w === "object" && w !== null && !Array.isArray(w)) : [];
+        got[String(e.log)] = whole === null ? "redactable" : e.witnessed === true ? whole : writes.map((w) => redactableWrite(e, w) ?? "redactable");
+      }
       const want = json("expected-redact.json") as JsonObject;
       for (const [k, v] of Object.entries(want)) if (serialize((got[k] ?? "∅") as Json) !== serialize(v)) return fail(`${k}: got ${serialize((got[k] ?? "∅") as Json)}`);
       return pass;

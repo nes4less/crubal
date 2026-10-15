@@ -6,6 +6,7 @@
 
 import { serialize } from "./canonical.ts";
 import type { Json, JsonObject, Record, Source, Status } from "./model.ts";
+import { writeHash } from "./store.ts";
 import { CrubalError } from "./tree.ts";
 
 const isObj = (v: Json | undefined): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -90,6 +91,8 @@ export function applyEntry(state: State, entry: Entry): void {
   if (typeof entry.redacted === "string") return;
   const writes = Array.isArray(entry.writes) ? entry.writes.filter(isObj) : [];
   for (const w of writes) {
+    // A redacted write (8.5.2) is skipped: the state is rebuilt without what it held.
+    if (typeof w.redacted === "string") continue;
     if (typeof w.envelope === "string") {
       applyEnvelope(state, entry, w);
       continue;
@@ -390,15 +393,32 @@ export class Journal {
 }
 
 /**
- * Can this entry be redacted (8.5.2)? Only when it holds nothing but value, observation and read writes and
- * isn't witnessed. Returns the reason it can't, or null.
+ * Can this whole entry be redacted (8.5.2)? Only when it holds nothing but value, observation and read
+ * writes and isn't witnessed; otherwise it is redacted write by write. Returns the reason it can't, or null.
  */
 export function redactable(entry: Entry): string | null {
   if (entry.witnessed === true) return "a witnessed entry is never redacted";
   const writes = Array.isArray(entry.writes) ? entry.writes.filter(isObj) : [];
-  for (const w of writes) {
-    const value = typeof w.record === "string" && typeof w.address === "string";
-    if (!value && !isObj(w.observation) && typeof w.read !== "string") return `an entry that created a record, changed its envelope or a definition, or wrote an edge, binding, instruction, run or install is never redacted`;
-  }
+  for (const w of writes) if (redactableWrite(entry, w)) return "an entry holding a write that is never redacted is redacted write by write, never whole";
   return null;
+}
+
+/** Can this write be redacted (8.5.2)? Null when it can, else why not. */
+export function redactableWrite(entry: Entry, w: JsonObject): string | null {
+  if (entry.witnessed === true) return "a witnessed entry is never redacted";
+  if (typeof w.redacted === "string") return null;
+  const value = typeof w.record === "string" && typeof w.address === "string";
+  if (value || isObj(w.observation) || typeof w.read === "string") return null;
+  return "a write that created a record, changed its envelope or a definition, or wrote an edge, binding, review, instruction, run or install is never redacted";
+}
+
+/** Redact one write of an entry (8.5.2): it becomes its own hash, and the entry's hash stays where it was. */
+export function redactWrite(entry: Entry, index: number): Entry {
+  const writes = Array.isArray(entry.writes) ? [...entry.writes] : [];
+  const w = writes[index];
+  if (!isObj(w)) throw new Error(`no write ${index}`);
+  const why = redactableWrite(entry, w);
+  if (why) throw new Error(why);
+  writes[index] = { redacted: `sha256:${writeHash(w)}` };
+  return { ...entry, writes };
 }

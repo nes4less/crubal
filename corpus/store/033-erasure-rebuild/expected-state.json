@@ -1,0 +1,13 @@
+{
+  "records": [
+    {
+      "id": "C-1", "kind": "person", "level": "person", "owner": "test.example",
+      "created": "2026-10-15T10:00:00Z", "updated": "2026-10-15T10:09:00Z",
+      "values": { "name": "Pat", "note": "Prefers pickup" },
+      "sources": {
+        "name": { "origin": "declared", "via": "L-1" },
+        "note": { "origin": "declared", "via": "L-3" }
+      }
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+[
+  {
+    "log": "L-1",
+    "owner": "test.example",
+    "at": "2026-10-15T10:00:00Z",
+    "by": {
+      "contract": "signup",
+      "run": "R-1"
+    },
+    "source": {
+      "origin": "declared"
+    },
+    "writes": [
+      {
+        "record": "C-1",
+        "envelope": "created",
+        "value": {
+          "kind": "person",
+          "level": "person",
+          "owner": "test.example"
+        }
+      },
+      {
+        "record": "C-1",
+        "address": "name",
+        "value": "Pat"
+      },
+      {
+        "redacted": "sha256:811c081d38f6342fa65ff07304021b9dc3f3d9fc06b52db8320a79068147ffe2"
+      }
+    ]
+  },
+  {
+    "log": "L-2",
+    "prev": "sha256:2e12306c5d26297df6025f87ed6d0f1bb0ccce3355aaf626ba7f501b29999e21",
+    "redacted": "sha256:2aad615e03e6396f52236757d8f61b080829a0c091465f9f3d655bf83ef2e343"
+  },
+  {
+    "log": "L-3",
+    "owner": "test.example",
+    "at": "2026-10-15T10:09:00Z",
+    "by": {
+      "person": "staff-1"
+    },
+    "source": {
+      "origin": "declared"
+    },
+    "writes": [
+      {
+        "record": "C-1",
+        "address": "note",
+        "value": "Prefers pickup"
+      }
+    ],
+    "prev": "sha256:2aad615e03e6396f52236757d8f61b080829a0c091465f9f3d655bf83ef2e343"
+  }
+]

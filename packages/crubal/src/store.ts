@@ -19,10 +19,21 @@ export function sha256(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
-/** An entry's hash: SHA-256 of its canonical form without `sig`; a redacted entry's hash is what it carries. */
+/** A write's hash: SHA-256 of its canonical form; a redacted write's hash is what it carries (8.5.2). */
+export function writeHash(w: Json): string {
+  if (isObj(w) && typeof w.redacted === "string") return w.redacted.replace(/^sha256:/, "");
+  return sha256(serialize(w));
+}
+
+/**
+ * An entry's hash (8.5): SHA-256 of its canonical form without `sig`, each write replaced by `sha256:` and
+ * its own hash, so a redacted write leaves the entry's hash where it was. A redacted entry's hash is what it
+ * carries.
+ */
 export function entryHash(entry: JsonObject): string {
   if (typeof entry.redacted === "string") return entry.redacted.replace(/^sha256:/, "");
   const { sig: _sig, ...rest } = entry;
+  if (Array.isArray(rest.writes)) rest.writes = rest.writes.map((w) => `sha256:${writeHash(w)}`);
   return sha256(serialize(rest));
 }
 

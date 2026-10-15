@@ -41,7 +41,7 @@
           "value": "Christmas Vacation"
         }
       ],
-      "sig": "2sGw4dJbbF59oPfvBuc3y-xKorgsZTRbqTlC67YF2vTr0XkRFlvjrDNL2rMQl0RXM88ygazvFPJu4tKot9dfCA"
+      "sig": "L2VpxPS0qhCHjByr1kw27pw6vSl3GqwEHCdySHn8REiu81yNfbhh7dO4oc8dyur9vt8xvf3vnQoiF6uSeaCQDQ"
     },
     {
       "log": "L-2",
@@ -61,8 +61,8 @@
           }
         }
       ],
-      "prev": "sha256:be91e64d3b12dde705cdc121f9063e4fcb36e5c42ea84c5f74c34d2300908114",
-      "sig": "vGMDnrYIrEjirk3D7R0pMwI8Xx_t9iuc0Yvb3nE3QuO5b6RzfliELJGmpz4AjZ0oFYFlhOJ6XS-i6Ck8fM9sDA"
+      "prev": "sha256:91e32337114200e240163c35b82901dfa8e644488325ce5464cdc1fc9d70e4bb",
+      "sig": "h2qzmht9BcLFT8219nks6Uyf2KaC7etfV61OKxZ0C3OYf_1hepQkQfYOPy5q3_1Bd4roCeiDBFX_sp9yi_TVBw"
     }
   ]
 }

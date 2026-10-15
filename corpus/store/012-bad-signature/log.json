@@ -13,7 +13,7 @@
         "value": "Christmas Vacation"
       }
     ],
-    "sig": "rMOIWR-5XACHpfWlYyrD5nyufZrgm_L4rZ50OoP3V1gTvLenYoIXYlCAV0mY_9cDuNuQCB5HWqeRvNzbQd2sBg"
+    "sig": "5PsDjfwAjbLE4v3ese26RdTQbQZJFAYCxjGjJqd6RiXY5UiOG4t26N8LTPXMzTG9eQyFj09ALtodV2_uhiSfDg"
   },
   {
     "log": "L-2",
@@ -33,8 +33,8 @@
         }
       }
     ],
-    "prev": "sha256:945000e5ed2c3fd08f09f38d9d49a4c16e87c41edc6c77bb73d8feb454f2c96c",
-    "sig": "LBWRf-H4qw5hNmYHzv1lbS6oQSTQuDx8zysDOH36Vi6KPrbs7lq_UaMskRpG7ryBAnjhyO0Sk-IRt_KK4ZjlBg"
+    "prev": "sha256:febe01f636c4b610a5b7b7db8799671498bdd23bbdbb5208078e18ad57590e84",
+    "sig": "EBsJumJSBe8MgLB62TUQ7J2bZsuCbj7G4BG1zUQ1nQA-uetfeycs3ZkcT9NmQuasf6Ivyb3mOeUCblOtLQpTAg"
   },
   {
     "log": "L-3",
@@ -50,7 +50,7 @@
         "value": "Christmas Vacation [DVD]"
       }
     ],
-    "prev": "sha256:6801003682938cfb4f9f9d3b768f295429b51b67dcbeb40fe2dd5d596e2dd0d6",
-    "sig": "xACLvqa2nG1JS6WcSuj5bwY0FVjE38NV5T3IgOayfQFGCWZJY_UdZzATlVLReS50a89T73PL1PeYE6wmIaLiBQ"
+    "prev": "sha256:c3a781821eedad47eb32ffc988aa1c20fea5cfe450ea28faafbd2593367e81bc",
+    "sig": "1einCrUZJcqqpMRjSrw5yh85gtdb_gEFfNvdnUwLJdS8rSbEddQBx8WPMvxgLU9wY6CpL0B6fhe_6hZenKS3Cw"
   }
 ]
