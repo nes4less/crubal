@@ -385,7 +385,8 @@ writeFileSync(
     {
       crubal: "2",
       owner: "crubal.com",
-      keys: {},
+      // crubal.com's signing key (8.5, 11.7): the public half; the private half is in the publisher's key store.
+      keys: { "crubal.com": { alg: "Ed25519", public: "ZdAEPbw_CMLYZIjYM-xXBRF2tSu0Wb5aO76ebEqi4Do", from: "2026-10-15" } },
       packages: stdPackages.map((p) => ({ package: p.id, latest: p.version, versions: { [p.version]: `${ORIGIN}/${p.name}/${p.version}/package.json` } })),
     },
     null,

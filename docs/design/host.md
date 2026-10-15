@@ -200,6 +200,11 @@ in CRUBAL, it is not host code.
 
 ## Decisions for the operator
 
+Ruled 2026-10-15: open reference host (1); identity through an OIDC-shaped adapter the reference host ships
+with a self-hostable provider, ME plugging Supabase Auth into it (2); everything runs and is tested locally,
+a staging deployment only when ME is wired (3); the send split (4); signed requests between owners (5).
+
+
 - **Open reference host** (call 1): the mechanics in the open repository, Cashierfu as a host built on it.
   The alternative is one closed host; it would make ME's path to Cashierfu the only path and leave the
   spec's handoffs unproven in the open.

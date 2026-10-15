@@ -148,6 +148,12 @@ pins at once.
 
 ## Decisions for the operator
 
+Ruled 2026-10-15: crubal.com's Ed25519 key exists (public `ZdAEPbw_CMLYZIjYM-xXBRF2tSu0Wb5aO76ebEqi4Do`, in
+the well-known file from this date; the private half in the publisher's key store, to be placed in the
+site build's environment as `CRUBAL_SIGNING_KEY`) (6); unsigned bundles are refused by default with a
+development override (7); the bundle is one document (8).
+
+
 - **A crubal.com signing key.** Nothing here signs until one exists; it should live in a key store the site
   build can reach (Vercel's encrypted environment for the build, with the public half in the well-known
   file). Rotation is a well-known file edit.
