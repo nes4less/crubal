@@ -9,7 +9,7 @@ import { itemText } from "./print-text.ts";
 
 const RESERVED_DETAIL = new Set(["row", "origin", "via", "owner"]);
 const IMAGE_FIELDS = new Set(["sha256", "w", "h", "type"]);
-const ENVELOPE = new Set(["crubal:wears", "crubal:parts", "crubal:kind", "crubal:owner", "crubal:created", "crubal:updated"]);
+const ENVELOPE = new Set(["crubal:wears", "crubal:parts", "crubal:kind", "crubal:owner", "crubal:within", "crubal:status", "crubal:applied", "crubal:created", "crubal:updated"]);
 const NUMBER = /^-?(0|[1-9]\d*)(\.\d+)?$/;
 const ORIGINS = new Set(["observed", "declared", "derived", "reported"]);
 
@@ -251,7 +251,25 @@ export function readText(source: string, dict: Dictionary): Wrapper {
       if (c.key === "crubal:wears") rec.wears = readList(c.value, c.line).map((p) => p.text);
       else if (c.key === "crubal:parts") rec.parts = readParts(c, ctx);
       else if (c.key === "crubal:owner") rec.owner = c.value;
-      else if (c.key === "crubal:created") rec.created = c.value;
+      else if (c.key === "crubal:within") rec.within = c.value.trim();
+      else if (c.key === "crubal:status") {
+        // `archived [reason: sold, into: P-9]`; `active` is the same as leaving the line out.
+        const p = readPiece(c.value, c.line);
+        if (p.text !== "active" && p.text !== "archived") throw new CrubalError(`a status is active or archived, not ${p.text}`, c.line);
+        if (p.text === "archived") {
+          const get = (n: string) => p.detail.find(([k]) => k === n)?.[1].text;
+          rec.status = { state: "archived" };
+          const reason = get("reason");
+          const into = get("into");
+          if (reason) rec.status.reason = reason;
+          if (into) rec.status.into = into;
+        }
+      } else if (c.key === "crubal:applied") {
+        // `[P-4QX7: 2, class:OpticalDisc/2026-11-01: 1]`: each issuer and the last instruction applied.
+        const p = readPiece(c.value, c.line);
+        if (p.text !== "" || !p.detail.length) throw new CrubalError(`applied is "[issuer: n, …]", not ${c.value}`, c.line);
+        rec.applied = Object.fromEntries(p.detail.map(([k, v]) => [k, Number(v.text)]));
+      } else if (c.key === "crubal:created") rec.created = c.value;
       else if (c.key === "crubal:updated") rec.updated = c.value;
       else if (c.key === "crubal:kind" && c.value !== kind) {
         throw new CrubalError(`crubal:kind ${c.value} disagrees with the level's kind ${kind}`, c.line);
@@ -268,6 +286,9 @@ function orderRecord(r: Record): Record {
   const o: JsonObject = { id: r.id, kind: r.kind, level: r.level };
   if (r.of) o.of = r.of;
   o.owner = r.owner;
+  if (r.within) o.within = r.within;
+  if (r.status) o.status = r.status as unknown as JsonObject;
+  if (r.applied) o.applied = r.applied;
   if (r.wears) o.wears = r.wears;
   if (r.created) o.created = r.created;
   if (r.updated) o.updated = r.updated;

@@ -1,0 +1,14 @@
+{
+  "level": "product",
+  "answers": [
+    { "epid": "1", "ASIN": "B000001", "Title": "Christmas Vacation" },
+    { "epid": "1", "ASIN": "B999", "Title": "Christmas Vacation" },
+    { "epid": "2", "ASIN": "B000002" },
+    { "epid": "3", "ASIN": "B000003" },
+    { "epid": "4", "GTIN": "012345678905", "Title": "Xmas Vacation", "Format": "DVD" },
+    { "decide": { "record": "P-1" } },
+    { "epid": "4", "Title": "Whatever" },
+    { "epid": "5", "ASIN": "B000005", "Title": "Elf", "Format": "DVD" },
+    { "epid": "6", "Title": "Elf", "Format": "DVD" }
+  ]
+}

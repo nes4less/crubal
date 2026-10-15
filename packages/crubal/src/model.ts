@@ -6,12 +6,21 @@ export type JsonObject = { [key: string]: Json };
 
 export type Source = { origin: string; via: string; owner?: string; adopted?: boolean };
 
+/** A record's status (1.12): absent means active. */
+export type Status = { state: "active" | "archived"; reason?: string; into?: string };
+
 export type Record = {
   id: string;
   kind: string;
   level: string;
+  /** Optional at every level (1.2): absent when the record stands alone. */
   of?: string;
   owner: string;
+  /** The record this one belongs to for access (14.2). */
+  within?: string;
+  status?: Status;
+  /** Per issuer of instructions, the last one applied (10.7). */
+  applied?: { [issuer: string]: number };
   wears?: string[];
   created?: string;
   updated?: string;
@@ -27,7 +36,7 @@ export type Wrapper = {
   records: Record[];
 };
 
-const RECORD_MEMBERS = new Set(["id", "kind", "level", "of", "owner", "wears", "created", "updated", "values", "parts", "sources", "alternatives", "suggestions"]);
+const RECORD_MEMBERS = new Set(["id", "kind", "level", "of", "owner", "within", "status", "applied", "wears", "created", "updated", "values", "parts", "sources", "alternatives", "suggestions", "held"]);
 
 /** Refuse JSON the spec forbids: `null` anywhere (chapter 3), unknown record members (3.2). */
 export function checkJson(doc: unknown, path = "$"): void {

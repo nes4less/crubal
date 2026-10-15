@@ -1,0 +1,16 @@
+{
+  "crubal": "2",
+  "records": [
+    {
+      "id": "U-1", "kind": "item", "level": "unit", "of": "P-1", "owner": "test.example",
+      "values": { "price": { "$money": "12.50", "currency": "USD" } },
+      "sources": { "*": { "origin": "observed", "via": "L-2" } }
+    },
+    {
+      "id": "P-1", "kind": "item", "level": "product", "owner": "test.example",
+      "values": { "title": "Christmas Vacation", "runtime": { "$qty": "98", "unit": "min" } },
+      "sources": { "*": { "origin": "declared", "via": "L-1" } },
+      "alternatives": { "runtime": [ { "value": { "$qty": "97", "unit": "min" }, "origin": "declared", "via": "L-1" } ] }
+    }
+  ]
+}

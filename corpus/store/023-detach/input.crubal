@@ -1,0 +1,12 @@
+// Detaching copies every folded value onto the record, with its source, so it keeps working as it was.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: DVD
+  runtime: 97min [origin: observed, via: L-7]
+
+unit: U-1 of P-1 [origin: observed, via: L-2]
+  price: 12.50USD

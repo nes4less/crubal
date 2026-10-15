@@ -1,0 +1,15 @@
+// Attaching without `edit` on the record above (1.7, chapter 14): what would move up lands there as a
+// suggestion, and the lower record keeps its own value until it is accepted. A value the product already
+// holds is still dropped and read through.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: DVD
+
+unit: U-9 [origin: reported, via: L-9]
+  title: Christmas Vacation
+  runtime: 95min
+  price: 4.00USD

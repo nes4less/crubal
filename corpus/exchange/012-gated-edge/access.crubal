@@ -1,0 +1,81 @@
+contract: checkIn
+  kind: form
+contract: publishSchedule
+  kind: send
+  writes:
+    gameTime -> when
+
+permissions: facility
+  menu:
+    checkIn: run checkIn
+    scheduleGames: edit gameTime, run publishSchedule
+    recordScores: edit score
+    captainKit: edit roster
+    grantCaptain: grant captainKit
+  presets:
+    frontDesk: checkIn audience: staff
+    coordinator: scheduleGames, recordScores, grantCaptain audience: staff
+  relations: operator, frontDesk, coordinator, captain, player, subscriber, follower only
+
+edge: E-1
+  who: C-OP
+  relation: operator
+  mode: admin
+  on: F-1
+  by: owner
+
+edge: E-2
+  who: C-FD
+  relation: frontDesk
+  mode: control
+  on: S-1
+  grants: frontDesk
+  by: E-1
+
+edge: E-3
+  who: C-CO
+  relation: coordinator
+  mode: control
+  on: L-1
+  grants: coordinator
+  until: 2027-06-30T00:00Z
+  by: E-1
+
+edge: E-4
+  who: C-CAP
+  relation: captain
+  mode: control
+  on: T-1
+  grants: captainKit
+  by: E-3
+
+edge: E-5
+  who: C-PL
+  relation: player
+  mode: consume
+  on: T-1
+  by: E-1
+
+edge: E-6
+  who: C-FAN
+  relation: follower
+  mode: none
+  on: T-1
+  by: owner
+
+edge: E-7
+  who: C-SUB
+  relation: subscriber
+  mode: view
+  on: L-1
+  until: 2026-12-31T00:00Z
+  by: owner
+
+edge: E-8
+  who: C-NEW
+  relation: coordinator
+  mode: control
+  on: L-2
+  grants: coordinator
+  gate: review
+  by: E-1

@@ -1,0 +1,20 @@
+{
+  "crubal": "2",
+  "records": [
+    {
+      "id": "P-2", "kind": "item", "level": "product", "owner": "test.example",
+      "status": { "state": "archived", "reason": "discontinued" },
+      "values": { "title": "Home Alone", "asin": "B000002" },
+      "sources": { "*": { "origin": "declared", "via": "L-1" } }
+    },
+    {
+      "id": "P-NEW1", "kind": "item", "level": "product", "owner": "test.example",
+      "values": { "asin": "B000005", "title": "Elf", "format": "DVD" },
+      "sources": {
+        "asin": { "origin": "reported", "via": "I-8" },
+        "title": { "origin": "reported", "via": "I-8" },
+        "format": { "origin": "reported", "via": "I-8" }
+      }
+    }
+  ]
+}

@@ -102,10 +102,16 @@ export type Dictionary = {
   /** The package's trust order and facets' own orders (11.3); empty means the default order. */
   trust: string[];
   facetTrust: Map<string, string[]>;
+  /** level name → the strong keys an arrival is bound by (11.2 `identify`) */
+  identify: Map<string, string[]>;
+  /** level name → the weak key groups that propose candidates (11.2 `match`); each group is all-of */
+  match: Map<string, string[][]>;
+  /** kind name → `independent`, `cascade of`, `cascade within` or `cascade both` (11.2 `archive`) */
+  archive: Map<string, string>;
 };
 
 export function emptyDictionary(): Dictionary {
-  const d: Dictionary = { facets: new Map(), classes: new Map(), levels: new Map(), vary: new Map(), trust: [], facetTrust: new Map() };
+  const d: Dictionary = { facets: new Map(), classes: new Map(), levels: new Map(), vary: new Map(), trust: [], facetTrust: new Map(), identify: new Map(), match: new Map(), archive: new Map() };
   // Core facets (spec 1.6, 5.6).
   d.facets.set("crubal:count", { ...blank("crubal:count", "number") });
   const notables = blank("crubal:notables", "compound");
@@ -537,7 +543,7 @@ function readClass(node: Node): ClassDef {
   return c;
 }
 
-const SKIP = new Set(["rule", "contract", "view", "shape", "filter", "role", "migration", "package", "resolve"]);
+const SKIP = new Set(["rule", "contract", "view", "shape", "filter", "role", "migration", "package", "resolve", "permissions", "ownership", "emergency", "edge", "instructions"]);
 
 /** Read definition text (facets, classes and kinds) into a dictionary. Other blocks are skipped. */
 export function readDefinitions(source: string, into: Dictionary = emptyDictionary()): Dictionary {
@@ -572,6 +578,21 @@ export function readDefinitions(source: string, into: Dictionary = emptyDictiona
           const set = into.vary.get(step.key) ?? new Set<string>();
           for (const k of splitTop(step.value, ",", step.line)) if (k) set.add(k);
           into.vary.set(step.key, set);
+        }
+        // Arrival keys (9.2a) and the archive cascade (1.12).
+        const identify = node.children.find((c) => c.key === "identify");
+        for (const l of identify?.children ?? []) if (l.key) into.identify.set(l.key, splitTop(l.value, ",", l.line).filter(Boolean));
+        const match = node.children.find((c) => c.key === "match");
+        for (const l of match?.children ?? []) {
+          if (!l.key) continue;
+          const groups = l.value.split(";").map((g) => g.split("+").map((k) => k.trim()).filter(Boolean)).filter((g) => g.length);
+          into.match.set(l.key, groups);
+        }
+        const archive = node.children.find((c) => c.key === "archive");
+        if (archive) {
+          const a = archive.value.trim();
+          if (!["independent", "cascade of", "cascade within", "cascade both"].includes(a)) throw new CrubalError(`archive is independent, cascade of, cascade within or cascade both, not ${a}`, archive.line);
+          into.archive.set(kind, a);
         }
         continue;
       }

@@ -1,0 +1,16 @@
+// Archiving snapshots folded values (1.12): a sold unit keeps what it said when it sold, while a unit still
+// active reads the product's later correction through.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: DVD
+  runtime: 97min
+
+unit: U-1 of P-1 [origin: observed, via: L-2]
+  price: 12.50USD
+
+unit: U-2 of P-1 [origin: observed, via: L-2]
+  price: 8.00USD

@@ -1,0 +1,3 @@
+// The projection stream (12.6, 12.7): the first publish carries every row; after a write, only the rows
+// that changed or joined, numbered on. P-5 had no title and was out of the view; the write gives it one.
+view: discs

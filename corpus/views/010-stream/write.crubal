@@ -1,0 +1,9 @@
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-9]
+  title: Christmas Vacation (Special Edition)
+
+product: P-5 [origin: declared, via: L-9]
+  title: Elf

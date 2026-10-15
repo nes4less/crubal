@@ -1,0 +1,9 @@
+{
+  "C-OP": [
+    { "record": "T-1", "heading": "Comets", "ancestors": ["L-1", "S-1", "F-1"] },
+    { "record": "T-2", "heading": "Sharks", "ancestors": ["L-2", "S-1", "F-1"] }
+  ],
+  "C-CO": [
+    { "record": "T-1", "heading": "Comets", "ancestors": ["L-1", "S-1", "F-1"] }
+  ]
+}

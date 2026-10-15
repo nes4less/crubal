@@ -1,0 +1,16 @@
+{
+  "crubal": "2",
+  "records": [
+    {
+      "id": "U-9", "kind": "item", "level": "unit", "of": "P-1", "owner": "test.example",
+      "values": { "runtime": { "$qty": "95", "unit": "min" }, "price": { "$money": "4.00", "currency": "USD" } },
+      "sources": { "*": { "origin": "reported", "via": "L-9" } }
+    },
+    {
+      "id": "P-1", "kind": "item", "level": "product", "owner": "test.example",
+      "values": { "title": "Christmas Vacation", "format": "DVD" },
+      "sources": { "*": { "origin": "declared", "via": "L-1" } },
+      "suggestions": { "runtime": [ { "value": { "$qty": "95", "unit": "min" }, "origin": "reported", "via": "L-9" } ] }
+    }
+  ]
+}

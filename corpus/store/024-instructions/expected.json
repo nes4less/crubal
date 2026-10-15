@@ -1,0 +1,17 @@
+{
+  "crubal": "2",
+  "records": [
+    {
+      "id": "U-1", "kind": "item", "level": "unit", "of": "P-1", "owner": "test.example",
+      "applied": { "P-1": 2, "class:Disc/2026-11-01": 1 },
+      "values": { "price": { "$money": "12.50", "currency": "USD" }, "grade": "Graded" },
+      "sources": { "*": { "origin": "observed", "via": "L-2" }, "grade": { "origin": "observed", "via": "L-2" } }
+    },
+    {
+      "id": "U-2", "kind": "item", "level": "unit", "of": "P-1", "owner": "test.example",
+      "values": { "graded": false, "sealed": true, "price": { "$money": "8.00", "currency": "USD" } },
+      "sources": { "*": { "origin": "observed", "via": "L-2" } }
+    }
+  ],
+  "review": []
+}

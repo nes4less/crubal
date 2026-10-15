@@ -1,0 +1,55 @@
+// Views above member are partitioned by `controlled` by default (12.2, 12.6): a coordinator with control over
+// one league is served only that league's teams; the operator, with admin on the facility, sees them all.
+// Rows carry their ancestors so an index can match edges to them.
+view: staffTeams
+callers: C-OP, C-CO
+
+kind: person
+  levels: person
+kind: facility
+  levels: facility
+kind: session
+  levels: session
+kind: league
+  levels: league
+kind: team
+  levels: team
+audience{public|member|staff|owner}
+name$
+
+shape: teamCard
+  slots:
+    !name -> heading
+
+view: staffTeams
+  select:
+    level: team
+  shape: teamCard
+  show: staff
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+person: C-OP [origin: declared, via: L-1]
+  audience: staff
+person: C-CO [origin: declared, via: L-1]
+  audience: staff
+
+facility: F-1 [origin: declared, via: L-1]
+  name: Northside
+session: S-1 [origin: declared, via: L-1]
+  crubal:within: F-1
+  name: Fall
+league: L-1 [origin: declared, via: L-1]
+  crubal:within: S-1
+  name: Rec
+league: L-2 [origin: declared, via: L-1]
+  crubal:within: S-1
+  name: Masters
+team: T-1 [origin: declared, via: L-1]
+  crubal:within: L-1
+  name: Comets
+team: T-2 [origin: declared, via: L-1]
+  crubal:within: L-2
+  name: Sharks

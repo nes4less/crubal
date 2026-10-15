@@ -1,0 +1,47 @@
+// You grant only what you hold (14.5, 14.12): E-3 holds control, so it can't grant E-4 admin.
+kind: facility
+  levels: facility
+kind: league
+  levels: league
+kind: team
+  levels: team
+score#
+
+permissions: facility
+  menu:
+    recordScores: edit score
+  presets:
+    coordinator: recordScores audience: staff
+  relations: operator, coordinator, captain
+
+edge: E-1
+  who: C-OP
+  relation: operator
+  mode: admin
+  on: F-1
+  by: owner
+
+edge: E-3
+  who: C-CO
+  relation: coordinator
+  mode: control
+  on: L-1
+  grants: coordinator
+  by: E-1
+
+edge: E-4
+  who: C-CAP
+  relation: captain
+  mode: admin
+  on: T-1
+  by: E-3
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+facility: F-1 [origin: declared, via: L-1]
+league: L-1 [origin: declared, via: L-1]
+  crubal:within: F-1
+team: T-1 [origin: declared, via: L-1]
+  crubal:within: L-1

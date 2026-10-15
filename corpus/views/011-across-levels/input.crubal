@@ -1,0 +1,32 @@
+// A view that selects by class with no level (12.2) takes wearers at every level, so a unit standing alone
+// (1.7) appears beside products. A level prefix reads the standing-alone record's own value.
+view: allDiscs
+
+class: Disc
+  for: item
+  facets:
+    title
+    format
+
+view: allDiscs
+  select:
+    wears: Disc
+  order: releaseDate after
+  shape: card
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-7 [origin: declared, via: L-1]
+  crubal:wears: Disc
+  title: Alien
+  format: DVD
+  releaseDate: 1990
+
+unit: U-7 [origin: observed, via: L-2]
+  crubal:wears: Disc
+  title: Aliens
+  format: Blu-ray
+  releaseDate: 1992
+  price: 3.00USD

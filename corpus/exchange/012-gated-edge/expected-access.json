@@ -1,0 +1,5 @@
+[
+  { "ask": "gated: C-NEW on T-3", "result": "E-8" },
+  { "ask": "gated: C-CO on T-1", "result": false },
+  { "ask": "may: C-NEW edit score on T-3", "result": true }
+]

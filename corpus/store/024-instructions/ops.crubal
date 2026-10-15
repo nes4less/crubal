@@ -1,0 +1,8 @@
+instruct: P-1
+  +grade
+  -graded -> grade
+    yes -> Graded
+    no -> Ungraded
+instruct: class:Disc/2026-11-01
+  -sealed
+apply: U-1

@@ -1,0 +1,59 @@
+// Access (chapter 14): a facility owned by test.example, sessions within it, leagues within sessions, teams
+// within leagues. Edges are in access.crubal; ask.crubal asks who may do what.
+kind: person
+  levels: person
+kind: facility
+  levels: facility
+kind: session
+  levels: session
+kind: league
+  levels: league
+kind: team
+  levels: team
+name$
+gameTime@any
+score#
+roster$*
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+person: C-OP [origin: declared, via: L-1]
+  name: Operator
+person: C-FD [origin: declared, via: L-1]
+  name: Front desk
+person: C-CO [origin: declared, via: L-1]
+  name: Coordinator
+person: C-CAP [origin: declared, via: L-1]
+  name: Captain
+person: C-PL [origin: declared, via: L-1]
+  name: Player
+person: C-FAN [origin: declared, via: L-1]
+  name: Fan
+person: C-SUB [origin: declared, via: L-1]
+  name: Subscriber
+
+facility: F-1 [origin: declared, via: L-1]
+  name: Northside
+session: S-1 [origin: declared, via: L-1]
+  crubal:within: F-1
+  name: Fall
+session: S-2 [origin: declared, via: L-1]
+  crubal:within: F-1
+  name: Winter
+league: L-1 [origin: declared, via: L-1]
+  crubal:within: S-1
+  name: Rec
+league: L-2 [origin: declared, via: L-1]
+  crubal:within: S-2
+  name: Masters
+team: T-1 [origin: declared, via: L-1]
+  crubal:within: L-1
+  name: Comets
+team: T-2 [origin: declared, via: L-1]
+  crubal:within: L-1
+  name: Rockets
+team: T-3 [origin: declared, via: L-1]
+  crubal:within: L-2
+  name: Sharks

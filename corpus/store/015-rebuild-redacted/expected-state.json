@@ -1,0 +1,13 @@
+{
+  "records": [
+    {
+      "id": "P-1", "kind": "item", "level": "product", "owner": "test.example",
+      "created": "2026-10-15T10:00:00Z", "updated": "2026-10-15T10:06:00Z",
+      "values": { "title": "Christmas Vacation", "format": "DVD" },
+      "sources": {
+        "title": { "origin": "declared", "via": "L-1" },
+        "format": { "origin": "declared", "via": "L-3" }
+      }
+    }
+  ]
+}

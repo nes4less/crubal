@@ -1,0 +1,11 @@
+[
+  { "outcome": "matched", "record": "P-1", "by": "identify:asin", "ref": "1" },
+  { "outcome": "bound", "record": "P-1", "by": "binding", "ref": "1" },
+  { "outcome": "matched", "record": "P-2", "by": "identify:asin", "ref": "2" },
+  { "outcome": "matched", "record": "P-1", "by": "identify:asin", "ref": "3" },
+  { "outcome": "held", "candidates": ["P-1"], "by": "match:gtin", "ref": "4" },
+  { "outcome": "bound", "record": "P-1", "by": "review", "ref": "4" },
+  { "outcome": "bound", "record": "P-1", "by": "binding", "ref": "4" },
+  { "outcome": "new", "record": "P-NEW1", "ref": "5" },
+  { "outcome": "held", "candidates": ["P-NEW1"], "by": "match:title+format", "ref": "6" }
+]

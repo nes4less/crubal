@@ -1,0 +1,17 @@
+// Merge (1.12): the loser's values fold into the survivor under the trust order, its units move over, and
+// it is archived as merged into the survivor. IDs are never reused.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: DVD
+
+product: P-2 [origin: reported, via: L-3]
+  title: National Lampoon's Christmas Vacation
+  format: DVD
+  runtime: 97min
+
+unit: U-3 of P-2 [origin: observed, via: L-2]
+  price: 5.00USD

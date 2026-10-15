@@ -1,0 +1,22 @@
+{
+  "crubal": "2",
+  "records": [
+    {
+      "id": "P-1", "kind": "item", "level": "product", "owner": "test.example",
+      "values": { "title": "Christmas Vacation", "format": "DVD", "runtime": { "$qty": "97", "unit": "min" } },
+      "sources": { "*": { "origin": "declared", "via": "L-1" }, "runtime": { "origin": "reported", "via": "L-3" } },
+      "alternatives": { "title": [ { "value": "National Lampoon's Christmas Vacation", "origin": "reported", "via": "L-3" } ] }
+    },
+    {
+      "id": "P-2", "kind": "item", "level": "product", "owner": "test.example",
+      "status": { "state": "archived", "reason": "merged", "into": "P-1" },
+      "values": { "title": "National Lampoon's Christmas Vacation", "format": "DVD", "runtime": { "$qty": "97", "unit": "min" } },
+      "sources": { "*": { "origin": "reported", "via": "L-3" } }
+    },
+    {
+      "id": "U-3", "kind": "item", "level": "unit", "of": "P-1", "owner": "test.example",
+      "values": { "price": { "$money": "5.00", "currency": "USD" } },
+      "sources": { "*": { "origin": "observed", "via": "L-2" } }
+    }
+  ]
+}

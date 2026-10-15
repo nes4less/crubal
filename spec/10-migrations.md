@@ -124,9 +124,9 @@ A recipe changes values. An **instruction** changes which keys lower records hol
 tells the records below it when the keys it projects change (chapter 1.7). A lower record never changes
 because something above it now looks different; it changes only when an instruction reaches it.
 
-Instructions have two **issuers**, because projection comes from two places (chapter 1.7): a record, when
-its own `wears` change; and a class version, when a package publish adds or removes a `level::` line, which
-reaches every wearer's lower records at once.
+Instructions have two **issuers**, because projection comes from two places (chapter 1.7): a record, named
+by its ID, when its own `wears` change; and a class version, named `class:<Name>/<version>`, when a package
+publish adds or removes a `level::` line, which reaches every wearer's lower records at once.
 
 ```crubal
 instructions: P-4QX7

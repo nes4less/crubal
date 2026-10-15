@@ -1,0 +1,22 @@
+may: C-OP edit score on T-3
+may: C-FD run checkIn on L-1
+may: C-FD run checkIn on F-1
+may: C-FD run checkIn on L-2
+may: C-CO edit gameTime on T-2
+may: C-CO edit score on L-2
+may: C-CAP edit roster on T-1
+may: C-CAP edit score on T-1
+may: C-PL run checkIn on T-1
+may: C-PL edit roster on T-1
+may: C-FAN see name on T-1
+may: C-SUB see name on T-1
+may: test.example merge T-1 on T-1
+mode: C-CAP on T-1
+mode: C-FD on T-3
+mode: C-SUB on T-2
+stands: C-CO controlled on T-2
+stands: C-FD controlled on T-3
+stands: C-OP controlled on T-3
+stands: C-FAN relation follower on T-1
+stands: C-CAP administered on T-1
+ancestors: T-1

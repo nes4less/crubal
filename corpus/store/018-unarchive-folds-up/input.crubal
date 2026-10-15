@@ -1,0 +1,12 @@
+// Unarchiving folds the copied values up again (1.12, 1.7): the same value is dropped, a different one
+// is a conflict for the trust order, and the loser is kept as an alternative on the record above.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  runtime: 97min
+
+unit: U-1 of P-1 [origin: observed, via: L-2]
+  price: 12.50USD

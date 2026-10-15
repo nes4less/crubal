@@ -1,0 +1,23 @@
+[
+  {
+    "log": "L-1", "owner": "test.example", "at": "2026-10-15T10:00:00Z",
+    "by": { "person": "C-1" },
+    "source": { "origin": "declared" },
+    "writes": [
+      { "record": "P-1", "envelope": "created", "value": { "kind": "item", "level": "product", "owner": "test.example" } },
+      { "record": "P-1", "address": "title", "value": "Christmas Vacation" }
+    ]
+  },
+  {
+    "log": "L-2", "prev": "sha256:0000", "sig": "…",
+    "redacted": "sha256:4be1c9c4d3f0a1b2c3d4e5f60718293a4b5c6d7e8f9011223344556677889900"
+  },
+  {
+    "log": "L-3", "prev": "sha256:0000", "owner": "test.example", "at": "2026-10-15T10:06:00Z",
+    "by": { "person": "C-1" },
+    "source": { "origin": "declared" },
+    "writes": [
+      { "record": "P-1", "address": "format", "value": "DVD" }
+    ]
+  }
+]

@@ -165,5 +165,6 @@ Chapter 3.2's record gains two optional members:
 |---|---|---|
 | `alternatives` | object: address → array of `{value, origin, via, owner?}` | when a conflict left a losing value |
 | `suggestions` | the same shape | when values landed as suggestions |
+| `held` | object: address → `{value, rule?, instruction?}` | when a value is held (chapter 6.7, 10.4, 10.7): kept, out of the current values |
 
 and the source object (chapter 3.7) gains `adopted: true`.

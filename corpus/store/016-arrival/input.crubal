@@ -1,0 +1,32 @@
+// Arrival (9.2a): a catalog's payloads find or make their product. ASIN is a strong key, GTIN a weak one
+// (barcodes get reused). P-2 is archived (discontinued) and still reachable by its strong key; P-3 was merged
+// into P-1 and resolves through `into`.
+asin$
+gtin$
+
+kind: item
+  levels: group, product, unit
+  identify:
+    product: asin
+  match:
+    product: gtin; title + format
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: DVD
+  asin: B000001
+  gtin: 012345678905
+
+product: P-2 [origin: declared, via: L-1]
+  crubal:status: archived [reason: discontinued]
+  title: Home Alone
+  asin: B000002
+
+product: P-3 [origin: declared, via: L-1]
+  crubal:status: archived [reason: merged, into: P-1]
+  title: Christmas Vacation
+  asin: B000003

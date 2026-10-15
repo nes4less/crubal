@@ -1,0 +1,6 @@
+[
+  { "ask": "mode: C-CO on L-1", "result": "none" },
+  { "ask": "mode: C-CAP on T-1", "result": "none" },
+  { "ask": "mode: C-SUB on L-1", "result": "none" },
+  { "ask": "mode: C-FD on L-1", "result": "control" }
+]

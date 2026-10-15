@@ -1,0 +1,30 @@
+// Only the owner may grant an edge to another owner's caller (14.8, 14.12): an admin can't.
+kind: facility
+  levels: facility
+score#
+
+permissions: facility
+  menu:
+    recordScores: edit score
+  relations: operator, support
+
+edge: E-1
+  who: C-OP
+  relation: operator
+  mode: admin
+  on: F-1
+  by: owner
+
+edge: E-9
+  who: platform.example:S-14
+  relation: support
+  mode: view
+  on: F-1
+  until: 2026-10-16T18:00Z
+  by: E-1
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+facility: F-1 [origin: declared, via: L-1]

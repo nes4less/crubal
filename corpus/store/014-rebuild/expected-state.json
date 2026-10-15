@@ -1,0 +1,28 @@
+{
+  "records": [
+    {
+      "id": "P-1", "kind": "item", "level": "product", "owner": "test.example", "wears": ["Disc"],
+      "created": "2026-10-15T10:00:00Z", "updated": "2026-10-15T10:06:00Z",
+      "values": { "title": "Christmas Vacation", "format": "DVD" },
+      "sources": {
+        "title": { "origin": "declared", "via": "L-1" },
+        "format": { "origin": "declared", "via": "L-1" }
+      },
+      "alternatives": { "title": [ { "value": "National Lampoon's Christmas Vacation", "origin": "reported", "via": "L-2" } ] },
+      "held": { "runtime": { "value": { "$qty": "97", "unit": "min" }, "rule": "runtimeRange" } }
+    },
+    {
+      "id": "U-1", "kind": "item", "level": "unit", "owner": "test.example", "of": "P-1",
+      "created": "2026-10-15T10:10:00Z", "updated": "2026-10-15T10:20:00Z",
+      "status": { "state": "archived", "reason": "sold" },
+      "applied": { "P-1": 1 },
+      "values": { "price": { "$money": "12.50", "currency": "USD" } },
+      "sources": { "price": { "origin": "observed", "via": "L-4" } }
+    }
+  ],
+  "edges": [ { "edge": "E-1", "who": "C-2", "relation": "seller", "mode": "control", "on": "P-1", "grants": ["seller"], "by": "owner" } ],
+  "bindings": { "catalog|110": "P-1" },
+  "instructions": { "P-1": [ { "issuer": "P-1", "n": 1, "op": "+", "key": "grade" } ] },
+  "runs": [ { "run": "R-1", "contract": "catalog", "key": "catalog|P-1|abc", "state": "closed" } ],
+  "installed": [ { "package": "test.example/test", "version": "2026-11-01" } ]
+}

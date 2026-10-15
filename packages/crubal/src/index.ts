@@ -14,4 +14,8 @@ export { entryHash, fieldPath, land, matchParts, readContracts, receive, sha256,
 export { checkRecipe, readRecipes, restamp, type Recipe, type ReviewItem, type Step } from "./migrate.ts";
 export { checkContracts, Exchange, readRoles, verifyBorder, type Role, type RunResult } from "./exchange.ts";
 export { checkPackages, readPackages, type PackageInfo } from "./packages.ts";
-export { AUDIENCES, checkViews, readViews, Views, type Projection, type ProjectOptions, type View, type ViewSet } from "./views.ts";
+export { AUDIENCES, checkViews, partitionOf, readViews, Views, type Projection, type ProjectOptions, type StreamEntry, type View, type ViewSet } from "./views.ts";
+export { applyEntry, emptyState, rebuild, redactable, stateJson, type Entry, type State } from "./log.ts";
+export { arrive, decide, surviving, type Arrival, type ArrivalStore } from "./arrival.ts";
+export { apply, archive, attach, detach, effective, emptyStore, foldUp, issue, issuersFor, merge, ownedKeys, pending, readInstructionBlocks, unarchive, type Instruction, type Store } from "./lifecycle.ts";
+export { Access, checkPermissions, foreign, MODES, readAccess, VERBS, type Edge, type Effective, type MenuItem, type Mode, type Permissions, type Preset } from "./access.ts";

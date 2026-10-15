@@ -3,6 +3,7 @@
 // counts follow the other picks; audiences and show rules decide visibility, and roles narrow an audience;
 // a view's read set decides which projection rows go stale.
 
+import type { Access } from "./access.ts";
 import { serialize } from "./canonical.ts";
 import { evaluate, parseCondition } from "./conditions.ts";
 import type { Dictionary, Facet } from "./defs.ts";
@@ -42,6 +43,8 @@ export type View = {
   indexLine: number;
   show: string;
   fresh: string;
+  /** `administered`, `controlled`, `owned`, `relation <name>` or `none` (12.2); absent takes the default. */
+  partition?: string;
 };
 export type RoleDef = { name: string; audience: string; see: string[]; seeLine: number; line: number };
 export type ViewSet = { shapes: Map<string, Shape>; filters: Map<string, Filter>; views: Map<string, View>; roles: Map<string, RoleDef>; shown: Map<string, string> };
@@ -107,6 +110,7 @@ export function readViews(source: string): ViewSet {
         indexLine: get("index")?.line ?? n.line,
         show: get("show")?.value ?? "public",
         fresh: get("fresh")?.value ?? "write",
+        ...(get("partition") ? { partition: get("partition")?.value.trim() as string } : {}),
       });
     } else if (n.key === "role") {
       const see = get("may")?.children.find((c) => c.key === "see");
@@ -183,8 +187,23 @@ export function checkViews(set: ViewSet, dict: Dictionary): void {
 
 // ─── Projecting (12.2–12.6) ──────────────────────────────────────────────────
 
-export type ProjectOptions = { audience?: string; caller?: Record; context?: Record; picks?: { [filter: string]: string[] }; page?: number };
+export type ProjectOptions = {
+  audience?: string;
+  caller?: Record;
+  context?: Record;
+  picks?: { [filter: string]: string[] };
+  page?: number;
+  /** Access (chapter 14) for partitioned views: the index serves a caller only the rows their edges match. */
+  access?: Access;
+};
 export type Projection = { rows: JsonObject[]; records: string[]; counts: { [filter: string]: { [bucket: string]: number } }; pages: number; indexable: boolean };
+/** One entry of a view's projection stream (12.6, 12.7). */
+export type StreamEntry = { projection: string; audience: string; seq: number; record: string; row?: JsonObject; removed?: true };
+
+/** A view's partition: what it declares, else `controlled` above member and `none` otherwise (12.2). */
+export function partitionOf(v: View): string {
+  return v.partition ?? (rankOf(v.show) > rankOf("member") ? "controlled" : "none");
+}
 
 function plainText(v: Json): string {
   if (typeof v === "string") return v;
@@ -226,6 +245,9 @@ export class Views {
   /** The values an address reads, as a list: own values, or a lower level's (`unit::price`). */
   private valuesAt(r: Record, address: string): Json[] {
     const m = address.match(/^(\w+)::(.+)$/);
+    // A level prefix reads the records below at that level, or the record itself when it sits there
+    // (a standing-alone lower record answers for its own level, 1.7).
+    if (m && r.level === m[1]) return this.valuesAt(r, m[2] as string);
     if (m) return this.below(r, m[1] as string).flatMap((u) => this.valuesAt(u, m[2] as string));
     const v = this.effective(r)[address];
     return v === undefined ? [] : Array.isArray(v) ? v : [v];
@@ -326,12 +348,23 @@ export class Views {
     return [...pinned, ...rows.filter((r) => !v.pin.includes(r.id)).sort(cmp)];
   }
 
+  /** The roles whose `see` a slot needs above member (12.6 role marks): none when members may see it. */
+  private marksFor(s: Slot, audience: string): string[] {
+    if (rankOf(audience) <= rankOf("member")) return [];
+    const keys = slotKeys(s.from);
+    if (keys.every((k) => visibleTo(this.set, k, "member"))) return [];
+    return [...this.set.roles.values()].filter((r) => rankOf(r.audience) <= rankOf(audience) && keys.every((k) => visibleTo(this.set, k, "member") || r.see.includes(k.replace(/^\w+::/, "")))).map((r) => r.name).sort();
+  }
+
   /** A view's projection for an audience (or a caller), with filter counts and a page. */
   project(name: string, opts: ProjectOptions = {}): Projection {
     const v = this.set.views.get(name);
     if (!v) throw new Error(`no view ${name}`);
     const audience = opts.caller ? String(opts.caller.values.audience ?? "member") : (opts.audience ?? v.show);
-    const all = this.select(v, { ...opts, audience });
+    const partition = partitionOf(v);
+    let all = this.select(v, { ...opts, audience });
+    // A partitioned view serves a caller only the rows their edges match (12.6, 14.10).
+    if (partition !== "none" && opts.access && opts.caller) all = all.filter((r) => (opts.access as Access).standsIn((opts.caller as Record).id, r.id, partition));
     const picks = opts.picks ?? {};
     const passes = (r: Record, except?: string) =>
       Object.entries(picks).every(([fname, chosen]) => {
@@ -356,13 +389,49 @@ export class Views {
     const rows = onPage.map((r): JsonObject => {
       if (shapeName === "crubal:portable") return { record: r.id, values: this.portable(r, audience, opts.caller) };
       const row: JsonObject = { record: r.id };
+      const marks: JsonObject = {};
       for (const s of this.set.shapes.get(shapeName)?.slots ?? []) {
         const val = this.slot(r, s, audience, opts.caller);
         if (val !== undefined) row[s.to] = val;
+        const m = opts.caller ? [] : this.marksFor(s, audience);
+        if (val !== undefined && m.length) marks[s.to] = m.length === 1 ? (m[0] as string) : m;
       }
+      if (Object.keys(marks).length) row.marks = marks;
+      // A partitioned view's row carries its record's ancestors, so an index can match edges to it.
+      if (partition !== "none" && opts.access) row.ancestors = opts.access.ancestors(r.id);
       return row;
     });
     return { rows, records: onPage.map((r) => r.id), counts, pages, indexable };
+  }
+
+  private streams = new Map<string, { rows: Map<string, string>; seq: number }>();
+
+  /**
+   * The projection stream (12.6): the entries since the last publish of this view for this audience, one
+   * per row that is new or changed, and one removal per row that left. Numbered per view and audience.
+   */
+  stream(name: string, opts: Omit<ProjectOptions, "page" | "picks"> = {}): StreamEntry[] {
+    const v = this.set.views.get(name);
+    if (!v) throw new Error(`no view ${name}`);
+    const audience = opts.audience ?? v.show;
+    const key = `${name}|${audience}`;
+    const last = this.streams.get(key) ?? { rows: new Map<string, string>(), seq: 0 };
+    const now = new Map<string, JsonObject>();
+    for (let page = 1; ; page++) {
+      const p = this.project(name, { ...opts, audience, page });
+      for (const row of p.rows) now.set(String(row.record), row);
+      if (page >= p.pages) break;
+    }
+    const out: StreamEntry[] = [];
+    const next = { rows: new Map<string, string>(), seq: last.seq };
+    for (const [id, row] of now) {
+      const s = serialize(row);
+      next.rows.set(id, s);
+      if (last.rows.get(id) !== s) out.push({ projection: name, audience, seq: ++next.seq, record: id, row });
+    }
+    for (const id of last.rows.keys()) if (!now.has(id)) out.push({ projection: name, audience, seq: ++next.seq, record: id, removed: true });
+    this.streams.set(key, next);
+    return out;
   }
 
   /** The portable shape (12.1): key, label, type and value for every value the audience may see. */

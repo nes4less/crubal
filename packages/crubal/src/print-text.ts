@@ -152,6 +152,16 @@ function printRecord(r: Record, fileOwner: string | undefined, out: Out) {
   const star = out.mode === "full" ? detailText(sourcePairs(sources["*"])) : "";
   out.lines.push(`${r.level}: ${r.id}${r.of ? ` of ${r.of}` : ""}${star}`);
   if (r.owner !== fileOwner) out.lines.push(`  crubal:owner: ${r.owner}`);
+  if (r.within) out.lines.push(`  crubal:within: ${r.within}`);
+  if (r.status?.state === "archived") {
+    const pairs: [string, string][] = [];
+    if (r.status.reason) pairs.push(["reason", writeText(r.status.reason, true)]);
+    if (r.status.into) pairs.push(["into", r.status.into]);
+    out.lines.push(`  crubal:status: archived${detailText(pairs)}`);
+  }
+  if (r.applied && Object.keys(r.applied).length) {
+    out.lines.push(`  crubal:applied:${detailText(Object.entries(r.applied).map(([k, n]) => [k, String(n)]))}`);
+  }
   if (r.wears?.length) out.lines.push(`  crubal:wears: ${r.wears.join(", ")}`);
   if (out.mode === "full" && r.created) out.lines.push(`  crubal:created: ${r.created}`);
   if (out.mode === "full" && r.updated) out.lines.push(`  crubal:updated: ${r.updated}`);

@@ -1,0 +1,21 @@
+permissions: facility
+  menu:
+    recordScores: edit score
+  presets:
+    coordinator: recordScores audience: staff
+  relations: operator, coordinator
+
+edge: E-1
+  who: C-OP
+  relation: operator
+  mode: admin
+  on: F-1
+  by: owner
+
+edge: E-3
+  who: C-CO
+  relation: coordinator
+  mode: control
+  on: L-1
+  grants: coordinator
+  by: E-1

@@ -1,0 +1,10 @@
+contract: catalog
+  kind: receive
+  origin: reported
+  ref: epid
+  reads:
+    ASIN -> asin
+    GTIN -> gtin
+    Title -> title
+    Format -> format
+  ignore: epid

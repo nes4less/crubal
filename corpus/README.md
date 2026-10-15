@@ -59,6 +59,32 @@ which record), an optional `answer.json` (what the other side sent back) and `ex
 `L-R1`, `L-R2` …, in order. Offer-and-take cases add the presenter's record as `presenter.json`; border cases
 hold a signed wrapper in `border.json`, the presenter's key in `keys.json` and `expected-border.json`.
 
+### Cases for the backbone chapters
+
+- **Rebuild (8.5.3):** a `store/` case with `log.json` and `expected-state.json` rebuilds the state from the
+  log alone and compares every member the expectation names (`records`, `edges`, `bindings`,
+  `instructions`, `runs`, `installed`, …). Links aren't checked by this case; `prev` may be a placeholder.
+- **Arrival (9.2a):** a `store/` case with `contract.crubal` (with `ref`), `answers.json` (an array of
+  payloads, or `{"level", "answers"}`; an answer `{"decide": {"record": ID}}` or `{"decide": {"new": true}}`
+  decides the last held arrival) and `expected-arrival.json` (one object per answer, compared as a subset:
+  `outcome`, `record`, `candidates`, `by`, `ref`). An optional `expected.json` lists records to compare
+  after the sequence. Minted records are named `P-NEW1`, `P-NEW2` … by the level's initial.
+- **Lifecycle and instructions (1.7, 1.12, 10.7):** a `store/` case with `ops.crubal`, operations in order:
+  `archive: ID [reason: …, into: …]`, `unarchive: ID`, `merge: LOSER -> SURVIVOR`, `attach: LOWER -> UPPER
+  [edit: no]`, `detach: ID`, `instruct: ISSUER` with instruction lines indented under it, `apply: ID`, and
+  `write: ID` with values indented under it. `expected.json` lists the records to compare (canonical form,
+  status, alternatives and suggestions included) and may list the `review` queue.
+- **Access (chapter 14):** an `exchange/` case with `access.crubal` (contracts, `permissions:`, `edge:`
+  blocks), an optional `now.txt`, and `ask.crubal`: `may: CALLER VERB TARGET on RECORD`, `mode: CALLER on
+  RECORD`, `stands: CALLER PARTITION… on RECORD`, `gated: CALLER on RECORD`, `ancestors: RECORD`.
+  `expected-access.json` holds one `{"ask", "result"}` per question. An `exchange-errors/` case whose
+  input holds `permissions:`, `ownership:` or `edge:` blocks checks the declarations, every record's owner
+  and every edge in order, and expects the refusal at the given line.
+- **Partitions and the stream (12.6):** a `views/` case may add `access.crubal`; `callers:` are then served
+  only the rows their edges match, and rows carry `ancestors`. A case with `write.crubal` and
+  `expected-stream.json` compares the stream entries of the first publish and of the publish after the
+  write.
+
 ## Passing a case
 
 For a case with `expected.json`, a Reader passes when all three hold:

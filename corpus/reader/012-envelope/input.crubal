@@ -1,0 +1,24 @@
+// The envelope after chapter 1.12 and 14.2: a unit standing alone (no `of`), a record within another for
+// access, an archived record with its reason, and the instructions a lower record has applied.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  crubal:within: S-1
+  title: Christmas Vacation
+  format: DVD
+
+unit: U-1 [origin: observed, via: L-2]
+  title: Home Alone
+  format: Blu-ray
+  price: 5.00USD
+
+unit: U-2 of P-1 [origin: observed, via: L-2]
+  crubal:status: archived [reason: sold]
+  crubal:applied: [P-1: 2, class:Disc/2026-11-01: 1]
+  price: 8.00USD
+
+product: P-2 [origin: declared, via: L-1]
+  crubal:status: archived [reason: merged, into: P-1]
+  title: Christmas Vacation

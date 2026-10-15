@@ -1,0 +1,18 @@
+// A unit standing alone holds everything itself (1.7). Attaching it folds its product facts up: the same
+// value is dropped and read through, a different one goes to the trust order (observed beats reported, so
+// the product keeps 97 and 95 is kept as an alternative), and its owned keys stay where they are.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: DVD
+  runtime: 97min [origin: observed, via: L-7]
+
+unit: U-9 [origin: reported, via: L-9]
+  title: Christmas Vacation
+  format: DVD
+  runtime: 95min
+  price: 4.00USD
+  condition: VG

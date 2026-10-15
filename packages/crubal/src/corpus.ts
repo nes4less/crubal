@@ -6,11 +6,16 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { canonical } from "./canonical.ts";
 import { type Dictionary, emptyDictionary, readDefinitions, splitCaseInput } from "./defs.ts";
-import { type Keys, land, matchParts, rawOf, readContracts, receive, replay, reviewByKey, validate, verifyChain, type IntakeOutcome, type Observation } from "./store.ts";
+import { type Keys, land, matchParts, rawOf, readContracts, receive, replay, reviewByKey, validate, verifyChain, type IntakeOutcome, type IntakeRecord, type Observation } from "./store.ts";
 import { checkRecipe, readRecipes, restamp } from "./migrate.ts";
 import { checkContracts, Exchange, readRoles, verifyBorder } from "./exchange.ts";
 import { checkPackages } from "./packages.ts";
 import { checkViews, readViews, Views } from "./views.ts";
+import { rebuild, stateJson } from "./log.ts";
+import { arrive, decide, type Arrival, type ArrivalStore } from "./arrival.ts";
+import { apply as applyInstructions, archive, attach, detach, emptyStore, issue, merge, unarchive } from "./lifecycle.ts";
+import { Access, checkPermissions, readAccess } from "./access.ts";
+import { readPiece } from "./lex.ts";
 import { readUnder } from "./read-text.ts";
 import { readTree } from "./tree.ts";
 import type { Record as Rec } from "./model.ts";
@@ -53,7 +58,7 @@ function loadDictionary(root: string, folder: string): Dictionary {
 }
 
 function copy(d: Dictionary): Dictionary {
-  return { facets: new Map(d.facets), classes: new Map(d.classes), levels: new Map(d.levels), vary: new Map(d.vary), trust: [...d.trust], facetTrust: new Map(d.facetTrust) };
+  return { facets: new Map(d.facets), classes: new Map(d.classes), levels: new Map(d.levels), vary: new Map(d.vary), trust: [...d.trust], facetTrust: new Map(d.facetTrust), identify: new Map(d.identify), match: new Map(d.match), archive: new Map(d.archive) };
 }
 
 /** Each expected entry must match an actual one on every field it states; entry sets must be the same. */
@@ -259,6 +264,15 @@ function runStoreCase(folder: string, caseDir: string, name: string, shared: Dic
         return e.line === want ? pass : fail(`refused at line ${e.line} (${e.message}), expected line ${want}`);
       }
     }
+    // Rebuild (8.5.3): the log alone gives back the state.
+    if (existsSync(file("expected-state.json"))) {
+      const got = stateJson(rebuild(json("log.json") as JsonObject[]));
+      const want = json("expected-state.json") as JsonObject;
+      for (const [k, v] of Object.entries(want)) {
+        if (serialize((got[k] ?? "∅") as Json) !== serialize(v)) return fail(`${k}: ${firstDiff(serialize((got[k] ?? "∅") as Json), serialize(v))}`);
+      }
+      return pass;
+    }
     if (existsSync(file("log.json"))) {
       const keys = existsSync(file("keys.json")) ? (json("keys.json") as unknown as Keys) : undefined;
       const got = verifyChain(json("log.json") as JsonObject[], keys) as unknown as { [k: string]: Json };
@@ -275,6 +289,89 @@ function runStoreCase(folder: string, caseDir: string, name: string, shared: Dic
     if (defs.trim()) readDefinitions(defs, dict);
     const records = readText(data, dict).records.map((r) => foldRecord(r, dict));
     const one = (r: Rec) => canonical({ crubal: "2", records: [r] }, dict);
+
+    // Arrival (9.2a): a sequence of payloads through one contract, each finding or making its record.
+    if (existsSync(file("answers.json"))) {
+      const text = readFileSync(file("contract.crubal"), "utf8");
+      readDefinitions(text, dict);
+      const [contract] = readContracts(text);
+      if (!contract) return fail("no contract");
+      const store: ArrivalStore = { records: new Map(records.map((r) => [r.id, r])), bindings: new Map() };
+      if (existsSync(file("bindings.json"))) for (const [k, v] of Object.entries(json("bindings.json") as JsonObject)) store.bindings.set(k, String(v));
+      const answersFile = json("answers.json");
+      const level = isPlainObject(answersFile) ? String(answersFile.level) : "product";
+      const answers = (isPlainObject(answersFile) ? answersFile.answers : answersFile) as Json[];
+      let n = 0;
+      const mint = () => `${level.charAt(0).toUpperCase()}-NEW${++n}`;
+      const owner = records[0]?.owner ?? "test.example";
+      const got: Json[] = [];
+      let held: { intake: IntakeRecord; ref?: string } | null = null;
+      answers.forEach((a, i) => {
+        if (isPlainObject(a) && isPlainObject(a.decide)) {
+          if (!held) throw new Error("a decision with nothing held");
+          const choice = a.decide.new === true ? ({ new: true } as const) : { record: String(a.decide.record) };
+          const r = decide(contract, held, choice, store, dict, { mint, owner, level });
+          got.push(r.arrival as unknown as Json);
+          held = null;
+          return;
+        }
+        const r = arrive(contract, JSON.stringify(a), level, store, dict, { mint, owner, intakeId: `I-${i + 1}` });
+        if (r.arrival.outcome === "held") held = { intake: r.intake, ...(r.arrival.ref !== undefined ? { ref: r.arrival.ref } : {}) };
+        got.push(r.arrival as unknown as Json);
+      });
+      const want = json("expected-arrival.json") as { [k: string]: Json }[];
+      if (got.length !== want.length) return fail(`${got.length} arrivals, expected ${want.length}: ${serialize(got)}`);
+      for (let i = 0; i < want.length; i++) {
+        const p = subset(got[i] as { [k: string]: Json }, want[i] as { [k: string]: Json }, `arrival ${i + 1}: `);
+        if (p) return fail(p);
+      }
+      if (existsSync(file("expected.json"))) {
+        const want2 = json("expected.json") as { records: Rec[] };
+        for (const w of want2.records) {
+          const r = store.records.get(w.id);
+          if (!r) return fail(`no record ${w.id}`);
+          if (one(r) !== one(w)) return fail(`${w.id}: ${firstDiff(one(r), one(w))}`);
+        }
+      }
+      return pass;
+    }
+
+    // Lifecycle (1.7, 1.12) and instructions (10.7): operations in order, then the records.
+    if (existsSync(file("ops.crubal"))) {
+      const store = emptyStore();
+      for (const r of records) store.records.set(r.id, r);
+      for (const op of readTree(readFileSync(file("ops.crubal"), "utf8"))) {
+        if (op.kind !== "pair" || !op.key) continue;
+        const piece = readPiece(op.value, op.line);
+        const detail = (k: string) => piece.detail.find(([n]) => n === k)?.[1].text;
+        const [a = "", b] = piece.text.split(" -> ").map((s) => s.trim());
+        if (op.key === "archive") archive(store, a, detail("reason") ?? "archived", dict, detail("into"));
+        else if (op.key === "unarchive") unarchive(store, a, dict);
+        else if (op.key === "merge" && b) merge(store, a, b, dict);
+        else if (op.key === "attach" && b) attach(store, a, b, dict, detail("edit") !== "no");
+        else if (op.key === "detach") detach(store, a, dict);
+        else if (op.key === "instruct") issue(store, piece.text, op.children);
+        else if (op.key === "apply") applyInstructions(store, a, dict);
+        else if (op.key === "write") {
+          const r = store.records.get(a);
+          if (!r) return fail(`write to an unknown record ${a}`);
+          const values = { ...r.values };
+          for (const c of op.children) {
+            const f = c.key ? dict.facets.get(c.key) : undefined;
+            if (c.key) values[c.key] = f ? (readUnder(f, c.value, dict) ?? c.value) : c.value;
+          }
+          store.records.set(a, { ...r, values });
+        } else return fail(`unknown op ${op.key}`);
+      }
+      const want = json("expected.json") as { records: Rec[]; review?: Json };
+      for (const w of want.records) {
+        const r = store.records.get(w.id);
+        if (!r) return fail(`no record ${w.id}`);
+        if (one(r) !== one(w)) return fail(`${w.id}: ${firstDiff(one(r), one(w))}`);
+      }
+      if (want.review !== undefined && serialize(store.review) !== serialize(want.review)) return fail(`review: got ${serialize(store.review)}`);
+      return pass;
+    }
 
     if (existsSync(file("recipe.crubal"))) {
       const [recipe] = readRecipes(readFileSync(file("recipe.crubal"), "utf8"));
@@ -375,7 +472,22 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
       const want = Number(readFileSync(file("error.txt"), "utf8").trim().split(/\s/)[0]);
       try {
         if (folder === "package-errors") checkPackages(input);
-        else {
+        else if (/^(edge|permissions|ownership): /m.test(input)) {
+          // Access (14.12, 14.13): the declarations, every record's owner, and every edge, in order.
+          const { defs, data } = splitCaseInput(input);
+          const d = copy(shared);
+          readDefinitions(defs, d);
+          const { perms, edges } = readAccess(defs);
+          checkPermissions(perms, d, new Set(readContracts(defs).map((c) => c.name)));
+          const recs = data.trim() ? readText(data, d).records.map((r) => foldRecord(r, d)) : [];
+          const access = new Access(d, perms, new Map(recs.map((r) => [r.id, r])), [], "test.example");
+          access.checkWithin();
+          for (const r of recs) access.checkOwnership(r);
+          for (const e of edges) {
+            access.checkEdge(e);
+            access.edges.set(e.edge, e);
+          }
+        } else {
           const d = copy(shared);
           readDefinitions(input, d);
           checkPackage(d);
@@ -396,6 +508,49 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
     const dict = copy(shared);
     if (defs.trim()) readDefinitions(defs, dict);
     checkPackage(dict);
+
+    // Access (chapter 14): edges over the records, then questions.
+    if (existsSync(file("ask.crubal"))) {
+      const accessText = readFileSync(file("access.crubal"), "utf8");
+      readDefinitions(accessText, dict);
+      const { perms, edges } = readAccess(accessText);
+      checkPermissions(perms, dict, new Set(readContracts(accessText).map((c) => c.name)));
+      const recs = readText(data, dict).records.map((r) => foldRecord(r, dict));
+      const now = existsSync(file("now.txt")) ? readFileSync(file("now.txt"), "utf8").trim() : undefined;
+      const access = new Access(dict, perms, new Map(recs.map((r) => [r.id, r])), edges, "test.example", now);
+      access.checkWithin();
+      const got: JsonObject[] = [];
+      for (const q of readTree(readFileSync(file("ask.crubal"), "utf8"))) {
+        if (q.kind !== "pair" || !q.key) continue;
+        const words = q.value.trim().split(/\s+/);
+        const ask = `${q.key}: ${q.value.trim()}`;
+        if (q.key === "may") {
+          // may: <caller> <verb> <target> on <record>
+          const [caller = "", verb = "", target = "", , record = ""] = words;
+          got.push({ ask, result: access.may(caller, verb, target, record) });
+        } else if (q.key === "mode") {
+          const [caller = "", , record = ""] = words;
+          got.push({ ask, result: access.effective(caller, record).mode });
+        } else if (q.key === "stands") {
+          // stands: <caller> <partition…> on <record>
+          const on = words.indexOf("on");
+          got.push({ ask, result: access.standsIn(words[0] ?? "", words[on + 1] ?? "", words.slice(1, on).join(" ")) });
+        } else if (q.key === "gated") {
+          const [caller = "", , record = ""] = words;
+          got.push({ ask, result: access.gated(caller, record)?.edge ?? false });
+        } else if (q.key === "ancestors") {
+          got.push({ ask, result: access.ancestors(words[0] ?? "") });
+        } else return fail(`unknown ask ${q.key}`);
+      }
+      const want = json("expected-access.json") as JsonObject[];
+      if (got.length !== want.length) return fail(`${got.length} answers, expected ${want.length}`);
+      for (let i = 0; i < want.length; i++) {
+        const p = subset(got[i] as { [k: string]: Json }, want[i] as { [k: string]: Json }, `${(want[i] as JsonObject).ask}: `);
+        if (p) return fail(p);
+      }
+      return pass;
+    }
+
     const shared_ = readFileSync(join(root, "exchange", "_contracts.crubal"), "utf8");
     const contracts = [...readContracts(shared_), ...readContracts(defs)];
     checkContracts(contracts, dict);
@@ -537,8 +692,24 @@ function runViewsCase(folder: string, caseDir: string, name: string, shared: Dic
     for (const r of records) views.put(r);
     const byId = new Map(records.map((r) => [r.id, r]));
     const viewName = run.view as string;
-    const opts = { picks: run.picks, ...(run.context ? { context: byId.get(run.context) as Rec } : {}), ...(run.page ? { page: run.page } : {}) };
+    // Partitioned views (12.6): the case's edges decide which rows a caller is served.
+    let access: Access | undefined;
+    if (existsSync(file("access.crubal"))) {
+      const { perms, edges } = readAccess(readFileSync(file("access.crubal"), "utf8"));
+      access = new Access(dict, perms, byId, edges, "test.example");
+    }
+    const opts = { picks: run.picks, ...(run.context ? { context: byId.get(run.context) as Rec } : {}), ...(run.page ? { page: run.page } : {}), ...(access ? { access } : {}) };
     const same = (got: Json, want: Json, label: string) => (serialize(got) === serialize(want) ? pass : fail(`${label}: got ${serialize(got)}`));
+
+    if (existsSync(file("expected-stream.json"))) {
+      const first = views.stream(viewName, opts);
+      for (const w of readText(readFileSync(file("write.crubal"), "utf8"), dict).records) {
+        const was = byId.get(w.id);
+        views.put(was ? { ...was, values: { ...was.values, ...w.values } } : foldRecord(w, dict));
+      }
+      const second = views.stream(viewName, opts);
+      return same([first, second] as unknown as Json, json("expected-stream.json"), "stream");
+    }
 
     if (existsSync(file("expected-stale.json"))) {
       views.project(viewName, opts);

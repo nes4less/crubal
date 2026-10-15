@@ -1,0 +1,51 @@
+[
+  {
+    "log": "L-1", "owner": "test.example", "at": "2026-10-15T10:00:00Z",
+    "by": { "person": "C-1" },
+    "source": { "origin": "declared" },
+    "writes": [
+      { "record": "P-1", "envelope": "created", "value": { "kind": "item", "level": "product", "owner": "test.example", "wears": ["Disc"] } },
+      { "record": "P-1", "address": "title", "value": "Christmas Vacation" },
+      { "record": "P-1", "address": "format", "value": "DVD" }
+    ]
+  },
+  {
+    "log": "L-2", "prev": "sha256:0000", "owner": "test.example", "at": "2026-10-15T10:05:00Z",
+    "by": { "contract": "catalog", "run": "R-1" },
+    "intake": "I-1",
+    "source": { "origin": "reported" },
+    "writes": [
+      { "record": "P-1", "address": "title", "value": "National Lampoon's Christmas Vacation", "as": "alternative" },
+      { "record": "P-1", "address": "runtime", "value": { "$qty": "97", "unit": "min" } },
+      { "binding": { "contract": "catalog", "ref": "110", "record": "P-1" } },
+      { "run": "R-1", "contract": "catalog", "key": "catalog|P-1|abc", "state": "closed" }
+    ]
+  },
+  {
+    "log": "L-3", "prev": "sha256:0000", "owner": "test.example", "at": "2026-10-15T10:06:00Z",
+    "by": { "rule": "runtimeRange" },
+    "writes": [
+      { "record": "P-1", "address": "runtime", "as": "held", "rule": "runtimeRange" }
+    ]
+  },
+  {
+    "log": "L-4", "prev": "sha256:0000", "owner": "test.example", "at": "2026-10-15T10:10:00Z",
+    "by": { "contract": "unitizer", "run": "R-2" },
+    "source": { "origin": "observed" },
+    "writes": [
+      { "record": "U-1", "envelope": "created", "value": { "kind": "item", "level": "unit", "owner": "test.example", "of": "P-1" } },
+      { "record": "U-1", "address": "price", "value": { "$money": "12.50", "currency": "USD" } },
+      { "edge": { "edge": "E-1", "who": "C-2", "relation": "seller", "mode": "control", "on": "P-1", "grants": ["seller"], "by": "owner" } },
+      { "instruction": { "issuer": "P-1", "n": 1, "op": "+", "key": "grade" } }
+    ]
+  },
+  {
+    "log": "L-5", "prev": "sha256:0000", "owner": "test.example", "at": "2026-10-15T10:20:00Z",
+    "by": { "contract": "checkout", "run": "R-3" },
+    "writes": [
+      { "record": "U-1", "envelope": "status", "value": { "state": "archived", "reason": "sold" } },
+      { "record": "U-1", "envelope": "applied", "value": { "P-1": 1 } },
+      { "install": { "package": "test.example/test", "version": "2026-11-01" } }
+    ]
+  }
+]

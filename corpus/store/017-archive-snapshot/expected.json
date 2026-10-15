@@ -1,0 +1,31 @@
+{
+  "crubal": "2",
+  "records": [
+    {
+      "id": "U-1", "kind": "item", "level": "unit", "of": "P-1", "owner": "test.example",
+      "status": { "state": "archived", "reason": "sold" },
+      "values": {
+        "price": { "$money": "12.50", "currency": "USD" },
+        "title": "Christmas Vacation",
+        "format": "DVD",
+        "runtime": { "$qty": "97", "unit": "min" }
+      },
+      "sources": {
+        "*": { "origin": "observed", "via": "L-2" },
+        "title": { "origin": "declared", "via": "L-1" },
+        "format": { "origin": "declared", "via": "L-1" },
+        "runtime": { "origin": "declared", "via": "L-1" }
+      }
+    },
+    {
+      "id": "U-2", "kind": "item", "level": "unit", "of": "P-1", "owner": "test.example",
+      "values": { "price": { "$money": "8.00", "currency": "USD" } },
+      "sources": { "*": { "origin": "observed", "via": "L-2" } }
+    },
+    {
+      "id": "P-1", "kind": "item", "level": "product", "owner": "test.example",
+      "values": { "title": "Christmas Vacation", "format": "DVD", "runtime": { "$qty": "98", "unit": "min" } },
+      "sources": { "*": { "origin": "declared", "via": "L-1" } }
+    }
+  ]
+}
