@@ -164,6 +164,9 @@ Each document type is a JSON object with a distinct identifying member.
 - `raw.body` is the payload's exact bytes: a string when they are valid UTF-8, otherwise `raw.base64`
   instead. `raw.sha256` is the hash of those bytes. A payload MUST NOT be parsed and re-serialized for
   storage.
+- `arrival`, when the payload had to find its record (chapter 9.2a): `{"outcome": "bound" | "matched" |
+  "held" | "new", "ref": "…", "by": "identify:asin"}`, plus `candidates` when held. `for` is absent while an
+  arrival is held.
 - `outcome` is one of `absorbed`, `new`, `conflict`, `contradiction`, `unknown`, `ignored`. A
   `contradiction` MUST carry `cites`, naming exactly one of `type` (the facet), `rule`, `value` (an
   address on the same object) or `global` (a global rule and the other record).
@@ -178,10 +181,19 @@ Each document type is a JSON object with a distinct identifying member.
   "at": "2026-10-14T09:40:03Z",
   "by": { "contract": "me:ocr", "run": "R-118" },
   "intake": "I-56AA",
-  "writes": [ { "record": "P-4QX7", "address": "runtime", "value": { "$qty": "97", "unit": "min" } } ],
+  "source": { "origin": "observed" },
+  "writes": [
+    { "record": "P-4QX7", "address": "runtime", "value": { "$qty": "97", "unit": "min" } },
+    { "record": "P-4QX7", "address": "title", "value": "Christmas Vacation (DVD)", "as": "alternative",
+      "source": { "origin": "reported" } },
+    { "record": "U-9KD2", "envelope": "applied", "value": 3 }
+  ],
   "sig": "…"
 }
 ```
+
+`as` is omitted when it is `current`, and a write carries its own `source` only when it differs from the
+entry's (chapter 8.5).
 
 `by` names exactly one of `person`, `contract` (with `run`), `rule`, `migration` or `take` (with `from`,
 chapter 8.5). A write that removes a value has

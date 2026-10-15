@@ -33,6 +33,38 @@ part); it lands as a suggestion. Re-deriving the same record MUST NOT grow its r
 4. **Check** each value against its facet (chapter 4.9), its worn classes (chapter 5.3.1) and the `must`
    rules it touches (chapter 6).
 
+## 9.2a Arrival: finding the record
+
+The fold works on a record, so a payload that doesn't name one must find or make one first. A run that names
+its record (`for`) skips this.
+
+**The source's own ID.** A receive or take contract declares which field of the payload is the other side's
+own ID for the thing (`ref: epid`, chapter 7.2). The store keeps a **binding** for every pair of contract and
+reference it has decided: `(ebayCatalog, 110245563)` is `P-4QX7`.
+
+**Resolving.** In this order, at the level the payload arrives at:
+
+| Step | When | Outcome |
+|---|---|---|
+| 1 | the reference is already bound | **bound**: it goes to that record |
+| 2 | a strong key (`identify`, chapter 11.2) matches one active record | **matched**: it goes there, and the binding is kept |
+| 3 | weak keys (`match`) find candidates, or strong keys find several | **held**: nothing is minted; the payload waits in review with its candidates |
+| 4 | nothing matches | **new**: a record is minted, and the binding is kept |
+
+- **A review decision is a binding.** "This one", "a new record" or "these two are the same" is saved against
+  the reference, so the same thing arriving again goes straight to its record. Nothing is decided twice.
+- **Minted at commit.** A record is minted only when the arrival commits. A form left unsaved, or a pick that
+  is never confirmed, leaves nothing behind.
+- **A person decides on the spot.** In a form, the candidates are shown to the person, and their choice is the
+  review decision.
+- **Archived records are never candidates** (chapter 1.12).
+
+**Levels.** A payload for a lower level resolves its own record first, then its parent the same way. A parent
+that resolves to one record is attached (chapter 1.7). No parent, or candidates only, is not a reason to
+hold: the record is minted standing alone, and the candidates are kept as a suggestion to attach.
+
+The intake record carries the arrival's outcome and the binding it used, as `arrival` (chapter 3.8).
+
 ## 9.3 Outcomes
 
 | Outcome | When | What happens |
@@ -96,6 +128,9 @@ distinct values.
   one-off.
 
 ## 9.6 Replay
+
+Replay is not rebuild (chapter 8.5.3): rebuild restores the past exactly from the log; replay does new work
+under today's definitions.
 
 Replaying an intake record runs the fold again, from its kept bytes, with the current maps, vocabulary and
 rules. Replay is deterministic: the same bytes under the same versions give the same outcomes.

@@ -67,6 +67,12 @@ kind: item
   follows:
     label: edition
     weight: size
+  identify:
+    product: asin
+    unit: serial
+  match:
+    product: gtin; title + format + releaseDate
+  archive: independent
 ```
 
 | Setting | Holds |
@@ -76,6 +82,9 @@ kind: item
 | `schema` | the schema.org type, one for the kind or one per level |
 | `vary` | for each level below the top, the facets that vary at the step into it (chapter 1.7). At the step into `product`, these are the group's **forks** (edition, size × colour), which shoppers pick along |
 | `follows` | facets that follow a fork (Label follows Edition): they are dependent, so filters count them together |
+| `identify` | per level, the **strong** keys: a value held by one record names that record, so an arrival carrying it is bound there (chapter 9.2a). Each MUST also be `unique` within the level |
+| `match` | per level, the **weak** keys, separated by `;`: an arrival sharing one is probably the same record and goes to review, never bound by itself. `a + b` means all of them together. A key that real data reuses (a recycled barcode) belongs here, not in `identify` |
+| `archive` | what archiving a record does to the records below it: `cascade` (they are archived too, with reason `parent archived`) or `independent` (the default) (chapter 1.12) |
 
 Classes add vary steps for their wearers with level prefixes (chapter 5.3.3). A package that `extends`
 another MAY add levels' vary steps to that package's kinds; it MUST NOT remove any.

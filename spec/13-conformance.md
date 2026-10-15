@@ -54,5 +54,5 @@ understand a package's extensions; it MUST NOT require them to conform, and MUST
 ## 13.6 Not part of conformance
 
 How an implementation stores data (tables, documents, files), which rules it compiles into its database, how
-it schedules runs, and how its screens look. Two conforming implementations may differ in all of these and
+it schedules runs, which engine an index uses (chapter 12.6.1), and how its screens look. Two conforming implementations may differ in all of these and
 MUST still give the same results.

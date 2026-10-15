@@ -4,6 +4,10 @@ A **view** is a curated display that data is mapped into: a selection of records
 carousels, search results, landing pages and a product's own page are all views. Views read; they never
 write. Like contracts, they refer only to rules, classes and facets.
 
+A view has two halves. **The store decides**: which records, which values, for which audience, because that
+needs the rules and the audience. **An index serves**: pages, counts, search and caching, because that is
+performance and presentation (12.6).
+
 ## 12.1 Shapes
 
 A **shape** is the display side of a view: named slots, filled by map lines exactly like a send contract's
@@ -107,10 +111,10 @@ filter: edition
 - **Only real values are bucketed.** New and unknown values (chapter 9) never reach a bucket, and neither do
   held values.
 - **A record is in a bucket** when any of its values for the facet is (for a level-prefixed facet, when any of
-  its lower records' values is).
+  its lower records' values is). The store decides this and puts it on the record's projection row (12.6).
 - **Counts.** For each bucket, the count is the number of records in the view's selection, narrowed by every
   *other* filter the shopper has picked, that fall into the bucket. Picking two buckets of one filter means
-  either.
+  either. The index serving the view computes counts from the rows it holds (12.6.1).
 - **Dependent facets.** `dependent:` names facets that follow the filter's facet (chapter 11.2 `follows`);
   their buckets are counted inside each of its buckets.
 
@@ -193,17 +197,41 @@ through contracts as callers (chapter 7).
 
 ## 12.6 Projections
 
-A view is **stored and indexed**, never derived on every read. Its **projection** is one row per selected
-record (the shape's slots), plus the filter postings and counts.
+A view is **stored and indexed**, never derived on every read. The store computes it; an index serves it.
+
+The store keeps the view's **projection**: one row per selected record, for the view's audience, holding the
+shape's slots and, for each filter, the buckets the record falls into. Everything that needs the rules or an
+audience decision happens here: selection, values read through from upper levels and rolled up from lower
+ones, held, new and unknown values left out, and `show` rules applied.
 
 - **The read set.** Every view has the set of keys its `select`, `of`, `order`, slots, filters and `show`
   rules read, worked out at publish. Rules are pure and addresses explicit, so the set is exact.
 - **Staleness.** A write to a key in a view's read set, on a record or on anything it reads through (upper
   levels, shared parts, rollups from lower levels), marks that record's projection stale. Only stale rows are
   rebuilt.
-- **`fresh: write`** rebuilds in the same transaction as the write. **`fresh: 5m`** lets rebuilds batch, and
-  the projection is never older than that.
-- A new version of a view, shape or filter rebuilds its projection in full.
+- **The projection stream.** Every change to a projection is published, in order, as a projection entry
+  (12.7): the view and its version, the audience, the record, and either its new row or `"removed": true`
+  when the record leaves the selection or the audience. Entries are numbered per view and audience, so an
+  index resumes where it stopped.
+- **Freshness.** Projection rows are never rebuilt inside the write's transaction, so a write's cost doesn't
+  grow with the number of views. **`fresh: write`** puts a write's effect on the stream as soon as the write
+  commits, in log order. **`fresh: 5m`** lets rebuilds batch, and the stream is never further behind than
+  that.
+- A new version of a view, shape or filter rebuilds its projection in full, and its stream starts over.
+
+### 12.6.1 Indexes
+
+An **index** is a utility that serves a view: it reads the view's projection stream and answers from it,
+with pages in the view's `order`, filter counts (12.3), search and caching. Which engine it uses is its own
+choice.
+
+- An index MUST read only the projection streams of the views it serves. It never reads records, the log or
+  another view's rows, so it can't show anything a view leaves out.
+- Its pages and counts MUST follow 12.2 and 12.3, over the rows it holds.
+- An index MAY be behind the store, and MUST say which entry number it reflects.
+- **Actions check again.** Nothing that acts relies on an index. A contract checks its `needs` against the
+  store when it runs (chapter 7.4), so a unit that sold a moment ago and still shows can't be bought twice.
+- An index can be dropped and rebuilt from the projection at any time. It is never the truth.
 
 ## 12.7 The JSON form
 
@@ -224,6 +252,21 @@ record (the shape's slots), plus the filter postings and counts.
 
 Shapes use chapter 7.9's map objects for their slots; filters hold `facet`, `buckets` (`[{"name", "values"} or
 {"name", "range"}]`) and `dependent`; roles hold `audience` and `may` (verb → targets).
+
+A projection entry, as the stream carries it:
+
+```json
+{
+  "projection": "dvds /2026-10-13",
+  "audience": "public",
+  "seq": 1042,
+  "record": "P-4QX7",
+  "row": { "cover": { "$image": "https://…/front.jpg" }, "heading": "Christmas Vacation", "price": "4.99 USD" },
+  "buckets": { "genres": ["Comedy", "Holiday"], "decade": ["1980s"], "condition": ["Like new"] }
+}
+```
+
+A record leaving the view is `{"projection", "audience", "seq", "record", "removed": true}`.
 
 ## 12.8 Well-formed views
 

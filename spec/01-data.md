@@ -10,15 +10,18 @@ A **record** is one thing: a product, a unit, a film, a person, a booking. It ha
 **values**.
 
 The envelope is defined by the core and written by the engine. No person or contract writes it directly,
-and it carries no source.
+and it carries no source. Every change to it is still a write, logged like any other (chapter 8.5): the
+engine makes it on behalf of whoever decided it.
 
 | Field | Holds | Notes |
 |---|---|---|
 | `id` | the record's identifier | unique within its owner; never reused |
 | `kind` | the record's root type | fixed when the record is created (1.2) |
 | `level` | which of the kind's levels this record sits at | `product`, `unit` … (1.2) |
-| `of` | the record one level up, by ID | absent at the top level |
+| `of` | the record one level up, by ID | optional at every level; absent when the record stands alone (1.7) |
 | `owner` | who controls the record | a domain (`mediaencyclopedia.com`) |
+| `status` | `active` or `archived`, with a `reason`, and `into` for a merge | 1.12 |
+| `applied` | for a record below the top level: the last of its parent's instructions it has applied | chapter 10.7 |
 | `wears` | the classes the record wears, in order | classes refine the kind (chapter 5) |
 | `created` · `updated` | times, UTC | RFC 3339, `Z` |
 | `parts` | owned parts (1.6) | absent when there are none |
@@ -39,7 +42,9 @@ declares:
 - its **schema.org type** (`schema:Product`), for publishing.
 
 Level names MUST be unique across the kinds of one package, so a level names its kind. A record's level MUST
-be one of its kind's levels, and its `of` MUST name a record of the same kind at the level directly above.
+be one of its kind's levels. Its `of`, when present, MUST name a record of the same kind at the level directly
+above. **`of` is optional at every level:** a kind's levels say where a record may attach, never that it
+must. A unit with no product is a whole record that can be shown, sold and printed on its own (1.7).
 
 ## 1.3 Keys
 
@@ -199,11 +204,37 @@ enough records is proposed as a real facet through review (chapter 9.5); a one-o
 
 ## 1.7 Values down the levels
 
-A record reads the values of the records above it. A lower record stores a value only for a facet the
-package declares to **vary** at that level step; for any other facet it MUST NOT store one, and readers see
-the upper record's value. A stored value at the lower level overrides the upper one for that record only.
+Every key on an attached record is one of two kinds:
 
-A value is stored once, at the highest level where it is true.
+- **Folded keys.** Facets that don't vary at the record's level (a product's title, format, runtime) are
+  facts about the record above. The lower record stores none of them; it reads the upper record's value, so a
+  change above is a change below. A value is stored once, at the highest level where it is true.
+- **Owned keys.** Facets that **vary** at the record's level (a unit's condition, price, sealed) are its own.
+  The record above **projects the keys**: the kind's `vary` steps and the `level::` lines of the classes it
+  wears (chapter 5.3.3) say which keys its lower records have. The lower record **owns the keys and their
+  values**. A change above never changes an owned value, and a change to which keys are projected reaches a
+  lower record only through an instruction (chapter 10.7).
+
+A record that wears a class of its own (5.5) owns that class's keys, whatever the record above projects.
+
+**Standing alone.** A record without `of` reads nothing from above, so it stores every value itself, folded
+keys included, and wears only its own classes. Rules and templates read its own values the same way they
+read through.
+
+**Attaching** a standing-alone record folds its values into the record above, key by key, as observations do
+(chapter 9.7.1):
+
+| The record above | The lower record's value | Result |
+|---|---|---|
+| holds the same value | | the lower copy is dropped and read through; it counts as support |
+| holds no value | | the lower value moves up, keeping its source |
+| holds a different value | | a conflict (chapter 9.3); it goes to review, and may signal a version split (9.7.3) |
+
+Owned keys stay where they are. Attaching is refused, and goes to review, when the two records' worn classes
+have an empty meet (chapter 5.5).
+
+**Detaching** copies every folded value onto the lower record, with its source, so the record keeps working as
+it was. Attaching and detaching are envelope writes (1.1), logged.
 
 ## 1.8 Qualifiers
 
@@ -262,3 +293,36 @@ amounts and money amounts by numeric value, with the same unit or currency; date
 fields, and moments by the instant they name; times of day by clock time and zone; links with the same target string; images by `sha256` when both have one, otherwise by location;
 compounds pair by pair; lists item by item, in order for an ordered list and as sets otherwise. Qualifiers
 take part in equality. Sources never do.
+
+## 1.12 Lifecycle
+
+A record is never deleted. Its life is a short list of envelope writes, each logged with who decided it.
+
+| Event | What happens |
+|---|---|
+| **arrive** | the record is minted, or the arrival is bound to an existing record (chapter 9.2a) |
+| **attach** · **detach** | `of` is set or cleared; values fold up or are copied down (1.7) |
+| **apply** | a lower record applies its parent's pending instructions (chapter 10.7) |
+| **archive** | `status` becomes `archived` with a reason; folded values are copied onto the record |
+| **unarchive** | `status` returns to `active` |
+| **merge** | two records are the same: one survives, the other is archived with reason `merged` and `into` |
+| **split** | the reverse of a merge, or a version split confirmed by a person (chapter 9.7.3) |
+
+**Archive** is one state for everything that leaves the working set: sold, discontinued, a duplicate, a
+mistake. The `reason` says which; a package MAY name reasons of its own.
+
+- **It is always a decision**, by a person or a contract (a checkout that completes archives the unit it
+  sold). Rules MAY suggest archiving; they never archive.
+- **It keeps history true.** Archiving copies every folded value onto the record, with its source, so a later
+  change above never rewrites what an archived record says.
+- **An archived record is left alone:** pending instructions skip it, arrivals never bind to it, rules don't
+  recompute its produced values, and views leave it out unless they select archived records explicitly.
+- **It is reversible.** Unarchiving returns the record to `active` as it was archived; if it is attached, its
+  copied values fold up again as in attaching (1.7), differences going to review.
+- **Cascade is the package's rule** (chapter 11.2, `archive`): archiving a record either archives the records
+  below it, each with reason `parent archived`, or leaves them alone. Unarchiving undoes only what the cascade
+  did.
+
+**Merge.** The survivor keeps its ID. The merged record's values fold into it under the trust order (chapter
+8.4), losers kept as alternatives; its bindings (chapter 9.2a) and lower records move to the survivor; links
+to the merged ID resolve through `into`. An ID is never reused.

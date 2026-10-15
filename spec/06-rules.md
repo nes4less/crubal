@@ -166,6 +166,10 @@ changed, a new rule version narrows a list. Then the engine never deletes and ne
 write. The affected value is **held**: kept, hidden from forms and pages, and flagged with the rule. It
 comes back if the verdict changes again, and a person or a migration recipe (chapter 10) can resolve it.
 
+Holding and releasing are logged writes (`as: held`, chapter 8.5), made by the engine with the rule as `by`.
+They are never worked out again from the rules, so a later rule version can't change what was held in the
+past.
+
 ## 6.8 Rule sets
 
 The rules that apply to a record are those whose `for` it matches, from every class it wears, every facet

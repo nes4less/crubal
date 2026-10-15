@@ -85,10 +85,31 @@ touched (chapter 3.8 gives the JSON).
 - **No consensus.** There is no mining and no global ledger. Every record has an owner, and the owner's log is
   the truth for the owner's data. Anyone holding entries can check the links and signatures.
 
+**The log records effects, not causes.** An entry says exactly what changed in the stored state, so the state
+can be rebuilt from the log alone (8.5.3). Why it changed is linked, not re-derived: the intake record, the
+run, the rule or the recipe.
+
 **What an entry holds:** `log` (its ID), `prev`, `chain` (when there are several), `owner`, `at`, `by`
-(exactly one of `person`, `contract` with `run`, `rule`, `migration` or `take` with the presenter's entry),
-`intake` (when the write came through intake), `writes`, and `sig`. Each write names a `record`, an
-`address`, and a `value` or `"removed": true`.
+(exactly one of `person`, `contract` with `run`, `rule`, `migration`, `instruction` or `take` with the
+presenter's entry), `intake` (when the write came through intake), `source` (the default source of its
+value writes: `origin`, and `owner` and `adopted` when they apply; `via` is the entry itself), `writes`, and
+`sig`.
+
+Each write is one of these:
+
+| Write | Names | Effect |
+|---|---|---|
+| **value** | `record`, `address`, `value` or `"removed": true`, `as`, and `source` when it differs from the entry's | `as` says where the value lands: `current` (the default), `alternative`, `suggestion` or `held` |
+| **envelope** | `record` and one `envelope` member: `created`, `of`, `wears`, `status`, `applied` | the record's envelope (chapter 1.12) |
+| **observation** | the observation document (chapter 3.8) | it is kept, beside the record it supports |
+| **binding** | `contract`, `ref`, and `record` or `"removed": true` | an arrival binding (chapter 9.2a) |
+| **review** | the item, and its `decision` or `"opened": true` | the review queue (chapters 9.5, 10.4) |
+| **instruction** | `record`, its number and the instruction | the record's instructions (chapter 10.7) |
+| **run** | `run`, `contract`, its idempotency key and `state`: `started`, `acted`, `failed`, `closed` | the run's state (chapter 7.5) |
+| **install** | the package identity and version | the store's package; the restamp that follows is its own entries |
+
+What can be computed from the log and the package versions it installs is never logged: completeness and the
+other rule results (chapter 6.9), projections (chapter 12.6), and whether instructions are pending.
 
 ### 8.5.1 Values that crossed a border
 
@@ -102,6 +123,17 @@ A hop can be hidden without breaking the chain. A **redacted entry** keeps only 
 `sig` and `"redacted": "sha256:…"`, the hash of the full entry. Its hash is that value, so the next entry's
 `prev` still matches and the signature still verifies. Redaction is how private hops are shared and how data
 is erased when the law requires it.
+
+### 8.5.3 Rebuild and replay
+
+Two different things, never to be confused:
+
+- **Rebuild** applies the log's entries, in order, to an empty store. It needs no rules, no contracts and no
+  engine of a particular version, and it MUST give exactly the state the store had. A store MUST be able to
+  rebuild; the state it keeps is a cache of the log. Rebuilding from a log with redacted entries gives the
+  state without what they held, which is what erasure means.
+- **Replay** (chapter 9.6) folds kept intake records again under the *current* definitions. It is new work,
+  and it writes new entries.
 
 ## 8.6 Migrations and history
 

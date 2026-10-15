@@ -114,3 +114,37 @@ A package MUST be refused at publish when a recipe breaks these:
   ]
 }
 ```
+
+## 10.7 Instructions
+
+A recipe changes everything a package holds. An **instruction** changes the records below one record: what a
+product tells its units when it changes the keys it projects (chapter 1.7). A lower record never changes
+because its parent's definition now looks different; it changes only when an instruction reaches it.
+
+```crubal
+instructions: P-4QX7
+  1: +grade
+  2: -graded -> grade
+       yes -> Graded
+       no -> -
+  3: -sealed
+```
+
+| Instruction | Does |
+|---|---|
+| `+key` | the key is projected; lower records gain it, empty (and incomplete, if required) |
+| `-key` | the key and its value leave the lower record; the value stays in the log |
+| `-key -> other` | the value moves to another key, with value maps written below it as in a contract's map (chapter 7.3) |
+
+- **Numbered and pending.** A record's instructions are numbered in order. Each lower record's envelope says
+  the last one it has `applied` (chapter 1.1); the rest are pending. A change above writes one instruction,
+  however many records are below.
+- **Applied by touch, drain or hand.** Pending instructions are applied, in order, before anything else
+  touches the lower record: a form opens it, a write reaches it, a contract runs on it. A store MAY also drain
+  them in the background at a rate it chooses, and a person MAY apply them to one record or many.
+- **Readers see what is applied.** Until a record applies an instruction, it shows its keys as they were.
+- **Archived records are skipped** (chapter 1.12). Unarchiving makes their pending instructions apply again.
+- Applying an instruction is a write, logged with `by: {"instruction": "<record> #<n>"}`. A value that a
+  value map can't place goes to the review queue and is held, as in a recipe (10.4).
+- A record's publish of a change that stops projecting a key its lower records hold values for MUST carry the
+  instruction for it.

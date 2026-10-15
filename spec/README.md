@@ -49,7 +49,7 @@ An implementation claims one level, and every level includes the ones above it i
 | **Rules** | also evaluates rules, and refuses a write that breaks a `must` rule (chapter 6) |
 | **Store** | also keeps sources and signed logs, runs intake with raw bytes kept, and applies migration recipes (chapters 8–10) |
 | **Exchange** | also runs contracts, offer and take, and verifies signatures across owners (chapters 7, 9, 11) |
-| **Views** | also builds stored projections, filter sub-indexes, audiences and roles (chapter 12) |
+| **Views** | also computes stored projections with their filter buckets, audiences and roles, publishes the projection stream, and serves it through an index, its own or any that conforms (chapter 12) |
 
 A claim is proven by passing that level's folder of the [test corpus](../corpus/README.md).
 
@@ -59,3 +59,5 @@ A claim is proven by passing that level's folder of the [test corpus](../corpus/
 - The units table (UN/CEFACT based) that names which unit spellings are valid.
 - Losing values kept as alternatives (an `alternatives` map shaped like `sources`): recommended, awaiting a
   call.
+- How an index subscribes to a projection stream (a contract kind of its own, or a `send` contract whose
+  payload is the entry).

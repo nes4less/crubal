@@ -131,8 +131,8 @@ common value of a facet).
 - A write that makes a record wear a class whose `for` doesn't include the record's kind MUST be refused.
 - A write that makes a record wear classes whose meet is empty for some facet MUST be refused: no value of
   that facet could satisfy them all.
-- **Lower levels read the wears above them.** A unit wears its product's classes and its own; it MUST NOT
-  shed a class worn above.
+- **Lower levels read the wears above them.** An attached unit wears its product's classes and its own; it
+  MUST NOT shed a class worn above. A unit standing alone wears only its own (chapter 1.7).
 - **Owned parts wear their own classes** (`wears` on the part), resolved separately from the whole's.
 - **Classes can be proposed.** A receive contract MAY propose classes for a record. A proposal lands as worn
   only by consensus (at least two independent sources proposing the same class, and none vetoing it; chapter
@@ -145,6 +145,10 @@ the rest of the rule results.
 **Unasked values.** A record may hold a value for a facet that no worn class asks for (a class was taken
 off, a line was removed, intake brought it). The value is kept, stays readable, and is flagged as
 **unasked**. It is never dropped silently.
+
+**Owned keys leave only by instruction.** When the classes a record wears stop projecting a lower-level key
+its lower records hold values for, those records don't change on their own: the key leaves them only through
+an instruction (chapter 10.7), `-key` or `-key -> other`.
 
 ## 5.6 Asking for parts
 
@@ -247,7 +251,7 @@ and narrows nothing: redundant lines hide drift.
 |---|---|---|
 | `label`, `describe`, order, sections, `frame` | safe | no |
 | add a facet line, add a used class, widen a narrowing | safe | no |
-| remove a facet line or a used class | safe for data; values become unasked (5.5) | no |
+| remove a facet line or a used class | safe for data; values become unasked (5.5) | no; a `level::` line that lower records hold values for needs an instruction (chapter 10.7) |
 | narrow a line, add `!`, add a level prefix | breaking for data that breaks it | `review` |
 | narrow `for` | breaking for records of the dropped kinds | `review` |
 | remove a part slot | breaking for records with those parts | `review` |
