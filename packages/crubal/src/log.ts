@@ -6,6 +6,7 @@
 
 import { serialize } from "./canonical.ts";
 import type { Json, JsonObject, Record, Source, Status } from "./model.ts";
+import { MemoryRecords, type RecordSet } from "./records.ts";
 import { writeHash } from "./store.ts";
 import { CrubalError } from "./tree.ts";
 
@@ -15,7 +16,7 @@ export type Entry = JsonObject;
 
 /** Everything a store holds that the log carries. */
 export type State = {
-  records: Map<string, Record>;
+  records: RecordSet;
   edges: Map<string, JsonObject>;
   /** `contract|ref` → record */
   bindings: Map<string, string>;
@@ -31,7 +32,7 @@ export type State = {
 };
 
 export function emptyState(): State {
-  return { records: new Map(), edges: new Map(), bindings: new Map(), instructions: new Map(), observations: [], reviews: [], runs: new Map(), installed: [], reads: [], definitions: new Map() };
+  return { records: new MemoryRecords(), edges: new Map(), bindings: new Map(), instructions: new Map(), observations: [], reviews: [], runs: new Map(), installed: [], reads: [], definitions: new Map() };
 }
 
 const MEMBERS = ["facet", "class", "rule", "contract", "kind", "view", "shape", "filter", "permissions", "ownership"];
@@ -257,7 +258,7 @@ export function stateJson(state: State): JsonObject {
 
 /** What an operation works on: a scratch copy of the state. Nothing in it is the truth until it is logged. */
 export type Draft = {
-  records: Map<string, Record>;
+  records: RecordSet;
   bindings: Map<string, string>;
   instructions: Map<string, JsonObject[]>;
   edges: Map<string, JsonObject>;
@@ -369,7 +370,7 @@ export class Journal {
 
   constructor(owner: string, records: Record[] = [], at?: string) {
     this.owner = owner;
-    this.draft = { records: new Map(), bindings: new Map(), instructions: new Map(), edges: new Map(), review: [] };
+    this.draft = { records: new MemoryRecords(), bindings: new Map(), instructions: new Map(), edges: new Map(), review: [] };
     for (const r of records) this.draft.records.set(r.id, structuredClone(r));
     if (records.length) this.commit({ migration: "backfill" }, () => {}, at);
   }

@@ -7,6 +7,7 @@ import { type Expr, evaluate, parseCondition, reads, type StateOf } from "./cond
 import type { Dictionary, Facet } from "./defs.ts";
 import { resolve } from "./dictionary.ts";
 import type { Json, JsonObject, Record } from "./model.ts";
+import type { RecordSet } from "./records.ts";
 import { itemText } from "./print-text.ts";
 import { CrubalError, readTree } from "./tree.ts";
 
@@ -205,7 +206,11 @@ export class Engine {
   private store = new Map<string, Stored>();
   private order: string[] = [];
 
-  constructor(dict: Dictionary, rules: Rule[]) {
+  /** The records a global rule reads (6.6), when the engine runs inside a store; else its own cache. */
+  private readonly records?: () => RecordSet;
+
+  constructor(dict: Dictionary, rules: Rule[], records?: () => RecordSet) {
+    this.records = records;
     this.dict = dict;
     this.rules = [...shortcutRules(dict), ...rules];
   }
@@ -255,6 +260,8 @@ export class Engine {
     const key = r.thenText.replace(/ is unique$/, "");
     const mine = rec.values[key];
     if (emptyOf(mine) || (isObj(mine) && "$empty" in mine)) return false;
+    const set = this.records?.();
+    if (set && mine !== undefined) return set.byKey(key, mine, rec.level).some((r) => r.id !== rec.id && r.status?.reason !== "merged");
     const want = JSON.stringify(mine);
     for (const [id, s] of this.store) {
       if (id === rec.id || s.rec.level !== rec.level || s.rec.status?.reason === "merged") continue;

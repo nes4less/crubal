@@ -7,6 +7,7 @@
 import { serialize } from "./canonical.ts";
 import type { ClassDef, Dictionary, Facet } from "./defs.ts";
 import type { Json, JsonObject, Record, Source } from "./model.ts";
+import { MemoryRecords, type RecordSet } from "./records.ts";
 import { readUnder } from "./read-text.ts";
 import { land } from "./store.ts";
 import { type Node, readTree } from "./tree.ts";
@@ -16,7 +17,7 @@ const isObj = (v: Json | undefined): v is JsonObject => typeof v === "object" &&
 export type Instruction = { issuer: string; n: number; op: "+" | "-"; key: string; to?: string; map: [string, string][] };
 
 export type Store = {
-  records: Map<string, Record>;
+  records: RecordSet;
   bindings: Map<string, string>;
   instructions: Map<string, Instruction[]>;
   review: JsonObject[];
@@ -25,11 +26,11 @@ export type Store = {
 type Extra = Record & { alternatives?: { [a: string]: JsonObject[] }; suggestions?: { [a: string]: JsonObject[] }; held?: { [a: string]: JsonObject } };
 
 export function emptyStore(): Store {
-  return { records: new Map(), bindings: new Map(), instructions: new Map(), review: [] };
+  return { records: new MemoryRecords(), bindings: new Map(), instructions: new Map(), review: [] };
 }
 
 /** A record's values with everything above it read through (1.7); a record standing alone reads nothing. */
-export function effective(records: Map<string, Record>, r: Record): JsonObject {
+export function effective(records: RecordSet, r: Record): JsonObject {
   const up = r.of ? records.get(r.of) : undefined;
   return { ...(up ? effective(records, up) : {}), ...r.values };
 }
@@ -43,7 +44,7 @@ function classLines(dict: Dictionary, name: string, seen = new Set<string>()): C
 }
 
 /** The keys a record owns (1.7): its level's vary step, and the `level::` lines of the classes above and on it. */
-export function ownedKeys(dict: Dictionary, records: Map<string, Record>, r: Record): Set<string> {
+export function ownedKeys(dict: Dictionary, records: RecordSet, r: Record): Set<string> {
   const keys = new Set(dict.vary.get(r.level) ?? []);
   const up = r.of ? records.get(r.of) : undefined;
   for (const w of [...(up?.wears ?? []), ...(r.wears ?? [])]) for (const l of classLines(dict, w)) if (l.level === r.level) keys.add(l.facet);
@@ -155,7 +156,7 @@ export function detach(store: Store, lowerId: string, dict: Dictionary): void {
 }
 
 function childrenOf(store: Store, id: string, along: "of" | "within"): Record[] {
-  return [...store.records.values()].filter((r) => r[along] === id);
+  return store.records.childrenOf(id, along);
 }
 
 /** Archive (1.12): snapshot folded values, set the status, cascade as the package says. */

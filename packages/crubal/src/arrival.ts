@@ -6,6 +6,7 @@
 import { serialize } from "./canonical.ts";
 import type { Dictionary } from "./defs.ts";
 import type { Json, JsonObject, Record, Source } from "./model.ts";
+import type { RecordSet } from "./records.ts";
 import { type Contract, fieldPath, type IntakeRecord, land, receive } from "./store.ts";
 
 const isObj = (v: Json | undefined): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -21,7 +22,7 @@ export type Arrival = {
   ref?: string;
 };
 
-export type ArrivalStore = { records: Map<string, Record>; bindings: Map<string, string> };
+export type ArrivalStore = { records: RecordSet; bindings: Map<string, string> };
 
 /** The value at a payload field path, or undefined. */
 function fieldValue(payload: Json, path: string): Json | undefined {
@@ -66,7 +67,7 @@ export function arrive(
   const refText = ref === undefined ? undefined : typeof ref === "string" ? ref : serialize(ref);
   const bindKey = refText === undefined ? undefined : `${c.name}|${refText}`;
   const source: Source = opts.source ?? { origin: c.origin, via: intake.intake };
-  const atLevel = [...store.records.values()].filter((r) => r.level === level);
+  const atLevel = store.records.atLevel(level);
   const active = (r: Record) => !r.status || r.status.state === "active";
   const finish = (arrival: Arrival, record: Record | undefined) => {
     if (record) {

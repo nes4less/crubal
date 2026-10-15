@@ -9,6 +9,7 @@ import { evaluate, parseCondition } from "./conditions.ts";
 import type { Dictionary, Facet } from "./defs.ts";
 import { splitTop } from "./lex.ts";
 import type { Json, JsonObject, Record } from "./model.ts";
+import { MemoryRecords, type RecordSet } from "./records.ts";
 import { Engine } from "./rules.ts";
 import { CrubalError, readTree } from "./tree.ts";
 
@@ -223,7 +224,7 @@ function label(key: string): string {
 export class Views {
   readonly dict: Dictionary;
   readonly set: ViewSet;
-  private records = new Map<string, Record>();
+  private records: RecordSet = new MemoryRecords();
   private engine: Engine;
 
   constructor(dict: Dictionary, set: ViewSet) {
@@ -248,7 +249,7 @@ export class Views {
   }
 
   private below(r: Record, level: string): Record[] {
-    return [...this.records.values()].filter((x) => x.of === r.id && x.level === level);
+    return this.records.childrenOf(r.id, "of", level);
   }
 
   /** The values an address reads, as a list: own values, or a lower level's (`unit::price`). */
@@ -327,8 +328,7 @@ export class Views {
   /** The records a view selects, curated and ordered, before filters and paging. */
   select(v: View, opts: ProjectOptions = {}): Record[] {
     const audience = opts.audience ?? v.show;
-    let rows = [...this.records.values()].filter((r) => {
-      if (v.level && r.level !== v.level) return false;
+    let rows = (v.level ? this.records.atLevel(v.level) : this.records.all()).filter((r) => {
       if (v.wears.some((w) => !this.wearsOf(r).includes(w))) return false;
       if (v.hide.includes(r.id)) return false;
       const vals = { ...this.effective(r), id: r.id };
@@ -507,7 +507,7 @@ export class Views {
       if (reads.has(key) && (!v.level || write.level === v.level)) out.add(write.id);
       if (reads.has(`${write.level}::${key}`) && write.of) out.add(write.of);
       if (reads.has(key) && v.level && write.level !== v.level) {
-        for (const r of this.records.values()) if (r.of === write.id && r.level === v.level) out.add(r.id);
+        for (const r of this.records.childrenOf(write.id, "of", v.level)) out.add(r.id);
       }
     }
     return [...out];

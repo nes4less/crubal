@@ -37,7 +37,9 @@ the internals later behind the same API.
   changes (`log.ts`); arrival with bindings and strong and weak keys (`arrival.ts`); folded and owned keys
   with attach, detach, archive, merge and instructions (`lifecycle.ts`); owners, edges, modes, the grantor
   chain, permission menus, gates and emergency access (`access.ts`); partitioned views, the projection
-  stream and stream subscriptions with cursors and resets (`views.ts`, `exchange.ts`); and a border that
+  stream and stream subscriptions with cursors and resets (`views.ts`, `exchange.ts`); the record set every
+  module reads through, so a backend that loads only what an operation needs can stand in for the memory
+  one (`records.ts`, docs/design/store.md); and a border that
   consults access, journals every run, and grants a consumer's edge (`exchange.ts`).
 
 A run applies the rules (7.4 step 6): a value a `must` rule won't have is parked as a contradiction citing

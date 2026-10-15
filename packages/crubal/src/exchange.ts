@@ -11,6 +11,7 @@ import { serialize } from "./canonical.ts";
 import { evaluate, parseCondition, type StateOf } from "./conditions.ts";
 import type { ClassLine, Dictionary } from "./defs.ts";
 import type { Json, JsonObject, Record, Source } from "./model.ts";
+import { MemoryRecords, type RecordSet } from "./records.ts";
 import { Engine, type Result, type Rule } from "./rules.ts";
 import { isSchedule, readSchedule, ticksDue } from "./schedule.ts";
 import { type Contract, fieldPath, type IntakeOutcome, type Keys, land, receive, sha256, verifyChain } from "./store.ts";
@@ -152,7 +153,7 @@ export class Exchange {
   readonly contracts: Map<string, Contract>;
   readonly roles: Role[];
   /** The records, shared with the Access that decides over them (chapter 14). */
-  records = new Map<string, Record>();
+  records: RecordSet = new MemoryRecords();
   bindings = new Map<string, string>();
   /** Set to make the border consult access: `run` needs the caller's `run` item, gated access suggests. */
   access?: Access;
@@ -172,7 +173,7 @@ export class Exchange {
     this.dict = dict;
     this.contracts = new Map(contracts.map((c) => [c.name, c]));
     this.roles = roles;
-    this.engine = new Engine(dict, rules);
+    this.engine = new Engine(dict, rules, () => this.records);
   }
 
   /**
@@ -386,7 +387,7 @@ export class Exchange {
     const c = this.contracts.get(name);
     if (!c) throw new Error(`no contract ${name}`);
     const log = this.nextLog();
-    const owner = this.access?.owner ?? [...this.records.values()][0]?.owner ?? "";
+    const owner = this.access?.owner ?? this.journal?.owner ?? this.records.all()[0]?.owner ?? "";
     // A refusal by the rules puts everything back: the arrival never happened.
     const prevRecords = new Map(this.records);
     const prevBindings = new Map(this.bindings);
@@ -488,7 +489,7 @@ export class Exchange {
         results.push({ tick, ...r } as Json);
         continue;
       }
-      const targets = c.parts.for ? [...this.records.values()].filter((r) => (r.wears ?? []).includes(c.parts.for as string) || r.level === c.parts.for || r.kind === c.parts.for).map((r) => r.id) : [];
+      const targets = c.parts.for ? this.records.forTarget(c.parts.for).map((r) => r.id) : [];
       if (!targets.length) {
         const log = this.nextLog();
         this.commit({ contract: name, run: log }, log, { contract: name, tick, key, state: "acted" });

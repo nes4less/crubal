@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Access, readAccess } from "../src/access.ts";
+import { MemoryRecords } from "../src/records.ts";
 import { readDefinitions } from "../src/defs.ts";
 import { apply, emptyStore, issue, pending } from "../src/lifecycle.ts";
 import { rebuild, redactable } from "../src/log.ts";
@@ -68,7 +69,7 @@ edge: E-3
   until: 2027-06-30T00:00Z
   by: E-1
 `);
-  const records = new Map([
+  const records = new MemoryRecords([
     ["F-1", { id: "F-1", kind: "facility", level: "facility", owner: "t", values: {} }],
     ["L-1", { id: "L-1", kind: "league", level: "league", owner: "t", within: "F-1", values: {} }],
     ["T-1", { id: "T-1", kind: "team", level: "team", owner: "t", within: "L-1", values: {} }],

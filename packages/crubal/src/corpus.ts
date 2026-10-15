@@ -19,6 +19,7 @@ import { readPiece } from "./lex.ts";
 import { readUnder } from "./read-text.ts";
 import { readTree } from "./tree.ts";
 import type { Record as Rec } from "./model.ts";
+import { MemoryRecords } from "./records.ts";
 import { checkRules, Engine, readRules, type Result, type Rule } from "./rules.ts";
 import { checkPackage, checkRecord, facetJson, foldRecord, type Outcome, resolve, resolvedJson } from "./dictionary.ts";
 import type { Json, JsonObject } from "./model.ts";
@@ -516,7 +517,7 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
           const { perms, edges } = readAccess(defs);
           checkPermissions(perms, d, new Set(readContracts(defs).map((c) => c.name)));
           const recs = data.trim() ? readText(data, d).records.map((r) => foldRecord(r, d)) : [];
-          const access = new Access(d, perms, new Map(recs.map((r) => [r.id, r])), [], "test.example");
+          const access = new Access(d, perms, new MemoryRecords(recs.map((r) => [r.id, r])), [], "test.example");
           // A record's refusal names the line its header was written at.
           const lineOf = (id: string) => {
             const i = input.split("\n").findIndex((l) => new RegExp(`^\\w+: ${id}(\\s|$)`).test(l));
@@ -558,7 +559,7 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
       checkPermissions(perms, dict, new Set(readContracts(accessText).map((c) => c.name)));
       const recs = readText(data, dict).records.map((r) => foldRecord(r, dict));
       const now = existsSync(file("now.txt")) ? readFileSync(file("now.txt"), "utf8").trim() : undefined;
-      const access = new Access(dict, perms, new Map(recs.map((r) => [r.id, r])), edges, "test.example", now);
+      const access = new Access(dict, perms, new MemoryRecords(recs.map((r) => [r.id, r])), edges, "test.example", now);
       access.checkWithin();
       const got: JsonObject[] = [];
       for (const q of readTree(readFileSync(file("ask.crubal"), "utf8"))) {
@@ -810,7 +811,7 @@ function runViewsCase(folder: string, caseDir: string, name: string, shared: Dic
     const text = data.trim() ? data : readFileSync(join(root, "views", "_records.crubal"), "utf8");
     const records = readText(text, dict).records.map((r) => foldRecord(r, dict));
     for (const r of records) views.put(r);
-    const byId = new Map(records.map((r) => [r.id, r]));
+    const byId = new MemoryRecords(records.map((r) => [r.id, r]));
     const viewName = run.view as string;
     // Partitioned views (12.6): the case's edges decide which rows a caller is served.
     let access: Access | undefined;

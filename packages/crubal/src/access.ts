@@ -8,6 +8,7 @@ import { compareTime, evaluate, parseCondition } from "./conditions.ts";
 import type { Dictionary } from "./defs.ts";
 import { splitTop } from "./lex.ts";
 import type { Json, JsonObject, Record } from "./model.ts";
+import type { RecordSet } from "./records.ts";
 import { CrubalError, type Node, readTree } from "./tree.ts";
 
 const isObj = (v: Json | undefined): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -170,10 +171,10 @@ export class Access {
   edges = new Map<string, Edge>();
   readonly dict: Dictionary;
   readonly perms: Permissions;
-  readonly records: Map<string, Record>;
+  readonly records: RecordSet;
   readonly owner: string;
   readonly now: string | undefined;
-  constructor(dict: Dictionary, perms: Permissions, records: Map<string, Record>, edges: Edge[], owner: string, now?: string) {
+  constructor(dict: Dictionary, perms: Permissions, records: RecordSet, edges: Edge[], owner: string, now?: string) {
     this.dict = dict;
     this.perms = perms;
     this.records = records;
@@ -195,7 +196,7 @@ export class Access {
 
   /** Refuse a `within` cycle (14.12). `lineOf` names the line a record was written at, for the refusal. */
   checkWithin(lineOf?: (id: string) => number | undefined): void {
-    for (const r of this.records.values()) {
+    for (const r of this.records.all()) {
       const seen = new Set<string>([r.id]);
       let cur = r.within;
       while (cur) {
