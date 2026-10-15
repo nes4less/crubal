@@ -1,0 +1,6 @@
+prepare: list
+on: P-1
+
+acted: L-R1
+
+undo: L-R1

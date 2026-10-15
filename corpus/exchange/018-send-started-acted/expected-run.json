@@ -1,0 +1,5 @@
+[
+  { "contract": "listing", "record": "U-1", "started": true, "log": "L-R1", "key": "listing|U-1|a9d0ba466a0c9c8ffe9667ec148b303c7f9e82f22987a8f743bf2c0e5f5507a7",
+    "payload": { "Title": "Christmas Vacation", "aspects": { "Format": "DVD" }, "price": { "value": "9.99", "currency": "USD" } } },
+  { "contract": "listing", "record": "U-1", "run": "L-R1", "acted": true }
+]

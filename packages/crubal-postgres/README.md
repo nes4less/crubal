@@ -80,7 +80,19 @@ in order and then the define writes, cached per chain head; the projector and `P
 their dictionary, views, contracts and permissions from it, so nothing is handed in any more except in
 tests.
 
+## Sends with a real act
+
+A send over the store is two entries with the act between them (docs/design/runs.md): `prepare` logs
+`started` with the idempotency key and the payload's hash, the payload itself kept in `outtake`; the
+contract's adapter (`adapters: { [contract]: (contract, payload, run) => … }`, host code, never a
+package's) acts outside any transaction; then `acted` or `failed` with its attempt. A run still open
+(`started`, or `failed` with attempts left under `retry`) is seeded into every fresh border from the runs
+table, so a restart never acts twice and `retry(run)` acts again from the kept payload without re-mapping.
+After the last attempt a review item `run:<contract>` opens. An answer the adapter brings back closes the
+run as a receive with `via` that run; `undo(run)` runs the reversing contract naming its cause; `erase`
+takes the record's outtake rows with its values.
+
 ## Not yet here
 
-The send split with a real act between `started` and `acted` (docs/design/runs.md), and the host:
-authentication, secrets, adapters, signing, loops and the HTTP surface (docs/design/host.md).
+The host: authentication, secrets, named adapters, signing, the loops and the HTTP surface
+(docs/design/host.md); forms as data (docs/design/index-and-forms.md).

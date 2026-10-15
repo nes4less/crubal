@@ -1,0 +1,4 @@
+[
+  { "contract": "listing", "record": "U-1", "started": true, "log": "L-R1" },
+  { "contract": "listing", "record": "U-1", "started": false, "reason": "a run with this payload is already started", "run": "L-R1" }
+]

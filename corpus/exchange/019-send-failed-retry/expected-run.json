@@ -1,0 +1,5 @@
+[
+  { "contract": "label", "record": "P-1", "started": true, "log": "L-R1" },
+  { "contract": "label", "record": "P-1", "run": "L-R1", "failed": true, "attempt": 1, "retry": 1 },
+  { "contract": "label", "record": "P-1", "run": "L-R1", "failed": true, "attempt": 2, "dead": true, "review": "run:label" }
+]

@@ -1,0 +1,14 @@
+// A failed act is retried as the contract says (7.5): retry: 1 every 10m allows two attempts. After the
+// last one the run stays failed and a review item run:<contract> opens, grouped by contract across records.
+contract: label
+  kind: send
+  writes:
+    title -> Title
+  retry: 1 every 10m
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: DVD

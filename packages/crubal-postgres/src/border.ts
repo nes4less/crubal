@@ -16,7 +16,10 @@ import { type Contract, receive } from "../../crubal/src/store.ts";
 import type { StreamEntry } from "../../crubal/src/views.ts";
 import type { PgStore } from "./store.ts";
 
-export type BorderOptions = { dict: Dictionary; contracts: Contract[]; roles?: Role[]; rules?: Rule[]; perms?: Permissions };
+/** What performs a run's act (7.4 step 4): the host's code for a system; never a package's. */
+export type Adapter = (contract: Contract, payload: JsonObject, run: string) => Promise<{ acted: true; body?: string } | { failed: string }>;
+
+export type BorderOptions = { dict: Dictionary; contracts: Contract[]; roles?: Role[]; rules?: Rule[]; perms?: Permissions; adapters?: { [contract: string]: Adapter } };
 
 /** The border's options from the store's own definitions (docs/design/publishing.md). */
 export async function borderOptions(store: PgStore): Promise<BorderOptions> {
@@ -47,14 +50,24 @@ export class PgBorder {
   }
 
   /** Runs so far and the keys acted on, from the runs table, so a fresh Exchange continues where the last left off. */
-  private async past(): Promise<{ runs: number; sent: Set<string> }> {
-    const { rows } = await this.store.pool.query("select json from runs where owner = $1", [this.owner]);
+  private async past(): Promise<{ runs: number; sent: Set<string>; known: Map<string, { contract: string; record: string }>; open: Map<string, { contract: string; record: string; key: string; attempts: number }> }> {
+    const { rows } = await this.store.pool.query("select run, json from runs where owner = $1", [this.owner]);
     const sent = new Set<string>();
+    const known = new Map<string, { contract: string; record: string }>();
+    const open = new Map<string, { contract: string; record: string; key: string; attempts: number }>();
     for (const r of rows as Row[]) {
       const j = r.json as JsonObject;
-      if (typeof j.key === "string" && (j.state === "acted" || j.state === "closed")) sent.add(j.key);
+      const run = String(r.run);
+      known.set(run, { contract: String(j.contract), record: String(j.record ?? "") });
+      if (typeof j.key !== "string") continue;
+      if (j.state === "acted" || j.state === "closed" || j.state === "started" || j.state === "failed") sent.add(j.key);
+      // A run still open: started, or failed with attempts left (docs/design/runs.md).
+      const c = this.contracts.get(String(j.contract));
+      const allowed = c ? 1 + Number((c.parts.retry ?? "").match(/^(\d+)\s+every\s+/)?.[1] ?? 0) : 1;
+      const attempts = Number(j.attempt ?? 0);
+      if (j.state === "started" || (j.state === "failed" && attempts < allowed)) open.set(run, { contract: String(j.contract), record: String(j.record ?? ""), key: j.key, attempts });
     }
-    return { runs: rows.length, sent };
+    return { runs: rows.length, sent, known, open };
   }
 
   /**
@@ -63,13 +76,17 @@ export class PgBorder {
    * draft (it may run more than once while the working set loads).
    */
   async run<T extends RunResult>(fn: (ex: Exchange) => T, at?: string): Promise<T> {
-    const { runs, sent } = await this.past();
+    const { runs, sent, known, open } = await this.past();
     const { out } = await this.store.commitFrom((draft: Draft) => {
       const ex = new Exchange(this.o.dict, this.o.contracts, this.o.roles ?? [], this.o.rules ?? []);
       ex.records = draft.records;
       ex.bindings = draft.bindings;
+      ex.review = draft.review;
       ex.runs = runs;
       for (const k of sent) ex.sent.add(k);
+      for (const [k, v] of known) ex.runsKnown.set(k, v);
+      // A copy each run: the operation may run more than once while the working set loads (working.ts).
+      for (const [k, v] of open) ex.started.set(k, { ...v });
       if (this.o.perms) {
         ex.access = new Access(this.o.dict, this.o.perms, draft.records, [...draft.edges.values()] as unknown as Edge[], this.owner);
         ex.access.edges = draft.edges as unknown as Map<string, Edge>;
@@ -95,11 +112,11 @@ export class PgBorder {
     );
   }
 
-  /** A receive contract's run on a record (7.4 steps 5–6), its intake kept. */
-  async receive(name: string, recordId: string, body: string, callerId?: string, at?: string): Promise<RunResult> {
+  /** A receive contract's run on a record (7.4 steps 5–6), its intake kept; with `forRun`, a late answer closing that run. */
+  async receive(name: string, recordId: string, body: string, callerId?: string, at?: string, forRun?: string): Promise<RunResult> {
     const c = this.contracts.get(name);
     if (!c) throw new Error(`no contract ${name}`);
-    const r = await this.run((ex) => ex.receiveRun(name, recordId, body, callerId), at);
+    const r = await this.run((ex) => ex.receiveRun(name, recordId, body, callerId, forRun), at);
     if (typeof r.log === "string") await this.keepIntake(c, body, recordId, r.log, at);
     return r;
   }
@@ -114,9 +131,59 @@ export class PgBorder {
     return r;
   }
 
-  /** A send or form contract's run (7.4 steps 1–4): acts at most once per contract, record and payload. */
+  /**
+   * A send (7.4, docs/design/runs.md): `started` in one entry with the payload kept in outtake, the adapter
+   * outside any transaction, then `acted` or `failed` in another; an answer the adapter brings back closes
+   * the run as a receive. Without an adapter the act is nothing and the run is acted.
+   */
   async send(name: string, recordId: string, callerId?: string, at?: string): Promise<RunResult> {
-    return this.run((ex) => ex.run(name, recordId, callerId), at);
+    const p = await this.run((ex) => ex.prepare(name, recordId, callerId), at);
+    if (p.started !== true) return p;
+    const payload = (p.payload ?? {}) as JsonObject;
+    const bytes = Buffer.from(JSON.stringify(payload), "utf8");
+    const { createHash } = await import("node:crypto");
+    await this.store.pool.query("insert into outtake (owner, run, contract, record, key, raw, sha256) values ($1, $2, $3, $4, $5, $6, $7) on conflict (owner, run) do nothing", [this.owner, String(p.log), name, recordId, String(p.key), bytes, createHash("sha256").update(bytes).digest("hex")]);
+    return { ...p, ...(await this.act(name, String(p.log), recordId, payload, callerId, at)) };
+  }
+
+  /** The act and what follows it: acted or failed, and the answer landed against the run. */
+  private async act(name: string, run: string, recordId: string, payload: JsonObject, callerId?: string, at?: string): Promise<RunResult> {
+    const c = this.contracts.get(name);
+    if (!c) throw new Error(`no contract ${name}`);
+    const adapter = this.o.adapters?.[name];
+    let outcome: Awaited<ReturnType<Adapter>>;
+    try {
+      outcome = adapter ? await adapter(c, payload, run) : { acted: true };
+    } catch (e) {
+      outcome = { failed: e instanceof Error ? e.message : String(e) };
+    }
+    if ("failed" in outcome) return this.run((ex) => ex.failed(run, outcome.failed), at);
+    const acted = await this.run((ex) => ex.acted(run, at), at);
+    if (outcome.body) {
+      const answered = await this.receive(name, recordId, outcome.body, callerId, at, run);
+      return { ...acted, answer: answered };
+    }
+    return acted;
+  }
+
+  /** Try a failed run again from its kept payload (7.5 `retry`), never re-mapping it. */
+  async retry(run: string, callerId?: string, at?: string): Promise<RunResult> {
+    const { rows } = await this.store.pool.query("select contract, record, raw from outtake where owner = $1 and run = $2", [this.owner, run]);
+    const row = rows[0] as Row | undefined;
+    if (!row) throw new Error(`no payload kept for ${run}`);
+    const payload = JSON.parse(Buffer.from(row.raw as Uint8Array).toString("utf8")) as JsonObject;
+    return this.act(String(row.contract), run, String(row.record ?? ""), payload, callerId, at);
+  }
+
+  /** Run the contract that reverses a run (7.5 `undo`), naming its cause. */
+  async undo(run: string, callerId?: string, at?: string): Promise<RunResult> {
+    const p = await this.run((ex) => ex.undo(run, callerId), at);
+    if (p.started !== true) return p;
+    const payload = (p.payload ?? {}) as JsonObject;
+    const bytes = Buffer.from(JSON.stringify(payload), "utf8");
+    const { createHash } = await import("node:crypto");
+    await this.store.pool.query("insert into outtake (owner, run, contract, record, key, raw, sha256) values ($1, $2, $3, $4, $5, $6, $7) on conflict (owner, run) do nothing", [this.owner, String(p.log), String(p.contract), String(p.record), String(p.key), bytes, createHash("sha256").update(bytes).digest("hex")]);
+    return { ...p, ...(await this.act(String(p.contract), String(p.log), String(p.record), payload, callerId, at)) };
   }
 
   /** The stored cursor of a stream contract for a view, when it is for the view's current version. */

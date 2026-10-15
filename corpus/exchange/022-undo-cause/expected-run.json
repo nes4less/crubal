@@ -1,0 +1,5 @@
+[
+  { "contract": "list", "record": "P-1", "started": true, "log": "L-R1" },
+  { "contract": "list", "record": "P-1", "run": "L-R1", "acted": true },
+  { "contract": "unlist", "record": "P-1", "started": true, "log": "L-R2", "cause": "L-R1" }
+]

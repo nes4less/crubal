@@ -1,0 +1,13 @@
+[
+  { "log": "J-1", "by": { "migration": "backfill" }, "writes": [
+    { "record": "P-1", "envelope": "created", "value": { "kind": "item", "level": "product", "owner": "test.example" } },
+    { "record": "P-1", "address": "title", "value": "Christmas Vacation", "source": { "origin": "declared", "via": "L-1" } },
+    { "record": "P-1", "address": "format", "value": "DVD", "source": { "origin": "declared", "via": "L-1" } } ] },
+  { "log": "J-2", "by": { "contract": "label", "run": "L-R1" }, "writes": [
+    { "run": "L-R1", "contract": "label", "record": "P-1", "key": "label|P-1|26e23bacb8e82ddc721d9778772a17aee1f890b8eda0f6edcfc0d8264c8cb2ac", "state": "started", "payload": "sha256:26e23bacb8e82ddc721d9778772a17aee1f890b8eda0f6edcfc0d8264c8cb2ac" } ] },
+  { "log": "J-3", "by": { "contract": "label", "run": "L-R1" }, "writes": [
+    { "run": "L-R1", "contract": "label", "record": "P-1", "key": "label|P-1|26e23bacb8e82ddc721d9778772a17aee1f890b8eda0f6edcfc0d8264c8cb2ac", "state": "failed", "reason": "printer offline", "attempt": 1 } ] },
+  { "log": "J-4", "by": { "contract": "label", "run": "L-R1" }, "writes": [
+    { "review": { "key": "run:label", "run": "L-R1", "record": "P-1", "reason": "printer offline", "attempts": 2 } },
+    { "run": "L-R1", "contract": "label", "record": "P-1", "key": "label|P-1|26e23bacb8e82ddc721d9778772a17aee1f890b8eda0f6edcfc0d8264c8cb2ac", "state": "failed", "reason": "printer offline", "attempt": 2 } ] }
+]

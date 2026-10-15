@@ -145,6 +145,19 @@ create table if not exists intake (
   primary key (owner, intake)
 );
 
+-- A send's mapped-out payload, kept beside the log (docs/design/runs.md): the run write holds only its hash,
+-- so the payload can be shown, replayed to the adapter on retry, and erased.
+create table if not exists outtake (
+  owner text not null,
+  run text not null,
+  contract text not null,
+  record text,
+  key text not null,
+  raw bytea not null,
+  sha256 text not null,
+  primary key (owner, run)
+);
+
 create table if not exists cursors (
   owner text not null,
   contract text not null,

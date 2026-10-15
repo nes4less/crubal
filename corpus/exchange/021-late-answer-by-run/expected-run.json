@@ -1,0 +1,5 @@
+[
+  { "contract": "listing", "record": "U-1", "started": true, "log": "L-R1" },
+  { "contract": "listing", "record": "U-1", "log": "L-R1", "landed": "value", "outcomes": [ { "from": "itemId", "to": "market:itemId", "outcome": "unknown" } ] },
+  { "contract": "listing", "record": "U-1", "stopped": "run", "reason": "no run L-R9" }
+]

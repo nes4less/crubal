@@ -1,0 +1,8 @@
+prepare: label
+on: P-1
+
+failed: L-R1
+reason: printer offline
+
+failed: L-R1
+reason: printer offline

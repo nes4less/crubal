@@ -1,6 +1,7 @@
 # Runs with a real act: the send split
 
-**Status:** design, 2026-10-15; ruled. Spec 7.4 and 7.5 say a run acts once and is logged; today the border
+**Status:** design, 2026-10-15; ruled; built (engine prepare/acted/failed/undo and late answers by run,
+exchange/018–022; store outtake, adapters, retry and erasure). Spec 7.4 and 7.5 say a run acts once and is logged; today the border
 logs `acted` the moment it maps out, because nothing acts. With a host performing the act (host.md), a send
 is two entries with the act between them. This document fixes the entries, the payload's keeping, retry,
 failure and late answers, and the corpus cases that prove them.

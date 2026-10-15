@@ -224,7 +224,7 @@ test("the border over the store: intake kept, runs idempotent across transaction
   const again = await border.send("label", "P-1", undefined, "2026-10-15T17:00:03Z");
   assert.equal(again.acted, false, "the same payload is never sent twice, even by a fresh border");
   const entries = await store.entries();
-  assert.equal(entries.length, 3, "backfill, the receive, the one send");
+  assert.equal(entries.length, 4, "backfill, the receive, and the one send's started and acted");
   assert.deepEqual(await store.verify(), { valid: true });
 });
 
@@ -378,4 +378,59 @@ migration: base /2026-10-01 -> base /2026-11-01
   // The border reads its contracts from the store too.
   const border = await PgBorder.over(store);
   assert.equal(border.contracts.size, 0);
+});
+
+test("a send over the store: started, the adapter, acted or failed, retry from outtake, a late answer, erasure", { skip: !url }, async () => {
+  const dict = emptyDictionary();
+  readDefinitions(readFileSync(join(corpus, "..", "reader", "_package.crubal"), "utf8"), dict);
+  readDefinitions("title$\nmarket:itemId$\n", dict);
+  const text = "contract: label\n  kind: send\n  writes:\n    title -> Title\n  retry: 1 every 10m\n\ncontract: listing\n  kind: send\n  writes:\n    title -> Title\n  reads:\n    itemId -> market:itemId\n  undo: unlist\n\ncontract: unlist\n  kind: send\n  writes:\n    title -> Title\n";
+  readDefinitions(text, dict);
+  const owner = "send.example";
+  const store = new PgStore(pool, owner);
+  await store.commit({ migration: "backfill" }, (d) => { d.records.set("P-1", { id: "P-1", kind: "item", level: "product", owner, values: { title: "Christmas Vacation" }, sources: { "*": { origin: "declared", via: "L-0" } } }); }, "2026-10-15T21:00:00Z");
+  let printerUp = false;
+  const adapters = {
+    label: async () => (printerUp ? { acted: true as const } : { failed: "printer offline" }),
+    listing: async () => ({ acted: true as const, body: '{"itemId":"110245563"}' }),
+  };
+  const border = new PgBorder(store, { dict, contracts: readContracts(text), adapters });
+  // Failed once, retried from the kept payload, acted: three run entries and one outtake row.
+  const first = await border.send("label", "P-1", undefined, "2026-10-15T21:00:01Z");
+  assert.equal(first.failed, true);
+  assert.equal(first.attempt, 1);
+  const run = String(first.log);
+  const out = (await pool.query("select contract, record, sha256, raw from outtake where owner = $1 and run = $2", [owner, run])).rows[0];
+  assert.equal(out.contract, "label");
+  assert.equal(JSON.parse(Buffer.from(out.raw).toString("utf8")).Title, "Christmas Vacation");
+  printerUp = true;
+  const again = await border.retry(run, undefined, "2026-10-15T21:10:01Z");
+  assert.equal(again.acted, true);
+  const states = (await store.state()).runs;
+  assert.equal(states.get(run)?.state, "acted");
+  const log = await store.entries();
+  const runWrites = log.flatMap((e) => (e.writes as JsonObject[]).filter((w) => w.run === run)).map((w) => `${w.state}${w.attempt ? `:${w.attempt}` : ""}`);
+  assert.deepEqual(runWrites, ["started", "failed:1", "acted"]);
+  assert.ok(!(log.find((e) => (e.writes as JsonObject[]).some((w) => w.run === run && w.state === "started"))?.writes as JsonObject[])[0]?.Title, "the payload itself is not in the log");
+  // A fresh border over the same store never starts the same payload twice.
+  const fresh = new PgBorder(store, { dict, contracts: readContracts(text), adapters });
+  const dup = await fresh.send("label", "P-1", undefined, "2026-10-15T21:20:00Z");
+  assert.equal(dup.acted, false);
+  // The adapter's answer closes the run as a receive: the value lands with via that run.
+  const listed = await border.send("listing", "P-1", undefined, "2026-10-15T21:30:00Z");
+  assert.equal(listed.acted, true);
+  const lrun = String(listed.log);
+  assert.equal((listed.answer as JsonObject).log, lrun);
+  assert.equal((await store.state()).runs.get(lrun)?.state, "closed");
+  assert.equal((await store.state()).records.get("P-1")?.values["market:itemId"], "110245563");
+  assert.equal((await store.state()).records.get("P-1")?.sources?.["market:itemId"]?.via, lrun);
+  // Undo names its cause.
+  const undone = await border.undo(lrun, undefined, "2026-10-15T21:40:00Z");
+  assert.equal(undone.contract, "unlist");
+  assert.equal(undone.cause, lrun);
+  assert.equal(undone.acted, true);
+  // Erasure takes the payloads sent about the record with the values.
+  await store.erase("P-1");
+  assert.equal((await pool.query("select count(*)::int as n from outtake where owner = $1 and record = 'P-1'", [owner])).rows[0].n, 0);
+  assert.deepEqual(await store.verify(), { valid: true });
 });

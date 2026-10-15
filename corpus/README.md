@@ -56,7 +56,9 @@ publish must refuse (chapter 11.5). `views/` cases project a view over `_records
 which record), an optional `answer.json` (what the other side sent back) and `expected-run.json`. A
 `run.crubal` may hold several runs in order, each `run:` with `on:`, and optionally `caller:` and `offer:`;
 `write: ID` with indented values changes a record between runs. The runner names each run's log entry
-`L-R1`, `L-R2` …, in order. Offer-and-take cases add the presenter's record as `presenter.json`; border cases
+`L-R1`, `L-R2` …, in order. The send split (docs/design/runs.md): `prepare:` with `on:` does steps 1–3 and
+starts the run; `acted: L-Rn` and `failed: L-Rn` (with `reason:`) finish it; `undo: L-Rn` runs the
+reversing contract naming its cause; a `run:` with `for-run: L-Rn` is a late answer that closes that run. Offer-and-take cases add the presenter's record as `presenter.json`; border cases
 hold a signed wrapper in `border.json`, the presenter's key in `keys.json` and `expected-border.json`.
 
 ### Cases for the backbone chapters

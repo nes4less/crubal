@@ -1,0 +1,12 @@
+// A started run is never started again (docs/design/runs.md): a host that restarts between started and
+// acted finds the run and asks the adapter by its key instead of acting twice.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: DVD
+
+unit: U-1 of P-1 [origin: observed, via: L-2]
+  price: 9.99USD

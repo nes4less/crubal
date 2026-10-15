@@ -626,9 +626,30 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
 
     // The runs, in order.
     const results: Json[] = [];
-    let current: { run?: string; on?: string; caller?: string; offer?: string; arrive?: string; level?: string; answer?: string; stream?: string; ack?: string; cursor?: string; tick?: string; now?: string } = {};
+    let current: { run?: string; on?: string; caller?: string; offer?: string; arrive?: string; level?: string; answer?: string; stream?: string; ack?: string; cursor?: string; tick?: string; now?: string; prepare?: string; acted?: string; failed?: string; reason?: string; undo?: string; forRun?: string } = {};
     const parseCursor = (s: string | undefined) => (s ? Object.fromEntries(s.split(",").map((p) => p.trim().split("=")).map(([v, n]) => [v ?? "", Number(n)])) : undefined);
     const flush = () => {
+      // The send split (docs/design/runs.md): prepare, then acted or failed; undo names its cause.
+      if (current.prepare && current.on) {
+        results.push(ex.prepare(current.prepare, current.on, current.caller) as Json);
+        current = {};
+        return;
+      }
+      if (current.acted) {
+        results.push(ex.acted(current.acted) as Json);
+        current = {};
+        return;
+      }
+      if (current.failed) {
+        results.push(ex.failed(current.failed, current.reason ?? "failed") as Json);
+        current = {};
+        return;
+      }
+      if (current.undo) {
+        results.push(ex.undo(current.undo, current.caller) as Json);
+        current = {};
+        return;
+      }
       if (current.tick) {
         results.push(ex.tick(current.tick, current.now ?? "", current.caller) as Json);
         current = {};
@@ -653,8 +674,9 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
       const c = contracts.find((x) => x.name === current.run);
       if (current.offer) {
         results.push(ex.take(current.run, current.offer, current.on, json("presenter.json") as unknown as Rec) as Json);
-      } else if (c?.kind === "receive") {
-        results.push(ex.receiveRun(current.run, current.on, readFileSync(file(current.answer ?? "answer.json"), "utf8"), current.caller) as Json);
+      } else if (c?.kind === "receive" || current.forRun) {
+        // A late answer names its run (7.5): the receive closes it and lands with its via.
+        results.push(ex.receiveRun(current.run, current.on, readFileSync(file(current.answer ?? "answer.json"), "utf8"), current.caller, current.forRun) as Json);
       } else {
         results.push(ex.run(current.run, current.on, current.caller) as Json);
       }
@@ -673,7 +695,12 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
       } else if (n.key === "ack") {
         flush();
         current.ack = n.value;
-      } else if (n.key === "cursor") current.cursor = n.value;
+      } else if (n.key === "prepare" || n.key === "acted" || n.key === "failed" || n.key === "undo") {
+        flush();
+        current[n.key] = n.value;
+      } else if (n.key === "reason") current.reason = n.value;
+      else if (n.key === "for-run") current.forRun = n.value;
+      else if (n.key === "cursor") current.cursor = n.value;
       else if (n.key === "tick") {
         flush();
         current.tick = n.value;

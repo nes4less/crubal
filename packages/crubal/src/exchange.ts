@@ -171,6 +171,14 @@ export class Exchange {
   runs = 0;
   /** Records minted by arrivals (9.2a), likewise. */
   minted = 0;
+  /** The review queue the border writes to (a dead run, an answer naming no run); the journal's draft list. */
+  review: JsonObject[] = [];
+  /** Mapped-out payloads kept beside the log, by run (docs/design/runs.md): a store keeps them in outtake. */
+  readonly outtake = new Map<string, JsonObject>();
+  /** Runs the store knows beyond this instance's entries (a border over a store seeds them): run → contract and record. */
+  readonly runsKnown = new Map<string, { contract: string; record: string }>();
+  /** Runs started and not yet acted or failed, by run: what a restarted host asks the adapter about. */
+  readonly started = new Map<string, { contract: string; record: string; key: string; attempts: number; cause?: string }>();
 
   constructor(dict: Dictionary, contracts: Contract[], roles: Role[] = [], rules: Rule[] = []) {
     this.dict = dict;
@@ -229,6 +237,7 @@ export class Exchange {
       for (const [k, e] of this.access.edges) journal.draft.edges.set(k, e as unknown as JsonObject);
       this.access.edges = journal.draft.edges as unknown as Map<string, Edge>;
     }
+    this.review = journal.draft.review;
   }
 
   /** Log a run's transaction: what it changed on the draft, and the run's own state (8.5). */
@@ -292,8 +301,24 @@ export class Exchange {
     return `L-R${this.runs}`;
   }
 
-  /** Steps 1–4 of a send (or form) contract: permission, needs, map out, act once. */
+  /**
+   * A send (or form) contract's run with no act between (the memory border, docs/design/runs.md): prepare,
+   * then acted, in two entries. A host puts its adapter between `prepare` and `acted` or `failed`.
+   */
   run(name: string, recordId: string, callerId?: string): RunResult {
+    const p = this.prepare(name, recordId, callerId);
+    if (p.started !== true) return p;
+    this.acted(String(p.log));
+    const { started: _s, ...rest } = p;
+    return { ...rest, acted: true };
+  }
+
+  /**
+   * Steps 1–3 of a send (7.4): permission, needs, map out; then the run is `started`, its idempotency key
+   * and the payload's hash logged, the payload itself kept beside the log. A key already started or acted
+   * is never sent again (7.5).
+   */
+  prepare(name: string, recordId: string, callerId?: string, cause?: string): RunResult {
     const c = this.contracts.get(name);
     if (!c) throw new Error(`no contract ${name}`);
     const r = this.records.get(recordId);
@@ -330,12 +355,70 @@ export class Exchange {
       const mapped = typeof v === "string" ? (m.values.find(([ours]) => ours === v)?.[1] ?? v) : v;
       put(payload, m.to, wire(mapped));
     }
-    // 4. Act, at most once per contract, record and payload.
+    // 4 begins: at most once per contract, record and payload; a started run is not started again.
     const key = `${name}|${recordId}|${sha256(serialize(payload))}`;
+    const open = [...this.started].find(([, s]) => s.key === key);
+    if (open) return { ...head, started: false, reason: "a run with this payload is already started", run: open[0] };
     if (this.sent.has(key)) return { ...head, acted: false, reason: "the same payload was already sent" };
     this.sent.add(key);
-    this.commit({ contract: name, run: log }, log, { contract: name, key, state: "acted" });
-    return { ...head, acted: true, payload, key, log };
+    this.outtake.set(log, payload);
+    this.started.set(log, { contract: name, record: recordId, key, attempts: 0, ...(cause ? { cause } : {}) });
+    this.commit({ contract: name, run: log }, log, { contract: name, record: recordId, key, state: "started", payload: `sha256:${sha256(serialize(payload))}`, ...(cause ? { cause } : {}) });
+    return { ...head, started: true, payload, key, log, ...(cause ? { cause } : {}) };
+  }
+
+  /** The act succeeded: the run is `acted` (docs/design/runs.md). */
+  acted(run: string, at?: string): RunResult {
+    const s = this.started.get(run);
+    if (!s) throw new Error(`no started run ${run}`);
+    this.started.delete(run);
+    this.commit({ contract: s.contract, run }, run, { contract: s.contract, record: s.record, key: s.key, state: "acted", ...(at ? { at } : {}) });
+    return { contract: s.contract, record: s.record, run, acted: true };
+  }
+
+  /** How many attempts a contract allows (7.5 `retry: N every D`): one without it. */
+  private attemptsAllowed(c: Contract): number {
+    const m = (c.parts.retry ?? "").match(/^(\d+)\s+every\s+/);
+    return m ? 1 + Number(m[1]) : 1;
+  }
+
+  /**
+   * The act failed: a `failed` entry with the attempt; after the last attempt the contract allows, a
+   * review item `run:<contract>` opens, grouped by contract across records, and the run stays failed.
+   */
+  failed(run: string, reason: string): RunResult {
+    const s = this.started.get(run);
+    if (!s) throw new Error(`no started run ${run}`);
+    const c = this.contracts.get(s.contract);
+    s.attempts += 1;
+    const allowed = c ? this.attemptsAllowed(c) : 1;
+    const dead = s.attempts >= allowed;
+    if (dead) {
+      this.started.delete(run);
+      this.review.push({ key: `run:${s.contract}`, run, record: s.record, reason, attempts: s.attempts });
+    }
+    this.commit({ contract: s.contract, run }, run, { contract: s.contract, record: s.record, key: s.key, state: "failed", reason, attempt: s.attempts });
+    return { contract: s.contract, record: s.record, run, failed: true, attempt: s.attempts, ...(dead ? { dead: true, review: `run:${s.contract}` } : { retry: allowed - s.attempts }) };
+  }
+
+  /** Run the contract that reverses a run (7.5 `undo`): an ordinary send naming its cause. */
+  /** The contract and record of a run this instance or its store knows. */
+  runOf(run: string): { contract: string; record: string } | undefined {
+    const known = this.runsKnown.get(run);
+    if (known) return known;
+    for (const x of this.journal?.entries ?? []) {
+      const w = Array.isArray(x.writes) ? (x.writes.find((y) => isObj(y) && y.run === run) as JsonObject | undefined) : undefined;
+      if (w) return { contract: String(w.contract), record: String(w.record ?? "") };
+    }
+    return undefined;
+  }
+
+  undo(run: string, callerId?: string): RunResult {
+    const w = this.runOf(run);
+    const contract = w ? this.contracts.get(w.contract) : undefined;
+    if (!w || !contract) throw new Error(`no run ${run}`);
+    if (!contract.undo) return { contract: contract.name, run, stopped: "undo", reason: `${contract.name} names no undo` };
+    return this.prepare(contract.undo, w.record, callerId, run);
   }
 
   private needsOf(c: Contract): ClassLine[] {
@@ -346,14 +429,24 @@ export class Exchange {
    * Steps 5–6 for a receive contract: map the answer back, compare with the record, and land it. Under a
    * gated edge (14.7) the values land as suggestions for the edge's reviewer, whatever the contract says.
    */
-  receiveRun(name: string, recordId: string, body: string, callerId?: string): RunResult {
+  receiveRun(name: string, recordId: string, body: string, callerId?: string, forRun?: string): RunResult {
     const c = this.contracts.get(name);
     const r = this.records.get(recordId);
     if (!c || !r) throw new Error(`no contract ${name} or record ${recordId}`);
     const head: RunResult = { contract: name, record: recordId, ...(callerId ? { caller: callerId } : {}) };
+    // An answer that names a run the store doesn't know is never guessed onto a record (docs/design/runs.md).
+    if (forRun !== undefined) {
+      const known = this.runOf(forRun)?.contract === name;
+      if (!known) {
+        this.review.push({ key: `run:${name}`, run: forRun, record: recordId, reason: "an answer named a run the store doesn't know" });
+        const l = this.nextLog();
+        this.commit({ contract: name, run: l }, l, { contract: name, record: recordId, state: "closed", answerFor: forRun });
+        return { ...head, stopped: "run", reason: `no run ${forRun}`, log: l };
+      }
+    }
     const stopped = this.permitted(c, recordId, callerId);
     if (stopped) return { ...head, stopped };
-    const log = this.nextLog();
+    const log = forRun ?? this.nextLog();
     const intake = receive(c, body, recordId, this.dict, `I-${log.slice(2)}`);
     const outcomes: IntakeOutcome[] = intake.outcomes.map((o) => {
       if (o.outcome !== "absorbed" || !o.to) return o;

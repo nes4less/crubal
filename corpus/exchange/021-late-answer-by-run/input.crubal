@@ -1,0 +1,12 @@
+// A late answer names its run (7.5): the receive closes that run and lands with its via. An answer naming
+// a run the store doesn't know lands nowhere: it stops and opens a review item, never guessed onto a record.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: DVD
+
+unit: U-1 of P-1 [origin: observed, via: L-2]
+  price: 9.99USD

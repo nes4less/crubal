@@ -1,0 +1,12 @@
+// A send is two entries (docs/design/runs.md): started, with the idempotency key and the payload's hash and
+// nothing else, then acted. The payload itself is kept beside the log, never in it.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: DVD
+
+unit: U-1 of P-1 [origin: observed, via: L-2]
+  price: 9.99USD

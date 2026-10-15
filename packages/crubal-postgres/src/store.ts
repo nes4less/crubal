@@ -323,6 +323,8 @@ export class PgStore {
         redacted += hits.length;
       }
     });
+    // What is kept beside the log for the record goes too: the payloads sent about it.
+    await this.pool.query("delete from outtake where owner = $1 and record = $2", [this.owner, recordId]);
     if (redacted) await this.rebuild();
     return { redacted, witnessed };
   }

@@ -1,0 +1,12 @@
+[
+  { "log": "J-1", "by": { "migration": "backfill" }, "writes": [
+    { "record": "P-1", "envelope": "created", "value": { "kind": "item", "level": "product", "owner": "test.example" } },
+    { "record": "P-1", "address": "title", "value": "Christmas Vacation", "source": { "origin": "declared", "via": "L-1" } },
+    { "record": "P-1", "address": "format", "value": "DVD", "source": { "origin": "declared", "via": "L-1" } },
+    { "record": "U-1", "envelope": "created", "value": { "kind": "item", "level": "unit", "owner": "test.example", "of": "P-1" } },
+    { "record": "U-1", "address": "price", "value": { "$money": "9.99", "currency": "USD" }, "source": { "origin": "observed", "via": "L-2" } } ] },
+  { "log": "J-2", "by": { "contract": "listing", "run": "L-R1" }, "writes": [
+    { "run": "L-R1", "contract": "listing", "record": "U-1", "key": "listing|U-1|a9d0ba466a0c9c8ffe9667ec148b303c7f9e82f22987a8f743bf2c0e5f5507a7", "state": "started", "payload": "sha256:a9d0ba466a0c9c8ffe9667ec148b303c7f9e82f22987a8f743bf2c0e5f5507a7" } ] },
+  { "log": "J-3", "by": { "contract": "listing", "run": "L-R1" }, "writes": [
+    { "run": "L-R1", "contract": "listing", "record": "U-1", "key": "listing|U-1|a9d0ba466a0c9c8ffe9667ec148b303c7f9e82f22987a8f743bf2c0e5f5507a7", "state": "acted" } ] }
+]
