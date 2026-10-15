@@ -1,0 +1,12 @@
+run: listing
+on: U-1
+caller: C-SELL
+run: listing
+on: U-1
+caller: C-FAN
+run: catalogLookup
+on: P-1
+caller: C-NEW
+run: catalogLookup
+on: P-1
+caller: C-SELL

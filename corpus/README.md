@@ -80,6 +80,12 @@ hold a signed wrapper in `border.json`, the presenter's key in `keys.json` and `
   `expected-access.json` holds one `{"ask", "result"}` per question. An `exchange-errors/` case whose
   input holds `permissions:`, `ownership:` or `edge:` blocks checks the declarations, every record's owner
   and every edge in order, and expects the refusal at the given line.
+- **The border and access (7.4, 14.4, 14.7):** an `exchange/` run case may add `access.crubal`; the border
+  then needs the caller's `run` item (a run stops at `permission`), lands a receive run as suggestions when
+  the caller's access is gated (`landed`, `gated`, `reviewer` on the result), and an `arrive: CONTRACT`
+  run (with `level:`, `caller:`, optional `on:` for the parent and `answer:` for the payload file) makes or
+  finds a record and grants the caller's consumer edge when the contract names a `relation`.
+  `expected-edges.json` lists edges to find afterwards, compared as subsets.
 - **Partitions and the stream (12.6):** a `views/` case may add `access.crubal`; `callers:` are then served
   only the rows their edges match, and rows carry `ancestors`. A case with `write.crubal` and
   `expected-stream.json` compares the stream entries of the first publish and of the publish after the

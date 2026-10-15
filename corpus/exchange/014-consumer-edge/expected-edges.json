@@ -1,0 +1,3 @@
+[
+  { "edge": "E-placeOrder-O-NEW1", "who": "C-BUY", "relation": "buyer", "mode": "consume", "on": "O-NEW1", "by": "owner" }
+]

@@ -1,0 +1,4 @@
+permissions: shop
+  menu:
+    buy: run placeOrder
+  relations: buyer

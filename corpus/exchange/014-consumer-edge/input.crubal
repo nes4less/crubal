@@ -1,0 +1,24 @@
+// A contract that creates a record for a caller grants their consume edge on it (14.4): the order is the
+// shop's record; the buyer holds their part through `relation: buyer`.
+kind: person
+  levels: person
+kind: order
+  levels: order
+name$
+item&Item
+qty#
+
+contract: placeOrder
+  kind: form
+  ref: cart
+  relation: buyer
+  reads:
+    item -> item
+    qty -> qty
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+person: C-BUY [origin: declared, via: L-1]
+  name: Buyer

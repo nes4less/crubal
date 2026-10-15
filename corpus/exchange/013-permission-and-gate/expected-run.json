@@ -1,0 +1,6 @@
+[
+  { "contract": "listing", "record": "U-1", "caller": "C-SELL", "acted": true },
+  { "contract": "listing", "record": "U-1", "caller": "C-FAN", "stopped": "permission" },
+  { "contract": "catalogLookup", "record": "P-1", "caller": "C-NEW", "landed": "suggestion", "gated": "E-2", "reviewer": "C-SELL" },
+  { "contract": "catalogLookup", "record": "P-1", "caller": "C-SELL", "landed": "value" }
+]

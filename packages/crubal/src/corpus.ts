@@ -579,17 +579,29 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
     checkContracts(contracts, dict);
     const ex = new Exchange(dict, contracts, readRoles(defs));
     for (const r of readText(data, dict).records.map((x) => foldRecord(x, dict))) ex.put(r);
+    // With access.crubal, the border consults access (chapter 14): permission to run, gates, consumer edges.
+    if (existsSync(file("access.crubal"))) {
+      const accessText = readFileSync(file("access.crubal"), "utf8");
+      const { perms, edges } = readAccess(accessText);
+      const now = existsSync(file("now.txt")) ? readFileSync(file("now.txt"), "utf8").trim() : undefined;
+      ex.access = new Access(dict, perms, ex.records, edges, "test.example", now);
+    }
 
     // The runs, in order.
     const results: Json[] = [];
-    let current: { run?: string; on?: string; caller?: string; offer?: string } = {};
+    let current: { run?: string; on?: string; caller?: string; offer?: string; arrive?: string; level?: string; answer?: string } = {};
     const flush = () => {
+      if (current.arrive) {
+        results.push(ex.arriveRun(current.arrive, readFileSync(file(current.answer ?? "answer.json"), "utf8"), current.level ?? "product", current.caller, current.on) as Json);
+        current = {};
+        return;
+      }
       if (!current.run || !current.on) return;
       const c = contracts.find((x) => x.name === current.run);
       if (current.offer) {
         results.push(ex.take(current.run, current.offer, current.on, json("presenter.json") as unknown as Rec) as Json);
       } else if (c?.kind === "receive") {
-        results.push(ex.receiveRun(current.run, current.on, readFileSync(file("answer.json"), "utf8")) as Json);
+        results.push(ex.receiveRun(current.run, current.on, readFileSync(file(current.answer ?? "answer.json"), "utf8"), current.caller) as Json);
       } else {
         results.push(ex.run(current.run, current.on, current.caller) as Json);
       }
@@ -599,7 +611,12 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
       if (n.key === "run") {
         flush();
         current.run = n.value;
+      } else if (n.key === "arrive") {
+        flush();
+        current.arrive = n.value;
       } else if (n.key === "on") current.on = n.value;
+      else if (n.key === "level") current.level = n.value;
+      else if (n.key === "answer") current.answer = n.value;
       else if (n.key === "caller") current.caller = n.value;
       else if (n.key === "offer") current.offer = n.value;
       else if (n.key === "write") {
@@ -625,6 +642,16 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
       if (one(got) !== one(want)) return fail(`record: ${firstDiff(one(got), one(want))}`);
       if (extra(got) !== extra(want)) return fail(`alternatives/suggestions: got ${extra(got)}`);
       return pass;
+    }
+    if (existsSync(file("expected-edges.json"))) {
+      const got = [...(ex.access?.edges.values() ?? [])].map(({ line: _l, ...e }) => e as unknown as Json);
+      const want = json("expected-edges.json") as JsonObject[];
+      for (const w of want) {
+        const a = got.find((e) => (e as JsonObject).edge === w.edge) as { [k: string]: Json } | undefined;
+        if (!a) return fail(`no edge ${w.edge}`);
+        const p = subset(a, w as { [k: string]: Json }, `${w.edge}: `);
+        if (p) return fail(p);
+      }
     }
     const wantRaw = json("expected-run.json");
     const want = (Array.isArray(wantRaw) ? wantRaw : [wantRaw]) as { [k: string]: Json }[];

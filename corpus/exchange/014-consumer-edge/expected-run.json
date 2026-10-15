@@ -1,0 +1,7 @@
+[
+  {
+    "contract": "placeOrder", "caller": "C-BUY",
+    "arrival": { "outcome": "new", "record": "O-NEW1", "ref": "K-77" },
+    "granted": { "edge": "E-placeOrder-O-NEW1", "relation": "buyer", "mode": "consume", "on": "O-NEW1" }
+  }
+]

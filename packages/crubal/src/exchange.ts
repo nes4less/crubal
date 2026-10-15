@@ -3,6 +3,8 @@
 // record. Runs are idempotent (7.5). Offer and take share between owners, and only the overlap flows
 // (7.8). Data crossing a border is verified against the presenter's published key (8.5.1).
 
+import type { Access, Edge } from "./access.ts";
+import { arrive, type Arrival } from "./arrival.ts";
 import { serialize } from "./canonical.ts";
 import { evaluate, parseCondition, type StateOf } from "./conditions.ts";
 import type { ClassLine, Dictionary } from "./defs.ts";
@@ -49,9 +51,9 @@ function callerStates(caller: Record | undefined, roles: Role[]): StateOf {
 
 const PARTS: { [kind: string]: string[] } = {
   send: ["needs", "gives", "writes", "reads", "when", "who", "auth", "scope", "credential", "retry", "undo", "for", "label", "describe", "version"],
-  receive: ["needs", "gives", "reads", "when", "who", "origin", "lands", "evidence", "absorb", "ignore", "keep-raw", "prefix", "ref", "auth", "scope", "credential", "retry", "undo", "for", "label", "describe", "version"],
+  receive: ["needs", "gives", "reads", "when", "who", "origin", "lands", "evidence", "absorb", "ignore", "keep-raw", "prefix", "ref", "relation", "auth", "scope", "credential", "retry", "undo", "for", "label", "describe", "version"],
   store: ["needs", "stores", "when", "who", "for", "label", "describe", "version"],
-  form: ["needs", "gives", "writes", "reads", "when", "who", "origin", "lands", "for", "label", "describe", "version"],
+  form: ["needs", "gives", "writes", "reads", "when", "who", "origin", "lands", "ref", "relation", "for", "label", "describe", "version"],
   offer: ["needs", "gives", "to", "mode", "terms", "for", "when", "who", "label", "describe", "version"],
   take: ["needs", "from", "reads", "mode", "lands", "origin", "absorb", "ignore", "keep-raw", "prefix", "ref", "when", "who", "for", "label", "describe", "version"],
 };
@@ -129,14 +131,47 @@ export class Exchange {
   readonly dict: Dictionary;
   readonly contracts: Map<string, Contract>;
   readonly roles: Role[];
-  private records = new Map<string, Record>();
+  /** The records, shared with the Access that decides over them (chapter 14). */
+  readonly records = new Map<string, Record>();
+  readonly bindings = new Map<string, string>();
+  /** Set to make the border consult access: `run` needs the caller's `run` item, gated access suggests. */
+  access?: Access;
   private sent = new Set<string>();
   private runs = 0;
+  private minted = 0;
 
   constructor(dict: Dictionary, contracts: Contract[], roles: Role[] = []) {
     this.dict = dict;
     this.contracts = new Map(contracts.map((c) => [c.name, c]));
     this.roles = roles;
+  }
+
+  /** Step 1 of a run (7.4): the menu is the permission (14.6); `who` only narrows. */
+  private permitted(c: Contract, recordId: string, callerId?: string): string | null {
+    if (this.access && callerId && !this.access.may(callerId, "run", c.name, recordId)) return "permission";
+    if (c.who) {
+      const caller = callerId ? this.records.get(callerId) : undefined;
+      const ok = evaluate(parseCondition(c.who), caller ? { ...caller.values } : {}, callerStates(caller, this.roles));
+      if (ok !== true) return "who";
+    }
+    return null;
+  }
+
+  /** The gated edge a caller's access comes through, if every granting edge is gated (14.7). */
+  private gate(recordId: string, callerId?: string): Edge | null {
+    return this.access && callerId ? this.access.gated(callerId, recordId) : null;
+  }
+
+  /**
+   * A contract that creates a record for a caller grants their edge on it (14.4): `mode: consume`, the
+   * contract's `relation`, under the owner's grant.
+   */
+  private grantConsumer(c: Contract, recordId: string, callerId: string): Edge | null {
+    const relation = c.parts.relation;
+    if (!this.access || !relation) return null;
+    const edge: Edge = { edge: `E-${c.name}-${recordId}`, who: callerId, relation, mode: "consume", on: recordId, grants: [], by: "owner", line: c.line };
+    this.access.edges.set(edge.edge, edge);
+    return edge;
   }
 
   put(r: Record) {
@@ -175,12 +210,9 @@ export class Exchange {
     const head: RunResult = { contract: name, record: recordId, ...(callerId ? { caller: callerId } : {}) };
     const log = this.nextLog();
 
-    // 1. Trigger and permission.
-    if (c.who) {
-      const caller = callerId ? this.records.get(callerId) : undefined;
-      const ok = evaluate(parseCondition(c.who), caller ? { ...caller.values } : {}, callerStates(caller, this.roles));
-      if (ok !== true) return { ...head, stopped: "who" };
-    }
+    // 1. Permission and trigger.
+    const stopped = this.permitted(c, recordId, callerId);
+    if (stopped) return { ...head, stopped };
     // 2. Needs: an unnamed class over the record.
     const missing: string[] = [];
     const unfit: string[] = [];
@@ -218,11 +250,17 @@ export class Exchange {
     return c.needs;
   }
 
-  /** Steps 5–6 for a receive contract: map the answer back, compare with the record, and land it. */
-  receiveRun(name: string, recordId: string, body: string): RunResult {
+  /**
+   * Steps 5–6 for a receive contract: map the answer back, compare with the record, and land it. Under a
+   * gated edge (14.7) the values land as suggestions for the edge's reviewer, whatever the contract says.
+   */
+  receiveRun(name: string, recordId: string, body: string, callerId?: string): RunResult {
     const c = this.contracts.get(name);
     const r = this.records.get(recordId);
     if (!c || !r) throw new Error(`no contract ${name} or record ${recordId}`);
+    const head: RunResult = { contract: name, record: recordId, ...(callerId ? { caller: callerId } : {}) };
+    const stopped = this.permitted(c, recordId, callerId);
+    if (stopped) return { ...head, stopped };
     const log = this.nextLog();
     const intake = receive(c, body, recordId, this.dict, `I-${log.slice(2)}`);
     const outcomes: IntakeOutcome[] = intake.outcomes.map((o) => {
@@ -232,9 +270,33 @@ export class Exchange {
       return serialize(current) === serialize(o.value as Json) ? o : { ...o, outcome: "conflict" };
     });
     const source: Source = { origin: c.origin, via: log };
-    if (c.lands === "suggestion") this.put(suggest(r, outcomes, source));
+    const gate = this.gate(recordId, callerId);
+    if (c.lands === "suggestion" || gate) this.put(suggest(r, outcomes, source));
     else this.put(land(r, { outcomes, contract: name }, source, this.dict.trust, this.dict.facetTrust));
-    return { contract: name, record: recordId, outcomes: outcomes as unknown as Json, sources: { origin: c.origin }, log };
+    return { ...head, outcomes: outcomes as unknown as Json, sources: { origin: c.origin }, log, landed: gate || c.lands === "suggestion" ? "suggestion" : "value", ...(gate ? { gated: gate.edge, reviewer: gate.reviewer ?? gate.by } : {}) };
+  }
+
+  /**
+   * An arrival through a contract (9.2a): the payload finds or makes its record; a new record made for a
+   * caller gets their consumer edge (14.4).
+   */
+  arriveRun(name: string, body: string, level: string, callerId?: string, of?: string): RunResult {
+    const c = this.contracts.get(name);
+    if (!c) throw new Error(`no contract ${name}`);
+    const log = this.nextLog();
+    const owner = this.access?.owner ?? [...this.records.values()][0]?.owner ?? "";
+    const { arrival, record } = arrive(c, body, level, this, this.dict, { mint: () => `${level.charAt(0).toUpperCase()}-NEW${++this.minted}`, owner, ...(of ? { of } : {}), intakeId: `I-${log.slice(2)}` });
+    const out: RunResult = { contract: name, ...(callerId ? { caller: callerId } : {}), arrival: arrival as unknown as Json, log };
+    if (record && arrival.outcome === "new" && callerId) {
+      const edge = this.grantConsumer(c, record.id, callerId);
+      if (edge) out.granted = { edge: edge.edge, relation: edge.relation, mode: edge.mode, on: edge.on };
+    }
+    return out;
+  }
+
+  /** The arrival type, re-exported for callers that read `arrival`. */
+  static arrivalOf(r: RunResult): Arrival | undefined {
+    return r.arrival as unknown as Arrival | undefined;
   }
 
   /** Offer and take (7.8): only what the offer gives and the take reads flows. */

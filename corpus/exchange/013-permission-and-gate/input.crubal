@@ -1,0 +1,31 @@
+// The border consults access (7.4 step 1, 14.6, 14.7): running a contract needs the caller's `run` item; a
+// caller whose only access is gated gets their receive run landed as suggestions for the edge's reviewer.
+// The sellers' edges sit on the shop S-1; the product and the unit are within it (`of` is not `within`).
+kind: person
+  levels: person
+kind: shop
+  levels: shop
+name$
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+person: C-SELL [origin: declared, via: L-1]
+  name: Seller
+person: C-NEW [origin: declared, via: L-1]
+  name: New seller
+person: C-FAN [origin: declared, via: L-1]
+  name: Fan
+
+shop: S-1 [origin: declared, via: L-1]
+  name: The shop
+
+product: P-1 [origin: declared, via: L-1]
+  crubal:within: S-1
+  title: Christmas Vacation
+  format: DVD
+
+unit: U-1 of P-1 [origin: observed, via: L-2]
+  crubal:within: S-1
+  price: 12.50USD

@@ -1,0 +1,32 @@
+permissions: shop
+  menu:
+    listUnits: run listing
+    lookUp: run catalogLookup
+  presets:
+    seller: listUnits, lookUp audience: member
+  relations: seller, follower only
+
+edge: E-1
+  who: C-SELL
+  relation: seller
+  mode: control
+  on: S-1
+  grants: seller
+  by: owner
+
+edge: E-2
+  who: C-NEW
+  relation: seller
+  mode: control
+  on: S-1
+  grants: seller
+  gate: review
+  reviewer: C-SELL
+  by: owner
+
+edge: E-3
+  who: C-FAN
+  relation: follower
+  mode: none
+  on: S-1
+  by: owner

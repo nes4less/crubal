@@ -38,7 +38,7 @@ the internals later behind the same API.
   permission menus, gates and emergency access (`access.ts`), and partitioned views with the projection
   stream (`views.ts`).
 
-It passes every corpus folder (113 cases). The corpus and this package name no adopter and no third party:
+It passes every corpus folder (115 cases). The corpus and this package name no adopter and no third party:
 `test.example` owns the data, `market:` stands for any marketplace, `bench` for any in-house tool, and
 product, unit and the like are the test package's own kinds, never the core's.
 
