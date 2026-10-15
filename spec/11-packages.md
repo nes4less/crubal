@@ -125,7 +125,10 @@ Adopted values (chapter 8.2) are outside the trust order: they don't change unti
   every facet, class, rule, contract, kind, view and recipe with its version, and the package's version
   names that list.
 - **Inside a package, everything follows current.** Its own members always refer to each other's current
-  versions.
+  versions. The owner's **working package** is the set of its members as they now stand: every change to a
+  member is a `define` write in the owner's log (chapter 8.5), made by a person or by a review decision
+  (chapter 9.5), so the working package is rebuilt from the log like the data is. Publishing cuts a version
+  from it (11.5); nothing else does.
 - **Outside, adopters pin.** `extends: commerce /2026-10-01` uses exactly that version until the package
   moves its pin, which is itself a new version of the package.
 - **Extending** (UCP's word, kept for packages and contracts) lets a package add facets, classes, rules,

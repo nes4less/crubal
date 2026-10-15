@@ -1,0 +1,34 @@
+[
+  {
+    "log": "L-1", "owner": "test.example", "at": "2026-10-15T09:00:00Z",
+    "by": { "person": "C-1" },
+    "writes": [
+      { "define": { "facet": "videoCodec", "type": "choice", "values": [ { "value": "MPEG-2" }, { "value": "H.264" } ] } },
+      { "define": { "class": "Disc", "for": ["item"], "facets": [ { "facet": "videoCodec" } ] } }
+    ]
+  },
+  {
+    "log": "L-2", "prev": "sha256:0000", "owner": "test.example", "at": "2026-10-15T09:05:00Z",
+    "by": { "person": "C-1" },
+    "source": { "origin": "declared" },
+    "writes": [
+      { "record": "P-1", "envelope": "created", "value": { "kind": "item", "level": "product", "owner": "test.example", "wears": ["Disc"] } },
+      { "record": "P-1", "address": "videoCodec", "value": "VC-1" }
+    ]
+  },
+  {
+    "log": "L-3", "prev": "sha256:0000", "owner": "test.example", "at": "2026-10-15T09:10:00Z",
+    "by": { "person": "C-1" },
+    "writes": [
+      { "review": { "key": "videoCodec", "value": "VC-1", "decision": "add" } },
+      { "define": { "facet": "videoCodec", "type": "choice", "values": [ { "value": "MPEG-2" }, { "value": "H.264" }, { "value": "VC-1" } ] } }
+    ]
+  },
+  {
+    "log": "L-4", "prev": "sha256:0000", "owner": "test.example", "at": "2026-10-15T09:20:00Z",
+    "by": { "person": "C-1" },
+    "writes": [
+      { "define": { "class": "Disc", "retired": true } }
+    ]
+  }
+]

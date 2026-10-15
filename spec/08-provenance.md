@@ -74,6 +74,15 @@ Sources stay hidden when printing in plain mode (chapter 2.6), and so do alterna
 Each owner keeps a **log**: an append-only list of entries, one per write, however many values the write
 touched (chapter 3.8 gives the JSON).
 
+**Every change is a transaction.** An entry is the unit: it applies whole or not at all, and a store that
+fails partway applies nothing of it. Data entry, intake landing, a grant, a review decision and a change to
+a definition are each one entry with one cause. The unit is one caller's action on one record, or on the
+few records one operation touches (a merge, an attach); a run over many records writes one entry per record,
+so one refused row refuses one row (chapter 7.5). What is computed is never a transaction: projections, rule
+results and pending instructions are read off the state. Nor is a read, except under an emergency edge
+(chapter 14.13). An event in the world (a sale, a reading) is not a transaction either: it is a **record**
+of a kind with a moment facet, and the transaction is the write that records it (chapter 6.11).
+
 - **Hash-linked.** An entry's **hash** is the SHA-256 of its canonical form (chapter 3.9) without `sig`.
   `prev` is `sha256:` and the previous entry's hash, in hex. The first entry of a chain has no `prev`.
 - **Signed.** `sig` is the owner's Ed25519 signature over the entry's hash (its 32 bytes, not the hex
@@ -107,8 +116,14 @@ Each write is one of these:
 | **review** | the item, and its `decision` or `"opened": true` | the review queue (chapters 9.5, 10.4) |
 | **instruction** | `record`, its number and the instruction | the record's instructions (chapter 10.7) |
 | **run** | `run`, `contract`, its idempotency key and `state`: `started`, `acted`, `failed`, `closed` | the run's state (chapter 7.5) |
-| **install** | the package identity and version | the store's package; the restamp that follows is its own entries |
+| **define** | a member of the owner's working package (chapter 11.4) as it now stands: `facet`, `class`, `rule`, `contract`, `kind`, `view`, `shape`, `filter`, `permissions` or `ownership`, in the JSON form, or its name and `"retired": true` | the definition in force from this entry on; `by` is the person or the review decision that changed it |
+| **install** | the package identity and version | a package of another owner the store adopts; the restamp that follows is its own entries |
 | **read** | `record`, under an emergency edge only (chapter 14.13) | nothing; it is the record that a read happened |
+
+Definitions are state like records: the owner's working package is what the `define` writes build, so a
+rebuild (8.5.3) recovers the definitions in force at any entry together with the data, and replay (chapter
+9.6) needs nothing outside the log. A published version of the package is a snapshot of that state (chapter
+11.5).
 
 An entry MAY carry `witnessed: true` (chapter 14.13); such an entry MUST NOT be redacted.
 

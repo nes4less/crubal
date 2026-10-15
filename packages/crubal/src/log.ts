@@ -25,10 +25,20 @@ export type State = {
   runs: Map<string, JsonObject>;
   installed: JsonObject[];
   reads: JsonObject[];
+  /** The owner's working package (11.4): `<member>:<name>` → the definition as it now stands. */
+  definitions: Map<string, JsonObject>;
 };
 
 export function emptyState(): State {
-  return { records: new Map(), edges: new Map(), bindings: new Map(), instructions: new Map(), observations: [], reviews: [], runs: new Map(), installed: [], reads: [] };
+  return { records: new Map(), edges: new Map(), bindings: new Map(), instructions: new Map(), observations: [], reviews: [], runs: new Map(), installed: [], reads: [], definitions: new Map() };
+}
+
+const MEMBERS = ["facet", "class", "rule", "contract", "kind", "view", "shape", "filter", "permissions", "ownership"];
+
+/** The key of a `define` write's member: which kind of member, and its name. */
+function memberKey(def: JsonObject): string | null {
+  for (const m of MEMBERS) if (typeof def[m] === "string") return `${m}:${def[m]}`;
+  return null;
 }
 
 type Extra = Record & { alternatives?: { [a: string]: JsonObject[] }; suggestions?: { [a: string]: JsonObject[] }; held?: { [a: string]: JsonObject } };
@@ -119,6 +129,14 @@ export function applyEntry(state: State, entry: Entry): void {
     }
     if (isObj(w.install)) {
       state.installed.push(w.install);
+      continue;
+    }
+    if (isObj(w.define)) {
+      // A member of the working package as it now stands, or retired (8.5, 11.4).
+      const key = memberKey(w.define);
+      if (!key) throw new CrubalError(`entry ${entry.log}: a define write names a ${MEMBERS.join(", ")}`);
+      if (w.define.retired === true) state.definitions.delete(key);
+      else state.definitions.set(key, w.define);
       continue;
     }
     if (typeof w.read === "string") {
@@ -228,6 +246,7 @@ export function stateJson(state: State): JsonObject {
   if (state.runs.size) out.runs = [...state.runs.values()];
   if (state.installed.length) out.installed = state.installed;
   if (state.reads.length) out.reads = state.reads;
+  if (state.definitions.size) out.definitions = [...state.definitions.values()];
   return out;
 }
 
@@ -376,7 +395,7 @@ export function redactable(entry: Entry): string | null {
   const writes = Array.isArray(entry.writes) ? entry.writes.filter(isObj) : [];
   for (const w of writes) {
     const value = typeof w.record === "string" && typeof w.address === "string";
-    if (!value && !isObj(w.observation) && typeof w.read !== "string") return `an entry that created a record, changed its envelope, or wrote an edge, binding, instruction, run or install is never redacted`;
+    if (!value && !isObj(w.observation) && typeof w.read !== "string") return `an entry that created a record, changed its envelope or a definition, or wrote an edge, binding, instruction, run or install is never redacted`;
   }
   return null;
 }

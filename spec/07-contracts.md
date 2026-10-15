@@ -130,6 +130,10 @@ Every run has a **run ID** (`R-118`), and the log entry for its writes names it 
 - **Idempotency.** A run's key is the contract, the record (or the `ref` when the run has no record yet,
   chapter 9.2a) and the hash of its mapped-out payload. A host MUST NOT act twice for the same key unless the
   earlier run failed before acting.
+- **Many records, one record at a time.** A run over several records (an import, a batch listing) is one
+  entry and one idempotency key per record (chapter 8.5): each item is `acted` or `failed` on its own, a
+  refusal refuses that item, and a retry acts only on the items that failed. There is no partial success of
+  one item.
 - **Retry.** `retry: 3 every 10m` retries a failed act up to three times, ten minutes apart. With no `retry`,
   a failed act is not retried.
 - **Late answers.** An answer that arrives after its run closed is taken as intake against that run, and
@@ -256,5 +260,4 @@ A package MUST be refused at publish when a contract breaks these:
 
 ## 7.11 Open
 
-- Scheduled triggers (`every day at 03:00`) wait on `now` in conditions (chapter 6.11).
-- Partial success (a run that acted on some items and not others).
+- Scheduled triggers (`every day at 03:00`): a trigger evaluated against the host's clock supplied as `now`.

@@ -1,0 +1,14 @@
+{
+  "records": [
+    {
+      "id": "P-1", "kind": "item", "level": "product", "owner": "test.example", "wears": ["Disc"],
+      "created": "2026-10-15T09:05:00Z", "updated": "2026-10-15T09:05:00Z",
+      "values": { "videoCodec": "VC-1" },
+      "sources": { "videoCodec": { "origin": "declared", "via": "L-2" } }
+    }
+  ],
+  "definitions": [
+    { "facet": "videoCodec", "type": "choice", "values": [ { "value": "MPEG-2" }, { "value": "H.264" }, { "value": "VC-1" } ] }
+  ],
+  "reviews": [ { "key": "videoCodec", "value": "VC-1", "decision": "add" } ]
+}

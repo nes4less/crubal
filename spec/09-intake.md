@@ -118,8 +118,10 @@ Review works **by key across all objects**, never object by object: `market:Stud
 distinct values.
 
 - A vocabulary decision changes a contract's map or the vocabulary (add a value, add an alias, map a value,
-  reject a value); it never edits objects directly. An arrival decision is a binding (9.2a), and a migration
-  item's decision resolves one held value (chapter 10.4); both are logged review writes (chapter 8.5).
+  reject a value); it never edits objects directly. It is logged twice over: the `review` write that records
+  the decision, and the `define` write that carries the changed member of the working package (chapter 8.5,
+  11.4). An arrival decision is a binding (9.2a), and a migration item's decision resolves one held value
+  (chapter 10.4); both are logged review writes.
 - After a decision, the held intake records are **replayed** (9.6), and the objects change through the fold
   like any other intake.
 - New and unknown values are searchable by staff and never shown in customer filters or pages.

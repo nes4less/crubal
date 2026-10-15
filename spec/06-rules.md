@@ -225,8 +225,13 @@ A write that breaks a `must` rule is not a result: it is refused, and nothing ch
 
 Conditions are stored as their text (6.3), so there is one grammar for them, not two.
 
-## 6.11 Open
+## 6.11 Events and current values
 
-- Events versus current values.
-- Which rules a store compiles into its database and which it checks in the application is an
-  implementation choice; the results MUST be the same.
+A facet holds the **current** value; it never holds a history. How a value got there is the log (chapter
+8.5), and anything that happens in the world (a sale, a reading, a game) is a **record** of a kind with a
+moment facet, data like any other. So a series worth asking about (prices over time, readings) is a kind of
+record with a moment, or a many-valued compound whose rows carry one; rules read the current value and
+aggregates over those rows, and no facet needs a history of its own.
+
+Which rules a store compiles into its database and which it checks in the application is an implementation
+choice (chapter 13.6); the results MUST be the same.

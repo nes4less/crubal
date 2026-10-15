@@ -63,7 +63,7 @@ hold a signed wrapper in `border.json`, the presenter's key in `keys.json` and `
 
 - **Rebuild (8.5.3):** a `store/` case with `log.json` and `expected-state.json` rebuilds the state from the
   log alone and compares every member the expectation names (`records`, `edges`, `bindings`,
-  `instructions`, `runs`, `installed`, …). Links aren't checked by this case; `prev` may be a placeholder.
+  `instructions`, `runs`, `installed`, `definitions`, `reviews`, …). Links aren't checked by this case; `prev` may be a placeholder.
 - **Arrival (9.2a):** a `store/` case with `contract.crubal` (with `ref`), `answers.json` (an array of
   payloads, or `{"level", "answers"}`; an answer `{"decide": {"record": ID}}` or `{"decide": {"new": true}}`
   decides the last held arrival) and `expected-arrival.json` (one object per answer, compared as a subset:
