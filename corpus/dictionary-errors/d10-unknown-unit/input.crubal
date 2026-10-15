@@ -1,0 +1,3 @@
+// A unit is a spelling from the units table, `currency`, or an ISO 4217 code (4.7); `stone` is none of them.
+title$
+weight#stone

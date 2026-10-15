@@ -1,6 +1,6 @@
-// crubal.com/units: the units table (chapter 1.4.3). Units are reference records of the kind "measure";
+// crubal.com/units: the units table (chapter 1.4.3, 11.9). Units are reference records of the kind "measure";
 // currencies are records of the kind "currency". Readers fold the spellings and convert within a dimension.
-package: units /2026-10-14
+package: units /2026-10-15
   owner: crubal.com
   label: Units and currencies
   crubal: 2
@@ -16,12 +16,16 @@ kind: currency
 
 facet: dimension
   type: choice
-  values: time, length, mass, data, count
-  fixed: yes
+  values: time, length, mass, volume, area, temperature, data, count
+  describe: The dimension a unit measures; units convert only within one. The list grows by versions of this package.
 
 facet: factor
   type: number
-  describe: How many of the dimension's base unit one of this unit is (s, m, kg, B, each).
+  describe: How many of the dimension's base unit one of this unit is (s, m, kg, L, m2, K, B, each).
+
+facet: offset
+  type: number
+  describe: For a unit whose zero isn't the base's (°C, °F): the base-unit amount at this unit's zero. An amount in base units is amount × factor + offset.
 
 facet: spellings
   type: text
@@ -32,6 +36,10 @@ facet: uncefact
   type: text
   label: UN/CEFACT code
   describe: The unit's UN/CEFACT Recommendation 20 code, for borders that use it. Never a spelling.
+
+facet: rounding
+  type: number
+  describe: On a dimension's base unit record: the decimal places a conversion keeps when the facet states none.
 
 facet: places
   type: number
@@ -45,6 +53,8 @@ class: Measure
   facets:
     !dimension
     !factor
+    offset
+    rounding
     spellings
     uncefact
 

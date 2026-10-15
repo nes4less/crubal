@@ -1,11 +1,13 @@
-// The units table's records.
+// The units table's records (11.9). The base unit of each dimension has factor 1 and states the rounding a
+// conversion keeps when the facet states none.
 crubal: 2
-package: crubal.com/units /2026-10-14
+package: crubal.com/units /2026-10-15
 owner: crubal.com
 
 measure: s
   dimension: time
   factor: 1
+  rounding: 3
   spellings: sec, secs, second, seconds
   uncefact: SEC
 measure: min
@@ -18,6 +20,18 @@ measure: h
   factor: 3600
   spellings: hr, hrs, hour, hours
   uncefact: HUR
+measure: d
+  dimension: time
+  factor: 86400
+  spellings: day, days
+  uncefact: DAY
+
+measure: m
+  dimension: length
+  factor: 1
+  rounding: 4
+  spellings: meter, meters, metre, metres
+  uncefact: MTR
 measure: mm
   dimension: length
   factor: 0.001
@@ -26,10 +40,10 @@ measure: cm
   dimension: length
   factor: 0.01
   uncefact: CMT
-measure: m
+measure: km
   dimension: length
-  factor: 1
-  uncefact: MTR
+  factor: 1000
+  uncefact: KMT
 measure: in
   dimension: length
   factor: 0.0254
@@ -40,14 +54,23 @@ measure: ft
   factor: 0.3048
   spellings: foot, feet
   uncefact: FOT
-measure: g
-  dimension: mass
-  factor: 0.001
-  uncefact: GRM
+measure: mi
+  dimension: length
+  factor: 1609.344
+  spellings: mile, miles
+  uncefact: SMI
+
 measure: kg
   dimension: mass
   factor: 1
+  rounding: 4
+  spellings: kilogram, kilograms
   uncefact: KGM
+measure: g
+  dimension: mass
+  factor: 0.001
+  spellings: gram, grams
+  uncefact: GRM
 measure: oz
   dimension: mass
   factor: 0.028349523125
@@ -58,9 +81,64 @@ measure: lb
   factor: 0.45359237
   spellings: lbs, pound, pounds
   uncefact: LBR
+
+measure: L
+  dimension: volume
+  factor: 1
+  rounding: 3
+  spellings: l, liter, liters, litre, litres
+  uncefact: LTR
+measure: mL
+  dimension: volume
+  factor: 0.001
+  spellings: ml, milliliter, milliliters, millilitre, millilitres
+  uncefact: MLT
+measure: floz
+  dimension: volume
+  factor: 0.0295735295625
+  spellings: fl oz, fl. oz., fluid ounce, fluid ounces
+  uncefact: OZA
+measure: gal
+  dimension: volume
+  factor: 3.785411784
+  spellings: gallon, gallons
+  uncefact: GLL
+
+measure: m2
+  dimension: area
+  factor: 1
+  rounding: 4
+  spellings: m², sqm, square meter, square meters
+  uncefact: MTK
+measure: ft2
+  dimension: area
+  factor: 0.09290304
+  spellings: ft², sqft, square foot, square feet
+  uncefact: FTK
+
+measure: K
+  dimension: temperature
+  factor: 1
+  rounding: 2
+  spellings: kelvin
+  uncefact: KEL
+measure: °C
+  dimension: temperature
+  factor: 1
+  offset: 273.15
+  spellings: C, degC, celsius
+  uncefact: CEL
+measure: °F
+  dimension: temperature
+  factor: 0.5555555555555556
+  offset: 255.37222222222223
+  spellings: F, degF, fahrenheit
+  uncefact: FAH
+
 measure: B
   dimension: data
   factor: 1
+  rounding: 0
   spellings: byte, bytes
   uncefact: AD
 measure: KB
@@ -79,11 +157,18 @@ measure: TB
   dimension: data
   factor: 1000000000000
   uncefact: E35
+
 measure: each
   dimension: count
   factor: 1
+  rounding: 0
   spellings: ea, pc, pcs, piece, pieces
   uncefact: EA
+measure: dozen
+  dimension: count
+  factor: 12
+  spellings: dz, doz
+  uncefact: DZN
 
 currency: USD
   name: US dollar

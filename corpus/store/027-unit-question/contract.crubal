@@ -1,0 +1,6 @@
+contract: scale
+  kind: receive
+  origin: observed
+  reads:
+    Weight -> weight
+    Runtime -> runtime

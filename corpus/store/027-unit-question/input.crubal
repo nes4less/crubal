@@ -1,0 +1,9 @@
+// A quantity whose unit spelling the table lacks is a unit question (11.9): the field lands as new, citing
+// the spelling, and review decides once whether it is an alias, a new unit or not a unit at all. The raw
+// text stays on the intake record either way.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation

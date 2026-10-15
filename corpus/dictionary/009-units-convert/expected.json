@@ -1,0 +1,15 @@
+{
+  "crubal": "2",
+  "package": "test /2026-10-14",
+  "records": [
+    {
+      "id": "P-1", "kind": "item", "level": "product", "owner": "test.example",
+      "values": {
+        "runtime": { "$qty": "90", "unit": "min" },
+        "temperature": { "$qty": "37.0", "unit": "°C" },
+        "distance": { "$qty": "3.2187", "unit": "km" }
+      },
+      "sources": { "*": { "origin": "declared", "via": "L-1" } }
+    }
+  ]
+}

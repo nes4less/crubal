@@ -64,4 +64,3 @@ A claim is proven by passing that level's folder of the [test corpus](../corpus/
 ## Open in the spec (not in the design)
 
 - Long text in the text form: quoted strings with `\n` work, but a readable block form is not designed.
-- The units table (UN/CEFACT based) that names which unit spellings are valid.

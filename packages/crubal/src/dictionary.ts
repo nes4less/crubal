@@ -8,7 +8,7 @@ import type { Json, JsonObject, Record } from "./model.ts";
 import { itemText } from "./print-text.ts";
 import { readUnder } from "./read-text.ts";
 import { CrubalError } from "./tree.ts";
-import { convert, unitOf } from "./units.ts";
+import { convert, knownUnit, unitOf } from "./units.ts";
 
 const isObj = (v: Json | undefined): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);
 
@@ -70,6 +70,8 @@ function checkFacet(f: Facet) {
   }
   if (f.ordered && !f.many) throw new CrubalError(`${f.key} is ordered but holds one value`, line);
   if (f.accepts.length && !f.unit) throw new CrubalError(`${f.key} accepts other units but has no unit`, line);
+  // 4.7 (6): a unit is a spelling from the units table, `currency`, or an ISO 4217 code.
+  for (const u of [...(f.unit ? [f.unit] : []), ...f.accepts]) if (!knownUnit(u)) throw new CrubalError(`${f.key}: ${u} isn't a unit the units table knows`, line);
   if (f.range && Number(f.range.min) > Number(f.range.max)) throw new CrubalError(`${f.key}'s range runs backwards`, line);
   if (f.identity) {
     const child = f.children?.get(f.identity);
@@ -360,7 +362,7 @@ function core(v: Json): Json {
 
 
 /** Check one scalar against its facet: an outcome and an optional flag. */
-export function checkScalar(f: Facet, v: Json): { outcome: string; flag?: string } {
+export function checkScalar(f: Facet, v: Json): { outcome: string; flag?: string; cites?: JsonObject } {
   const c = core(v);
   if (isObj(c) && "$empty" in c) return { outcome: "absorbed" };
   switch (f.type) {
@@ -369,6 +371,8 @@ export function checkScalar(f: Facet, v: Json): { outcome: string; flag?: string
       if (typeof c === "string" && NUMBER.test(c) && !f.unit) amount = c;
       if (isObj(c) && "$qty" in c && c.unit === f.unit) amount = String(c.$qty);
       if (isObj(c) && "$money" in c && (f.unit === "currency" || c.currency === f.unit)) amount = String(c.$money);
+      // A spelling the units table lacks is a unit question for review (11.9), not a contradiction.
+      if (amount === null && isObj(c) && "$qty" in c && f.unit && unitOf(String(c.unit)) === null) return { outcome: "new", cites: { unit: String(c.unit) } };
       if (amount === null) return { outcome: "contradiction" };
       if (f.range && (Number(amount) < Number(f.range.min) || Number(amount) > Number(f.range.max))) return { outcome: "absorbed", flag: "range" };
       return { outcome: "absorbed" };

@@ -1,0 +1,13 @@
+// Units fold and convert by the units table (4.2, 11.9): an accepted unit's amount is converted through
+// the dimension's base by factor and offset, kept to the facet's places; a spelling the table lists folds
+// to its unit first.
+temperature#°C accepts: °F places: 1
+distance#km accepts: mi, m
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  runtime: 1.5 hr
+  temperature: 98.6°F
+  distance: 2 miles

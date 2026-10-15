@@ -184,7 +184,7 @@ shape `crubal:portable`) are fixed by this specification.
 | Identity | Holds |
 |---|---|
 | `crubal.com/core` | the core's names |
-| `crubal.com/units` | the units table: units by dimension, with conversion factors and accepted spellings, and ISO 4217 currencies |
+| `crubal.com/units` | the units table (11.9): units by dimension, with factors, offsets and accepted spellings, and ISO 4217 currencies |
 | `crubal.com/party` | the `person`, `organization` and `system` kinds, their base classes, and the caller facets that edges, contracts and the trust order read (chapter 14) |
 | `crubal.com/product` | the `item` kind (group > product > unit) and the base product facets |
 | `crubal.com/service` | the `service` kind (service > booking) and the base service facets |
@@ -260,6 +260,46 @@ version differs from the entry before it, and each entry's hash and signature ve
 form of its own version (chapter 8.5). A chain therefore reads as segments, one per version, and a rebuild
 (chapter 8.5.3) applies each entry under its own form and the form recipes between.
 
-## 11.9 Open
+## 11.9 The units table
 
-- The standard units table itself.
+The units table is the package `crubal.com/units` (11.7): **reference records**, one per unit and one per
+currency, that every package pins (`units:`) and every store reads the same way. Quantities (chapter 1.4.3)
+name its spellings, intake folds through it (chapter 9.2), facets convert by it (chapter 4.2) and recipes
+convert by it (chapter 10.3). The table is data, not core: a store with a different pin converts
+differently, and that is the pin's job.
+
+**A unit** is a record of the kind `measure`: its ID is the canonical spelling (`min`, `floz`, `°C`), and it
+holds its `dimension`, its `factor` to the dimension's base unit, an `offset` when its zero isn't the base's
+(`°C`: an amount in base units is amount × factor + offset), its accepted `spellings`, and its UN/CEFACT
+code as `uncefact`, never as a spelling. A dimension's base unit has factor 1 and states the `rounding` a
+conversion keeps. **A currency** is a record of the kind `currency`: its ISO 4217 code, its name and its
+minor-unit `places`, for a border that asks for cents (chapter 1.4.4). A three-letter uppercase spelling is
+always a currency and never a unit.
+
+- **Conversion** goes through the base: an accepted unit's amount becomes the facet's unit by the two
+  factors and offsets, kept to the facet's `places` when it has them, else to the dimension's rounding at
+  most. Units convert only within one dimension.
+- **Compound units** (`km/h`, `kWh`) are listed as units of their own, with their dimension and factor.
+  There is no grammar of products and quotients.
+- **Spellings are folding aliases** (chapter 4.3): case, spaces and punctuation runs fold before matching,
+  so `MIN`, `min.` and `Min` need no entry, and a spelling in another language is one more alias. There is
+  no localization machinery.
+- **The first table** holds time, length, mass, volume, area, temperature, data and count, and the
+  currencies the standard packages use. It grows by dated versions of the package, additions only.
+
+**Extending the table.** A package MAY publish units of its own, prefixed like everything else of its own
+(`me:slab`), as `measure:` records with a dimension, a factor to the base where one exists, and spellings;
+and it MAY add `spellings` to a standard unit by a record of that unit's name holding only `spellings`. It
+MUST NOT change a standard unit's factor, offset, dimension or canonical spelling. A store's table in force
+is the standard table at its pin plus the owner's extension. When a store moves its pin to a newer standard
+table, a unit of its extension that now matches a standard unit by UN/CEFACT code folds into it, the
+extension keeping its spellings as aliases: an install and restamp (chapter 10), never a lookup.
+
+**A unit question.** A quantity whose spelling folds to no unit of the table in force is not a
+contradiction and not a unit: it is a **unit question** for review (chapter 9.5), the field landing as `new`
+with `cites: {"unit": <spelling>}` and the raw text kept on the intake record. Review decides once, by
+spelling across every record it reached: an alias (the spelling joins a unit's `spellings`), a new unit
+(dimension, factor or offset, code; it joins the extension), or not a unit (the field stays raw). Each
+decision is a `review` write and a `define` write (chapter 8.5), and the held intakes replay. A store MAY
+look the spelling up (UN/CEFACT, UCUM, an AI) to **propose** an answer, shown beside the evidence; it never
+applies one. Nothing in the table is created because it was seen.

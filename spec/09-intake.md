@@ -133,6 +133,9 @@ distinct values.
 - **Promotion by recurrence.** A notable key (chapter 1.6) or unknown key seen on enough distinct records (a
   package threshold, `recur:`, default 5) is proposed as a candidate facet. Below the threshold it stays a
   one-off.
+- **Unit questions.** A quantity's spelling that folds to no unit is reviewed by spelling, across every
+  facet it reached, and decided once: an alias, a new unit of the owner's extension, or not a unit (chapter
+  11.9). A lookup or an AI may propose the answer; a person applies it.
 
 ## 9.6 Replay
 

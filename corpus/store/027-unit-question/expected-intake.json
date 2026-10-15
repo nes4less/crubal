@@ -1,0 +1,6 @@
+{
+  "outcomes": [
+    { "from": "Weight", "to": "weight", "outcome": "new", "cites": { "unit": "stone" } },
+    { "from": "Runtime", "to": "runtime", "outcome": "absorbed", "value": { "$qty": "97", "unit": "min" } }
+  ]
+}

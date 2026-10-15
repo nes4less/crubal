@@ -209,16 +209,17 @@ export type IntakeRecord = {
 };
 
 /** Fold one raw value through the map's value map, the aliases and the shapes, then check it (9.2). */
-function foldIn(f: Facet, raw: Json, map: MapLine | undefined, dict: Dictionary): { value: Json; outcome: string } {
+function foldIn(f: Facet, raw: Json, map: MapLine | undefined, dict: Dictionary): { value: Json; outcome: string; cites?: JsonObject } {
   let text = typeof raw === "string" ? raw : serialize(raw);
   const vm = map?.values.find(([theirs]) => theirs === text);
   if (vm) text = vm[1];
   const read = readUnder(f, text, dict) ?? text;
   const value = foldValue(f, read, dict);
   const items = Array.isArray(value) ? value : [value];
-  const checks = items.map((i) => checkScalar(f, i).outcome);
-  const outcome = checks.includes("contradiction") ? "contradiction" : checks.includes("new") ? "new" : "absorbed";
-  return { value, outcome };
+  const checks = items.map((i) => checkScalar(f, i));
+  const outcome = checks.some((c) => c.outcome === "contradiction") ? "contradiction" : checks.some((c) => c.outcome === "new") ? "new" : "absorbed";
+  const unit = checks.find((c) => c.cites?.unit)?.cites;
+  return { value, outcome, ...(unit ? { cites: unit } : {}) };
 }
 
 /** Keep a payload's exact bytes (3.8): as text when they are valid UTF-8, otherwise as base64. */
@@ -244,7 +245,8 @@ export function reviewByKey(intakes: { for: string; outcomes: IntakeOutcome[] }[
   for (const i of intakes) {
     for (const o of i.outcomes) {
       if (o.outcome !== "unknown" && o.outcome !== "new") continue;
-      const key = o.to ?? o.from;
+      // A unit question (11.9) is reviewed by spelling, across every facet it reached.
+      const key = o.cites?.unit ? `unit:${String(o.cites.unit)}` : (o.to ?? o.from);
       const g = groups.get(key) ?? { objects: new Set<string>(), values: new Set<string>(), outcome: o.outcome };
       g.objects.add(i.for);
       if (o.value !== undefined) g.values.add(serialize(o.value));
@@ -275,8 +277,8 @@ export function receive(c: Contract, body: string, forRecord: string, dict: Dict
         outcomes.push({ from: path, to: map.to, outcome: "unknown", value: raw });
         continue;
       }
-      const { value, outcome } = foldIn(f, raw, map, dict);
-      outcomes.push({ from: path, to: map.to, outcome, value, ...(outcome === "contradiction" ? { cites: { type: f.key } } : {}) });
+      const { value, outcome, cites } = foldIn(f, raw, map, dict);
+      outcomes.push({ from: path, to: map.to, outcome, value, ...(outcome === "contradiction" ? { cites: { type: f.key } } : cites ? { cites } : {}) });
       continue;
     }
     if (c.keepRaw.some((k) => samePath(k, path))) {
