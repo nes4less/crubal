@@ -1,0 +1,21 @@
+permissions: shop
+  menu:
+    feedStaff: run staffIndex
+  relations: index
+
+edge: E-1
+  who: index.example
+  relation: index
+  mode: control
+  on: P-1
+  grants: feedStaff
+  until: 2026-10-14T00:00Z
+  by: owner
+
+edge: E-2
+  who: index.example
+  relation: index
+  mode: control
+  on: P-1
+  grants: feedStaff
+  by: owner

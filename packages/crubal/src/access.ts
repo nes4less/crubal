@@ -327,6 +327,21 @@ export class Access {
     return false;
   }
 
+  /** May the caller do `verb` to `target` on any record at all: by a live admin edge, or a control edge carrying it? */
+  mayAnywhere(callerId: string, verb: string, target: string): boolean {
+    if (callerId === this.owner) return true;
+    for (const e of this.edges.values()) {
+      if (e.who !== callerId || !this.live(e)) continue;
+      if (e.mode === "admin") return true;
+      if (e.mode !== "control") continue;
+      for (const name of this.expand(e.grants)) {
+        const t = this.perms.menu.get(name)?.verbs[verb];
+        if (t && (t.includes(target) || t.includes("*"))) return true;
+      }
+    }
+    return false;
+  }
+
   /** The live gated edge a caller's access comes through, when every granting edge is gated (14.7). */
   gated(callerId: string, recordId: string): Edge | null {
     const eff = this.effective(callerId, recordId);

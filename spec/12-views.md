@@ -252,6 +252,44 @@ choice.
   for callers without the role, and decides nothing else about visibility.
 - Its pages and counts MUST follow 12.2 and 12.3, over the rows it holds.
 - An index MAY be behind the store, and MUST say which entry number it reflects.
+### 12.6.2 Subscriptions
+
+An index subscribes through a **send contract that carries projection streams** (chapter 7): sending data to
+a system is a contract, an index is a system, and nothing new is needed.
+
+```crubal
+contract: searchIndex
+  kind: send
+  stream: dvds, allDiscs
+  to: index.example
+  credential: search-index
+  when: entry
+```
+
+- `stream` names the views whose streams the contract carries, and takes the place of `writes` and `needs`:
+  the payload is the entries (12.7), in `seq` order, batched; nothing is mapped, because the store already
+  decided every row. `to` names the party that receives them.
+- **Push and pull are one contract.** `when: entry` runs it whenever one of its views publishes entries;
+  with `when: asked` the index runs it as a caller and names its own cursor, and gets the entries since.
+- **The owner connects an index** by writing the contract into its package, as it connects any system. An
+  index never subscribes itself; a platform's shared index is each owner's contract pointed at the same `to`.
+- **A cursor per contract and view.** The index acknowledges the last `seq` it holds; the store keeps it as
+  the run's state and resumes from the next one. Until an acknowledgment, entries are delivered again, so an
+  index applies them idempotently by (view, audience, `seq`). Each batch is one run, its idempotency key the
+  contract, the view, its version and the range of `seq` it carries (chapter 7.5).
+- **A new version is a new stream.** Entries name the view with its version (`dvds /2026-11-01`); the first
+  entry of a new version carries `reset: true`, and the index drops the old version's rows when it arrives.
+  The cursor an index acknowledged for an older version doesn't apply to the new one.
+- **Order within a stream, none across streams.** Two views' entries may interleave; one view's never
+  reorder.
+- **Lag is visible.** The index reports the `seq` it reflects (12.6.1), and the store exposes each contract's
+  cursor, so an operator sees how far behind an index is.
+- **Trust by edge.** A stream carries every row of its audience's projection, ancestors included, because
+  the index does the partition matching, so the index is trusted at the level of the views it carries. A
+  view at `public` goes to any party the contract names. A view above `public` goes only to a party holding
+  a live `control` edge that carries `run` for the contract (chapter 14.6), granted by the owner; without
+  it the run stops at `permission`.
+
 - **Actions check again.** Nothing that acts relies on an index. A contract checks its `needs` against the
   store when it runs (chapter 7.4), so a unit that sold a moment ago and still shows can't be bought twice.
 - An index can be dropped and rebuilt from the projection at any time. It is never the truth.
@@ -290,7 +328,9 @@ A projection entry, as the stream carries it:
 ```
 
 A record leaving the view is `{"projection", "audience", "seq", "record", "removed": true}`. In a view above
-`member`, `marks` maps a slot to the role it needs: `"marks": { "cost": "buyer" }`.
+`member`, `marks` maps a slot to the role it needs: `"marks": { "cost": "buyer" }`. `projection` names the
+view with its version when it has one (`"dvds /2026-11-01"`), and the first entry of a new version carries
+`"reset": true` (12.6.2).
 
 ## 12.8 Well-formed views
 

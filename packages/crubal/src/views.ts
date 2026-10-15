@@ -45,6 +45,8 @@ export type View = {
   fresh: string;
   /** `administered`, `controlled`, `owned`, `relation <name>` or `none` (12.2); absent takes the default. */
   partition?: string;
+  /** The dated version; a new version starts the view's stream over (12.6). */
+  version?: string;
 };
 export type RoleDef = { name: string; audience: string; see: string[]; seeLine: number; line: number };
 export type ViewSet = { shapes: Map<string, Shape>; filters: Map<string, Filter>; views: Map<string, View>; roles: Map<string, RoleDef>; shown: Map<string, string> };
@@ -111,6 +113,7 @@ export function readViews(source: string): ViewSet {
         show: get("show")?.value ?? "public",
         fresh: get("fresh")?.value ?? "write",
         ...(get("partition") ? { partition: get("partition")?.value.trim() as string } : {}),
+        ...(get("version") ? { version: get("version")?.value.trim() as string } : {}),
       });
     } else if (n.key === "role") {
       const see = get("may")?.children.find((c) => c.key === "see");
@@ -198,7 +201,7 @@ export type ProjectOptions = {
 };
 export type Projection = { rows: JsonObject[]; records: string[]; counts: { [filter: string]: { [bucket: string]: number } }; pages: number; indexable: boolean };
 /** One entry of a view's projection stream (12.6, 12.7). */
-export type StreamEntry = { projection: string; audience: string; seq: number; record: string; row?: JsonObject; removed?: true };
+export type StreamEntry = { projection: string; audience: string; seq: number; record: string; row?: JsonObject; removed?: true; reset?: true };
 
 /** A view's partition: what it declares, else `controlled` above member and `none` otherwise (12.2). */
 export function partitionOf(v: View): string {
@@ -411,18 +414,35 @@ export class Views {
     return { rows, records: onPage.map((r) => r.id), counts, pages, indexable };
   }
 
-  private streams = new Map<string, { rows: Map<string, string>; seq: number }>();
+  private streams = new Map<string, { version: string; rows: Map<string, string>; seq: number; log: StreamEntry[]; published: boolean }>();
+
+  /** A view's version, as its stream names it. */
+  versionOf(name: string): string {
+    return this.set.views.get(name)?.version ?? "";
+  }
+
+  /** A new version of a view: its stream starts over at the next publish (12.6). */
+  revise(name: string, version: string) {
+    const v = this.set.views.get(name);
+    if (!v) throw new Error(`no view ${name}`);
+    v.version = version;
+  }
 
   /**
    * The projection stream (12.6): the entries since the last publish of this view for this audience, one
-   * per row that is new or changed, and one removal per row that left. Numbered per view and audience.
+   * per row that is new or changed, and one removal per row that left. Numbered per view and audience; a
+   * new version of the view starts over at 1, its first entry marked `reset`.
    */
   stream(name: string, opts: Omit<ProjectOptions, "page" | "picks"> = {}): StreamEntry[] {
     const v = this.set.views.get(name);
     if (!v) throw new Error(`no view ${name}`);
     const audience = opts.audience ?? v.show;
     const key = `${name}|${audience}`;
-    const last = this.streams.get(key) ?? { rows: new Map<string, string>(), seq: 0 };
+    const version = v.version ?? "";
+    const projection = version ? `${name} /${version}` : name;
+    const had = this.streams.get(key);
+    const last = had && had.version === version ? had : { version, rows: new Map<string, string>(), seq: 0, log: [] as StreamEntry[], published: false };
+    const reset = !!had && had.version !== version;
     const now = new Map<string, JsonObject>();
     for (let page = 1; ; page++) {
       const p = this.project(name, { ...opts, audience, page });
@@ -430,15 +450,24 @@ export class Views {
       if (page >= p.pages) break;
     }
     const out: StreamEntry[] = [];
-    const next = { rows: new Map<string, string>(), seq: last.seq };
+    const next = { version, rows: new Map<string, string>(), seq: last.seq, log: [...last.log], published: true };
     for (const [id, row] of now) {
       const s = serialize(row);
       next.rows.set(id, s);
-      if (last.rows.get(id) !== s) out.push({ projection: name, audience, seq: ++next.seq, record: id, row });
+      if (last.rows.get(id) !== s) out.push({ projection, audience, seq: ++next.seq, record: id, row });
     }
-    for (const id of last.rows.keys()) if (!now.has(id)) out.push({ projection: name, audience, seq: ++next.seq, record: id, removed: true });
+    for (const id of last.rows.keys()) if (!now.has(id)) out.push({ projection, audience, seq: ++next.seq, record: id, removed: true });
+    if (reset && out[0]) out[0].reset = true;
+    next.log.push(...out);
     this.streams.set(key, next);
     return out;
+  }
+
+  /** The current version's entries after `seq`, for an index resuming from its cursor (12.6.2). */
+  entriesSince(name: string, seq: number, audience?: string): StreamEntry[] {
+    const v = this.set.views.get(name);
+    const s = this.streams.get(`${name}|${audience ?? v?.show ?? "public"}`);
+    return (s?.log ?? []).filter((e) => e.seq > seq);
   }
 
   /** The portable shape (12.1): key, label, type and value for every value the audience may see. */

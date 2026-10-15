@@ -56,7 +56,9 @@ contract: ebayListing
 | `writes` | the map out (7.3) | send, form |
 | `reads` | the map in (7.3) | receive, send (its answer), form |
 | `stores` | the map both ways (7.3) | store |
-| `when` | the trigger: a condition (chapter 6.3) that starts a run when it becomes true, or `asked` for runs started by a caller | all; default `asked` |
+| `when` | the trigger: a condition (chapter 6.3) that starts a run when it becomes true, `asked` for runs started by a caller, or `entry` for a stream contract that runs as its views publish (chapter 12.6.2) | all; default `asked` |
+| `stream` | the views whose projection streams the contract carries (chapter 12.6.2); it takes the place of `writes` and `needs` | send |
+| `to` | the party the data goes to (an offer's audience, 7.8; a stream's index, chapter 12.6.2) | offer, send with `stream` |
 | `who` | who may run it: a condition over the caller (7.6) | all |
 | `origin` | the origin of the values it brings in (chapter 1.9) | receive, form, take; default `reported` for systems and `declared` for forms |
 | `lands` | `value` (the default), `suggestion` (7.5) or `observation` (chapter 9.7) | receive, form, take |

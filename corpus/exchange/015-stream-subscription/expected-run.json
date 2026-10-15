@@ -1,0 +1,50 @@
+[
+  {
+    "contract": "searchIndex", "caller": "index.example",
+    "entries": { "discs2": [
+      { "projection": "discs2", "audience": "public", "seq": 1, "record": "P-2", "row": { "record": "P-2", "heading": "Home Alone" } },
+      { "projection": "discs2", "audience": "public", "seq": 2, "record": "P-1", "row": { "record": "P-1", "heading": "Christmas Vacation" } }
+    ] },
+    "cursor": { "discs2": 2 }
+  },
+  {
+    "contract": "searchIndex", "caller": "index.example",
+    "entries": { "discs2": [
+      { "projection": "discs2", "audience": "public", "seq": 1, "record": "P-2", "row": { "record": "P-2", "heading": "Home Alone" } },
+      { "projection": "discs2", "audience": "public", "seq": 2, "record": "P-1", "row": { "record": "P-1", "heading": "Christmas Vacation" } }
+    ] },
+    "cursor": { "discs2": 2 }
+  },
+  { "contract": "searchIndex", "acked": { "discs2": 2 } },
+  {
+    "contract": "searchIndex", "caller": "index.example",
+    "entries": { "discs2": [
+      { "projection": "discs2", "audience": "public", "seq": 3, "record": "P-1", "row": { "record": "P-1", "heading": "Christmas Vacation (Special Edition)" } }
+    ] },
+    "cursor": { "discs2": 3 }
+  },
+  {
+    "contract": "searchIndex", "caller": "index.example",
+    "entries": { "discs2": [
+      { "projection": "discs2", "audience": "public", "seq": 2, "record": "P-1", "row": { "record": "P-1", "heading": "Christmas Vacation" } },
+      { "projection": "discs2", "audience": "public", "seq": 3, "record": "P-1", "row": { "record": "P-1", "heading": "Christmas Vacation (Special Edition)" } }
+    ] },
+    "cursor": { "discs2": 3 }
+  },
+  {
+    "contract": "searchIndex", "caller": "index.example",
+    "entries": { "discs2": [
+      { "projection": "discs2 /2026-11-01", "audience": "public", "seq": 1, "record": "P-2", "row": { "record": "P-2", "heading": "Home Alone" }, "reset": true },
+      { "projection": "discs2 /2026-11-01", "audience": "public", "seq": 2, "record": "P-1", "row": { "record": "P-1", "heading": "Christmas Vacation (Special Edition)" } }
+    ] },
+    "cursor": { "discs2": 2 }
+  },
+  {
+    "contract": "staffIndex", "caller": "index.example",
+    "entries": { "staffDiscs": [
+      { "projection": "staffDiscs", "audience": "staff", "seq": 1, "record": "P-1", "row": { "record": "P-1", "heading": "Christmas Vacation (Special Edition)" } },
+      { "projection": "staffDiscs", "audience": "staff", "seq": 2, "record": "P-2", "row": { "record": "P-2", "heading": "Home Alone" } }
+    ] },
+    "cursor": { "staffDiscs": 2 }
+  }
+]

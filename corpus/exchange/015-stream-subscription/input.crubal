@@ -1,0 +1,49 @@
+// An index subscribes through a send contract that carries a view's projection stream (12.6.2). Pushed
+// runs resume from the cursor the index acknowledged (redelivered until then); a pull names its own cursor;
+// a new version of the view starts the stream over, its first entry marked reset. A view above public goes
+// only to a party holding `run` for the contract: the index holds it through E-2 (E-1 has lapsed).
+kind: party
+  levels: party
+name$
+
+shape: card2
+  slots:
+    !title -> heading
+
+view: discs2
+  select:
+    level: product
+  order: releaseDate after
+  shape: card2
+
+view: staffDiscs
+  select:
+    level: product
+  shape: card2
+  show: staff
+
+contract: searchIndex
+  kind: send
+  stream: discs2
+  to: index.example
+  credential: search-index
+  when: entry
+
+contract: staffIndex
+  kind: send
+  stream: staffDiscs
+  to: index.example
+  credential: search-index
+  when: entry
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  releaseDate: 1989
+
+product: P-2 [origin: declared, via: L-1]
+  title: Home Alone
+  releaseDate: 1990

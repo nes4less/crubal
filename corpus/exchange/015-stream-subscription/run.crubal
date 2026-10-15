@@ -1,0 +1,13 @@
+stream: searchIndex
+stream: searchIndex
+ack: searchIndex
+cursor: discs2=2
+write: P-1
+  title: Christmas Vacation (Special Edition)
+stream: searchIndex
+stream: searchIndex
+caller: index.example
+cursor: discs2=1
+revise: discs2 /2026-11-01
+stream: searchIndex
+stream: staffIndex

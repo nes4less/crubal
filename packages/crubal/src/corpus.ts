@@ -576,9 +576,18 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
 
     const shared_ = readFileSync(join(root, "exchange", "_contracts.crubal"), "utf8");
     const contracts = [...readContracts(shared_), ...readContracts(defs)];
-    checkContracts(contracts, dict);
+    // A case that defines views lets its stream contracts (12.6.2) carry their projection streams.
+    const ownViews = readViews(defs);
+    checkContracts(contracts, dict, "", ownViews.views.size ? new Set(ownViews.views.keys()) : undefined);
     const ex = new Exchange(dict, contracts, readRoles(defs));
-    for (const r of readText(data, dict).records.map((x) => foldRecord(x, dict))) ex.put(r);
+    if (ownViews.views.size) {
+      checkViews(ownViews, dict);
+      ex.views = new Views(dict, ownViews);
+    }
+    for (const r of readText(data, dict).records.map((x) => foldRecord(x, dict))) {
+      ex.put(r);
+      ex.views?.put(r);
+    }
     // With access.crubal, the border consults access (chapter 14): permission to run, gates, consumer edges.
     if (existsSync(file("access.crubal"))) {
       const accessText = readFileSync(file("access.crubal"), "utf8");
@@ -589,8 +598,19 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
 
     // The runs, in order.
     const results: Json[] = [];
-    let current: { run?: string; on?: string; caller?: string; offer?: string; arrive?: string; level?: string; answer?: string } = {};
+    let current: { run?: string; on?: string; caller?: string; offer?: string; arrive?: string; level?: string; answer?: string; stream?: string; ack?: string; cursor?: string } = {};
+    const parseCursor = (s: string | undefined) => (s ? Object.fromEntries(s.split(",").map((p) => p.trim().split("=")).map(([v, n]) => [v ?? "", Number(n)])) : undefined);
     const flush = () => {
+      if (current.stream) {
+        results.push(ex.streamRun(current.stream, current.caller, parseCursor(current.cursor)) as Json);
+        current = {};
+        return;
+      }
+      if (current.ack) {
+        results.push(ex.ack(current.ack, parseCursor(current.cursor) ?? {}) as Json);
+        current = {};
+        return;
+      }
       if (current.arrive) {
         results.push(ex.arriveRun(current.arrive, readFileSync(file(current.answer ?? "answer.json"), "utf8"), current.level ?? "product", current.caller, current.on) as Json);
         current = {};
@@ -614,6 +634,17 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
       } else if (n.key === "arrive") {
         flush();
         current.arrive = n.value;
+      } else if (n.key === "stream") {
+        flush();
+        current.stream = n.value;
+      } else if (n.key === "ack") {
+        flush();
+        current.ack = n.value;
+      } else if (n.key === "cursor") current.cursor = n.value;
+      else if (n.key === "revise") {
+        flush();
+        const [view = "", version = ""] = n.value.split(" /");
+        ex.views?.revise(view.trim(), version.trim());
       } else if (n.key === "on") current.on = n.value;
       else if (n.key === "level") current.level = n.value;
       else if (n.key === "answer") current.answer = n.value;
@@ -629,6 +660,7 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
           if (c.key) values[c.key] = f ? (readUnder(f, c.value, dict) ?? c.value) : c.value;
         }
         ex.put({ ...r, values });
+        ex.views?.put({ ...r, values });
       }
     }
     flush();

@@ -5,6 +5,7 @@
 
 import type { Access, Edge } from "./access.ts";
 import { arrive, type Arrival } from "./arrival.ts";
+import type { StreamEntry, Views } from "./views.ts";
 import { serialize } from "./canonical.ts";
 import { evaluate, parseCondition, type StateOf } from "./conditions.ts";
 import type { ClassLine, Dictionary } from "./defs.ts";
@@ -50,7 +51,7 @@ function callerStates(caller: Record | undefined, roles: Role[]): StateOf {
 // ─── Publish checks (7.10) ───────────────────────────────────────────────────
 
 const PARTS: { [kind: string]: string[] } = {
-  send: ["needs", "gives", "writes", "reads", "when", "who", "auth", "scope", "credential", "retry", "undo", "for", "label", "describe", "version"],
+  send: ["needs", "gives", "writes", "reads", "stream", "to", "when", "who", "auth", "scope", "credential", "retry", "undo", "for", "label", "describe", "version"],
   receive: ["needs", "gives", "reads", "when", "who", "origin", "lands", "evidence", "absorb", "ignore", "keep-raw", "prefix", "ref", "relation", "auth", "scope", "credential", "retry", "undo", "for", "label", "describe", "version"],
   store: ["needs", "stores", "when", "who", "for", "label", "describe", "version"],
   form: ["needs", "gives", "writes", "reads", "when", "who", "origin", "lands", "ref", "relation", "for", "label", "describe", "version"],
@@ -62,8 +63,8 @@ function ourKey(address: string): string {
   return address.replace(/^\w+::/, "").split(/[.[]/)[0] as string;
 }
 
-/** Check contracts against a dictionary (7.10). Throws the first problem. */
-export function checkContracts(contracts: Contract[], dict: Dictionary, ownPrefix = ""): void {
+/** Check contracts against a dictionary (7.10). Throws the first problem. `views` lets stream contracts be checked. */
+export function checkContracts(contracts: Contract[], dict: Dictionary, ownPrefix = "", views?: Set<string>): void {
   const names = new Set(contracts.map((c) => c.name));
   for (const c of contracts) {
     const allowed = PARTS[c.kind];
@@ -71,6 +72,12 @@ export function checkContracts(contracts: Contract[], dict: Dictionary, ownPrefi
     for (const [part, line] of Object.entries(c.partLines)) {
       if (part === "kind" || part.includes(":")) continue;
       if (!allowed.includes(part)) throw new CrubalError(`a ${c.kind} contract has no part ${part}`, line);
+    }
+    // A stream contract (12.6.2) carries projection entries: nothing is mapped and nothing is needed.
+    if (c.stream.length) {
+      if (c.writes.length || c.needs.length) throw new CrubalError(`${c.name} carries a stream, so it has no writes and no needs`, c.partLines.stream);
+      if (!c.parts.to) throw new CrubalError(`${c.name} carries a stream, so it names who it goes to`, c.partLines.stream);
+      if (views) for (const v of c.stream) if (!views.has(v)) throw new CrubalError(`${c.name} streams ${v}, which isn't a view`, c.partLines.stream);
     }
     for (const l of c.needs) if (!dict.facets.has(l.facet)) throw new CrubalError(`${l.facet} is not a defined facet`, l.line);
     const sides: { address: string; line: number; values: string[]; valueLines: number[]; mayBeUnknown: boolean }[] = [
@@ -92,7 +99,9 @@ export function checkContracts(contracts: Contract[], dict: Dictionary, ownPrefi
         throw new CrubalError(of ? `${v} is an alias of ${of.value}; a value map must name the real value` : `${v} is not a value of ${key}`, s.valueLines[i] ?? s.line);
       });
     }
-    for (const cond of [c.who, c.when]) if (cond && cond !== "asked") parseCondition(cond, c.line);
+    // `when` is a condition, `asked` (a caller starts it) or `entry` (a stream contract runs as its views publish).
+    for (const cond of [c.who, c.when]) if (cond && cond !== "asked" && cond !== "entry") parseCondition(cond, c.line);
+    if (c.when === "entry" && !c.stream.length) throw new CrubalError(`${c.name} runs on entry but carries no stream`, c.partLines.when);
     if (c.undo && !names.has(c.undo)) throw new CrubalError(`${c.name}'s undo names ${c.undo}, which isn't a contract here`, c.partLines.undo);
     const cred = c.parts.credential;
     if (cred && /[^A-Za-z0-9._-]/.test(cred)) throw new CrubalError(`${c.name}'s credential must be a name, never a secret`, c.partLines.credential);
@@ -136,6 +145,10 @@ export class Exchange {
   readonly bindings = new Map<string, string>();
   /** Set to make the border consult access: `run` needs the caller's `run` item, gated access suggests. */
   access?: Access;
+  /** Set to let stream contracts (12.6.2) carry the views' projection streams. */
+  views?: Views;
+  /** Per stream contract, the cursor each view's index has acknowledged, with the version it was for. */
+  private cursors = new Map<string, { [view: string]: { version: string; seq: number } }>();
   private sent = new Set<string>();
   private runs = 0;
   private minted = 0;
@@ -297,6 +310,48 @@ export class Exchange {
   /** The arrival type, re-exported for callers that read `arrival`. */
   static arrivalOf(r: RunResult): Arrival | undefined {
     return r.arrival as unknown as Arrival | undefined;
+  }
+
+  /**
+   * A stream contract's run (12.6.2): the entries of each view since the cursor, in order. Pushed (the
+   * stored cursor, acknowledged by the index) or pulled (the caller's cursor). A view above `public` goes
+   * only to a party holding `run` for the contract.
+   */
+  streamRun(name: string, callerId?: string, cursor?: { [view: string]: number }): RunResult {
+    const c = this.contracts.get(name);
+    if (!c) throw new Error(`no contract ${name}`);
+    if (!c.stream.length) throw new Error(`${name} carries no stream`);
+    if (!this.views) throw new Error("no views to stream from");
+    const party = callerId ?? c.parts.to ?? "";
+    const head: RunResult = { contract: name, caller: party };
+    for (const v of c.stream) {
+      const view = this.views.set.views.get(v);
+      if (view && view.show !== "public" && !this.access?.mayAnywhere(party, "run", name)) return { ...head, stopped: "permission", view: v };
+    }
+    const log = this.nextLog();
+    const stored = this.cursors.get(name) ?? {};
+    const entries: JsonObject = {};
+    const out: JsonObject = {};
+    const batches: string[] = [];
+    for (const v of c.stream) {
+      this.views.stream(v);
+      const version = this.views.versionOf(v);
+      const held = stored[v];
+      const since = cursor?.[v] ?? (held && held.version === version ? held.seq : 0);
+      const list: StreamEntry[] = this.views.entriesSince(v, since);
+      entries[v] = list as unknown as Json;
+      out[v] = list.at(-1)?.seq ?? since;
+      if (list.length) batches.push(`${name}|${v}|${version}|${list[0]?.seq}-${list.at(-1)?.seq}`);
+    }
+    return { ...head, entries, cursor: out, ...(batches.length ? { key: batches.join(" ") } : {}), log };
+  }
+
+  /** The index acknowledges what it holds: the store resumes from there (12.6.2). */
+  ack(name: string, cursor: { [view: string]: number }): RunResult {
+    const stored = this.cursors.get(name) ?? {};
+    for (const [v, seq] of Object.entries(cursor)) stored[v] = { version: this.views?.versionOf(v) ?? "", seq };
+    this.cursors.set(name, stored);
+    return { contract: name, acked: cursor };
   }
 
   /** Offer and take (7.8): only what the offer gives and the take reads flows. */

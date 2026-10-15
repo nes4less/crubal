@@ -85,7 +85,10 @@ hold a signed wrapper in `border.json`, the presenter's key in `keys.json` and `
   the caller's access is gated (`landed`, `gated`, `reviewer` on the result), and an `arrive: CONTRACT`
   run (with `level:`, `caller:`, optional `on:` for the parent and `answer:` for the payload file) makes or
   finds a record and grants the caller's consumer edge when the contract names a `relation`.
-  `expected-edges.json` lists edges to find afterwards, compared as subsets.
+  `expected-edges.json` lists edges to find afterwards, compared as subsets. A case that defines views in
+  its input may run stream contracts (12.6.2): `stream: CONTRACT` (push from the acknowledged cursor;
+  with `caller:` and `cursor: view=seq` a pull), `ack: CONTRACT` with `cursor: view=seq`, and
+  `revise: VIEW /VERSION` to start a view's stream over.
 - **Partitions and the stream (12.6):** a `views/` case may add `access.crubal`; `callers:` are then served
   only the rows their edges match, and rows carry `ancestors`. A case with `write.crubal` and
   `expected-stream.json` compares the stream entries of the first publish and of the publish after the

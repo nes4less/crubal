@@ -76,6 +76,8 @@ export type Contract = {
   undo?: string;
   /** The field of their payload that is their own ID for the thing (9.2a). */
   ref?: string;
+  /** For a send contract that carries projection streams (12.6.2): the views. */
+  stream: string[];
   /** Every part as written, with its line, for the publish checks. */
   parts: { [k: string]: string };
   partLines: { [k: string]: number };
@@ -115,6 +117,7 @@ export function readContracts(source: string): Contract[] {
       line: node.line,
       needs: [],
       gives: [],
+      stream: [],
       parts: {},
       partLines: {},
     };
@@ -134,6 +137,7 @@ export function readContracts(source: string): Contract[] {
       else if (p.key === "mode") c.mode = p.value;
       else if (p.key === "undo") c.undo = p.value;
       else if (p.key === "ref") c.ref = p.value;
+      else if (p.key === "stream") c.stream = list();
       if (p.key === "kind") c.kind = p.value;
       else if (p.key === "origin") c.origin = p.value;
       else if (p.key === "prefix") c.prefix = p.value;
@@ -143,7 +147,7 @@ export function readContracts(source: string): Contract[] {
       else if (p.key === "keep-raw") c.keepRaw = list();
       else if (p.key === "absorb") c.absorb = p.value !== "no";
       else if (p.key === "lands") c.lands = p.value;
-      if (!["kind", "origin", "prefix", "reads", "writes", "ignore", "keep-raw", "absorb", "lands", "gives", "who", "when", "from", "to", "mode", "undo", "ref"].includes(p.key)) c.parts[p.key] = p.value;
+      if (!["kind", "origin", "prefix", "reads", "writes", "ignore", "keep-raw", "absorb", "lands", "gives", "who", "when", "from", "mode", "undo", "ref", "stream"].includes(p.key)) c.parts[p.key] = p.value;
     }
     if (!c.origin) c.origin = c.kind === "form" ? "declared" : "reported";
     if (c.keepRaw.length && !c.prefix) throw new CrubalError(`${c.name} keeps raw fields, so it needs a prefix`, c.line);
