@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Record lifecycle</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#1F4FA3}a:hover{color:#163B7C}
+</style>
+</helmet>
+<div style="position: relative; width: 1168px; height: 640px; background: #F2F4F7; color: #141B24; font-family: 'IBM Plex Sans', system-ui, sans-serif">
+
+<svg width="127" height="8" viewBox="0 0 127 8" preserveAspectRatio="none" style="position: absolute; left: 304px; top: 260px; width: 127px; height: 8px; overflow: visible; fill: none; stroke: #4A5563; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><defs><marker id="dc-arrow-head-filled-1" orient="auto" markerWidth="5" markerHeight="5" refX="2" refY="2" overflow="visible"><path d="M0 0 L4 2 L0 4 Z" fill="#4A5563" stroke="none" style="stroke: none; fill: #4A5563; fill: context-stroke"/></marker></defs><path d="M 0 4 L 123 4" marker-end="url(#dc-arrow-head-filled-1)"></path></svg>
+<svg width="191" height="8" viewBox="0 0 191 8" preserveAspectRatio="none" style="position: absolute; left: 672px; top: 239px; width: 191px; height: 8px; overflow: visible; fill: none; stroke: #4A5563; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><defs><marker id="dc-arrow-head-filled-2" orient="auto" markerWidth="5" markerHeight="5" refX="2" refY="2" overflow="visible"><path d="M0 0 L4 2 L0 4 Z" fill="#4A5563" stroke="none" style="stroke: none; fill: #4A5563; fill: context-stroke"/></marker></defs><path d="M 0 4 L 187 4" marker-end="url(#dc-arrow-head-filled-2)"></path></svg>
+<svg width="191" height="8" viewBox="0 0 191 8" preserveAspectRatio="none" style="position: absolute; left: 673px; top: 281px; width: 191px; height: 8px; overflow: visible; fill: none; stroke: #4A5563; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><defs><marker id="dc-arrow-head-filled-3" orient="auto" markerWidth="5" markerHeight="5" refX="2" refY="2" overflow="visible"><path d="M0 0 L4 2 L0 4 Z" fill="#4A5563" stroke="none" style="stroke: none; fill: #4A5563; fill: context-stroke"/></marker></defs><path d="M 191 4 L 4 4" marker-end="url(#dc-arrow-head-filled-3)"></path></svg>
+<svg width="8" height="119" viewBox="0 0 8 119" preserveAspectRatio="none" style="position: absolute; left: 548px; top: 329px; width: 8px; height: 119px; overflow: visible; fill: none; stroke: #4A5563; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round"><defs><marker id="dc-arrow-head-filled-4" orient="auto" markerWidth="5" markerHeight="5" refX="2" refY="2" overflow="visible"><path d="M0 0 L4 2 L0 4 Z" fill="#4A5563" stroke="none" style="stroke: none; fill: #4A5563; fill: context-stroke"/></marker></defs><path d="M 4 119 L 4 4" marker-end="url(#dc-arrow-head-filled-4)"></path></svg>
+<svg width="8" height="120" viewBox="0 0 8 120" preserveAspectRatio="none" style="position: absolute; left: 980px; top: 328px; width: 8px; height: 120px; overflow: visible; fill: none; stroke: #4A5563; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 6 6"><path d="M 4 0 L 4 120"></path></svg>
+
+<div style="position: absolute; left: 64px; top: 56px; font-size: 32px; line-height: 40px; font-weight: 600; letter-spacing: -0.01em">Record lifecycle</div>
+<div style="position: absolute; left: 64px; top: 104px; width: 1040px; font-size: 16px; line-height: 24px; color: #4A5563">Nothing is ever deleted. Every step is an envelope write, logged with who decided it.</div>
+
+<div style="position: absolute; left: 64px; top: 200px; width: 240px; height: 128px; box-sizing: border-box; padding: 14px 16px; display: flex; align-items: flex-start; text-align: left; background: #FFFFFF; border: 1px solid #CBD3DD; border-radius: 10px; font-size: 13px; line-height: 18px; color: #3B4552"><span><b style="font-size: 15px; line-height: 22px; color: #141B24">Arrival</b><br>Bound, matched or new. A held arrival waits in review, and nothing is minted.</span></div>
+<div style="position: absolute; left: 432px; top: 200px; width: 240px; height: 128px; box-sizing: border-box; padding: 14px 16px; display: flex; align-items: flex-start; text-align: left; background: #FFFFFF; border: 2px solid #1F4FA3; border-radius: 10px; font-size: 13px; line-height: 18px; color: #3B4552"><span><b style="font-size: 15px; line-height: 22px; color: #141B24">Active</b><br>Attached (product facts fold down) or standing alone (holds everything). Attach and detach any time.</span></div>
+<div style="position: absolute; left: 864px; top: 200px; width: 240px; height: 128px; box-sizing: border-box; padding: 14px 16px; display: flex; align-items: flex-start; text-align: left; background: #FFFFFF; border: 1px solid #CBD3DD; border-radius: 10px; font-size: 13px; line-height: 18px; color: #3B4552"><span><b style="font-size: 15px; line-height: 22px; color: #141B24">Archived</b><br>Reason: sold, duplicate, mistake, merged… Folded values copied on. Left alone.</span></div>
+<div style="position: absolute; left: 432px; top: 448px; width: 240px; height: 128px; box-sizing: border-box; padding: 14px 16px; display: flex; align-items: flex-start; text-align: left; background: #FFFFFF; border: 1px solid #CBD3DD; border-radius: 10px; font-size: 13px; line-height: 18px; color: #3B4552"><span><b style="font-size: 15px; line-height: 22px; color: #141B24">Pending instructions</b><br>From the parent: +key, −key, −key → other. Applied on touch, by drain or by hand.</span></div>
+<div style="position: absolute; left: 864px; top: 448px; width: 240px; height: 104px; box-sizing: border-box; padding: 14px 16px; display: flex; align-items: flex-start; text-align: left; background: #FFFFFF; border: 1px solid #CBD3DD; border-radius: 10px; font-size: 13px; line-height: 18px; color: #3B4552"><span><b style="font-size: 15px; line-height: 22px; color: #141B24">Cascade</b><br>The package decides: archive the units too, or leave them.</span></div>
+
+<div style="position: absolute; left: 320px; top: 236px; width: 96px; text-align: center; font-size: 13px; line-height: 16px; color: #4A5563">mint or bind</div>
+<div style="position: absolute; left: 692px; top: 215px; width: 152px; text-align: center; font-size: 13px; line-height: 16px; color: #4A5563">archive · a decision</div>
+<div style="position: absolute; left: 728px; top: 297px; width: 80px; text-align: center; font-size: 13px; line-height: 16px; color: #4A5563">unarchive</div>
+<div style="position: absolute; left: 564px; top: 380px; width: 48px; text-align: center; font-size: 13px; line-height: 16px; color: #4A5563">apply</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1168,"height":640}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
