@@ -1,0 +1,22 @@
+[
+  {
+    "log": "J-1",
+    "by": { "migration": "backfill" },
+    "writes": [
+      { "record": "P-1", "envelope": "created", "value": { "kind": "item", "level": "product", "owner": "test.example" } },
+      { "record": "P-1", "address": "title", "value": "Christmas Vacation", "source": { "origin": "declared", "via": "L-1" } },
+      { "record": "P-1", "address": "format", "value": "DVD", "source": { "origin": "declared", "via": "L-1" } },
+      { "record": "U-1", "envelope": "created", "value": { "kind": "item", "level": "unit", "owner": "test.example", "of": "P-1" } },
+      { "record": "U-1", "address": "price", "value": { "$money": "12.50", "currency": "USD" }, "source": { "origin": "observed", "via": "L-2" } }
+    ]
+  },
+  {
+    "log": "J-2",
+    "by": { "person": "tester" },
+    "writes": [
+      { "record": "U-1", "envelope": "status", "value": { "state": "archived", "reason": "sold" } },
+      { "record": "U-1", "address": "title", "value": "Christmas Vacation", "source": { "origin": "declared", "via": "L-1" } },
+      { "record": "U-1", "address": "format", "value": "DVD", "source": { "origin": "declared", "via": "L-1" } }
+    ]
+  }
+]

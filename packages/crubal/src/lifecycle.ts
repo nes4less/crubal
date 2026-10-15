@@ -193,6 +193,7 @@ export function merge(store: Store, loserId: string, survivorId: string, dict: D
   }
   store.records.set(survivorId, survivor);
   for (const c of childrenOf(store, loserId, "of")) store.records.set(c.id, { ...c, of: survivorId });
+  for (const c of childrenOf(store, loserId, "within")) store.records.set(c.id, { ...c, within: survivorId });
   for (const [k, v] of store.bindings) if (v === loserId) store.bindings.set(k, survivorId);
   store.records.set(loserId, { ...loser, status: { state: "archived", reason: "merged", into: survivorId } });
 }
@@ -239,17 +240,24 @@ export function issue(store: Store, issuer: string, lines: Node[]): Instruction[
   return added;
 }
 
-/** The issuers whose instructions reach a record: the record above, and the class versions above and on it. */
+/**
+ * The issuers whose instructions reach a record, in the order they apply (10.7): the record above, then
+ * its kind's versions, then the class versions above and on it, each group by name then version.
+ */
 export function issuersFor(store: Store, r: Record): string[] {
   const out: string[] = [];
   if (r.of) out.push(r.of);
   const up = r.of ? store.records.get(r.of) : undefined;
   const worn = new Set([...(up?.wears ?? []), ...(r.wears ?? [])]);
+  const kinds: string[] = [];
+  const classes: string[] = [];
   for (const issuer of store.instructions.keys()) {
-    const m = issuer.match(/^class:([^/]+)\//);
-    if (m && worn.has(m[1] as string)) out.push(issuer);
+    const k = issuer.match(/^kind:([^/]+)\//);
+    if (k && k[1] === r.kind) kinds.push(issuer);
+    const c = issuer.match(/^class:([^/]+)\//);
+    if (c && worn.has(c[1] as string)) classes.push(issuer);
   }
-  return out;
+  return [...out, ...kinds.sort(), ...classes.sort()];
 }
 
 /** The instructions a record hasn't applied yet, in issuer order then number. */

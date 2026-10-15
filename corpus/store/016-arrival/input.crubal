@@ -1,7 +1,7 @@
 // Arrival (9.2a): a catalog's payloads find or make their product. ASIN is a strong key, GTIN a weak one
 // (barcodes get reused). P-2 is archived (discontinued) and still reachable by its strong key; P-3 was merged
 // into P-1 and resolves through `into`.
-asin$
+asin$ unique
 gtin$
 
 kind: item

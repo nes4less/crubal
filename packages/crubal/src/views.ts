@@ -238,6 +238,12 @@ export class Views {
     return { ...(up ? this.effective(up) : {}), ...r.values };
   }
 
+  /** The classes a record wears, those of the records above it included (5.5). */
+  private wearsOf(r: Record): string[] {
+    const up = r.of ? this.records.get(r.of) : undefined;
+    return [...(up ? this.wearsOf(up) : []), ...(r.wears ?? [])];
+  }
+
   private below(r: Record, level: string): Record[] {
     return [...this.records.values()].filter((x) => x.of === r.id && x.level === level);
   }
@@ -320,7 +326,7 @@ export class Views {
     const audience = opts.audience ?? v.show;
     let rows = [...this.records.values()].filter((r) => {
       if (v.level && r.level !== v.level) return false;
-      if (v.wears.some((w) => !(r.wears ?? []).includes(w))) return false;
+      if (v.wears.some((w) => !this.wearsOf(r).includes(w))) return false;
       if (v.hide.includes(r.id)) return false;
       const vals = { ...this.effective(r), id: r.id };
       if (v.when && evaluate(parseCondition(v.when), vals) !== true) return false;
@@ -360,7 +366,8 @@ export class Views {
   project(name: string, opts: ProjectOptions = {}): Projection {
     const v = this.set.views.get(name);
     if (!v) throw new Error(`no view ${name}`);
-    const audience = opts.caller ? String(opts.caller.values.audience ?? "member") : (opts.audience ?? v.show);
+    // A caller's audience is read off their edges (14.4) when access is at hand; a stated value otherwise.
+    const audience = opts.caller ? (opts.access ? opts.access.audienceOf(opts.caller.id) : String(opts.caller.values.audience ?? "member")) : (opts.audience ?? v.show);
     const partition = partitionOf(v);
     let all = this.select(v, { ...opts, audience });
     // A partitioned view serves a caller only the rows their edges match (12.6, 14.10).

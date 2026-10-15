@@ -96,6 +96,14 @@ function checkFacet(f: Facet) {
 /** Run every publish check on a dictionary. Throws the first error; returns warnings. */
 export function checkPackage(dict: Dictionary): Warning[] {
   const warnings: Warning[] = [];
+  // An identify key names a record, so it must be a facet and unique (11.2).
+  for (const [level, ks] of dict.identify) {
+    for (const k of ks) {
+      const f = dict.facets.get(k);
+      if (!f) throw new CrubalError(`identify names ${k} at ${level}, which isn't a facet`);
+      if (!f.unique) throw new CrubalError(`${k} is an identify key at ${level}, so it must be unique`, f.line);
+    }
+  }
   const keys = new Map<string, string>();
   for (const f of dict.facets.values()) {
     if (f.key.startsWith("crubal:")) continue;

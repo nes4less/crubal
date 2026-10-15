@@ -1,0 +1,13 @@
+// Entries are the only way state changes (8.5): an operation's effects are logged, and the state is what
+// applying the entries gives. Archiving U-1 logs its status and the folded values it copied, each with the
+// source it came from, and nothing computed.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: DVD
+
+unit: U-1 of P-1 [origin: observed, via: L-2]
+  price: 12.50USD

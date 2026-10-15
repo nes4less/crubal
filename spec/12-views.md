@@ -138,7 +138,9 @@ Which callers belong to an audience is decided by edges (chapter 14.4).
 
 **Roles** are itemized permissions that sit on top of an audience as a filter. They never change projections,
 caches or indexes. A role is a **preset** of the permission menu (chapter 14.6), which is where the full set
-of verbs, scopes and narrowing is defined; the form below is the short way to write one.
+of verbs, scopes and narrowing is defined. The `role:` block below is the short form: it reads as one preset
+of that name holding one menu item per verb line, and a package MAY write either; a reader treats them as
+the same declaration.
 
 ```crubal
 role: buyer
@@ -214,7 +216,10 @@ ones, held, new and unknown values left out, and `show` rules applied.
   rules read, worked out at publish. Rules are pure and addresses explicit, so the set is exact.
 - **Staleness.** A write to a key in a view's read set, on a record or on anything it reads through (upper
   levels, shared parts, rollups from lower levels), marks that record's projection stale. Only stale rows are
-  rebuilt.
+  rebuilt. **The envelope is in every read set:** a change of `status`, `wears`, `within` or `of` (chapter
+  1.12) changes what a view holds, what a row reads through and what its ancestors are, so it marks the
+  record's row stale like a key would. Erasure (chapter 8.5.2) is such a change: the row leaves the
+  projection, and the stream (below) carries its removal to every index.
 - **Partitions.** In a partitioned view (12.2), every projection row carries its record's ID and ancestors
   (chapter 14.2). The host hands the index the verified caller's live edges, and the index serves a row only
   when one of those edges stands in the partition's relation to the record or an ancestor: an edge on the

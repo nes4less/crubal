@@ -37,8 +37,9 @@ type Extra = Record & { alternatives?: { [a: string]: JsonObject[] }; suggestion
 function sourceOf(entry: Entry, write: JsonObject): Source {
   const base = isObj(entry.source) ? entry.source : {};
   const own = isObj(write.source) ? write.source : {};
-  const merged = { ...base, ...own } as { origin?: string; owner?: string; adopted?: boolean };
-  const s: Source = { origin: merged.origin ?? "reported", via: String(entry.log) };
+  const merged = { ...base, ...own } as { origin?: string; owner?: string; adopted?: boolean; via?: string };
+  // A copied value keeps the source of where it came from (1.12, 1.7), so a write may name its own `via`.
+  const s: Source = { origin: merged.origin ?? "reported", via: merged.via ?? String(entry.log) };
   if (merged.owner) s.owner = merged.owner;
   if (merged.adopted) s.adopted = true;
   return s;
@@ -154,7 +155,7 @@ function applyValue(state: State, entry: Entry, w: JsonObject) {
     const held = { ...(r.held ?? {}) };
     const value = w.value ?? r.values[address];
     if (value === undefined) throw new CrubalError(`entry ${entry.log}: nothing at ${address} to hold`);
-    held[address] = { value, ...(typeof w.rule === "string" ? { rule: w.rule } : {}) };
+    held[address] = { value, ...(typeof w.rule === "string" ? { rule: w.rule } : {}), ...(typeof w.instruction === "string" ? { instruction: w.instruction } : {}) };
     r.held = held;
     place(r, address, undefined, source);
     return;
@@ -228,6 +229,142 @@ export function stateJson(state: State): JsonObject {
   if (state.installed.length) out.installed = state.installed;
   if (state.reads.length) out.reads = state.reads;
   return out;
+}
+
+// ─── The journal: entries are the only way state changes ─────────────────────
+
+/** What an operation works on: a scratch copy of the state. Nothing in it is the truth until it is logged. */
+export type Draft = {
+  records: Map<string, Record>;
+  bindings: Map<string, string>;
+  instructions: Map<string, JsonObject[]>;
+  edges: Map<string, JsonObject>;
+  review: JsonObject[];
+};
+
+function sourceAt(r: Record, key: string): Source | undefined {
+  return r.sources?.[key] ?? r.sources?.["*"];
+}
+
+const sameJson = (a: Json | undefined, b: Json | undefined) => serialize((a ?? "∅") as Json) === serialize((b ?? "∅") as Json);
+
+/** The writes that take `before` to `after`: exactly the effects, nothing computed (8.5). */
+export function diffWrites(before: State, after: Draft): JsonObject[] {
+  const writes: JsonObject[] = [];
+  for (const [id, r] of after.records) {
+    const was = before.records.get(id) as Extra | undefined;
+    const now = r as Extra;
+    if (!was) {
+      const v: JsonObject = { kind: now.kind, level: now.level, owner: now.owner };
+      if (now.of) v.of = now.of;
+      if (now.within) v.within = now.within;
+      if (now.wears) v.wears = now.wears;
+      writes.push({ record: id, envelope: "created", value: v });
+    } else {
+      for (const m of ["of", "within"] as const) {
+        if (was[m] === now[m]) continue;
+        writes.push(now[m] ? { record: id, envelope: m, value: now[m] as string } : { record: id, envelope: m, removed: true });
+      }
+      if (!sameJson(was.wears ?? [], now.wears ?? [])) writes.push({ record: id, envelope: "wears", value: now.wears ?? [] });
+    }
+    if (!sameJson((was?.status ?? {}) as unknown as Json, (now.status ?? {}) as unknown as Json)) writes.push({ record: id, envelope: "status", value: (now.status ?? { state: "active" }) as unknown as JsonObject });
+    if (!sameJson(was?.applied ?? {}, now.applied ?? {})) writes.push({ record: id, envelope: "applied", value: now.applied ?? {} });
+    const heldWas = was?.held ?? {};
+    const heldNow = now.held ?? {};
+    const newlyHeld = new Set(Object.keys(heldNow).filter((k) => !sameJson(heldWas[k], heldNow[k])));
+    for (const k of newlyHeld) {
+      const h = heldNow[k] as JsonObject;
+      writes.push({ record: id, address: k, as: "held", value: h.value as Json, ...(typeof h.rule === "string" ? { rule: h.rule } : {}), ...(typeof h.instruction === "string" ? { instruction: h.instruction } : {}) });
+    }
+    for (const [k, v] of Object.entries(now.values)) {
+      const s = sourceAt(now, k);
+      if (was && sameJson(was.values[k], v) && sameJson((sourceAt(was, k) ?? "") as Json, (s ?? "") as Json)) continue;
+      writes.push({ record: id, address: k, value: v, ...(s ? { source: s as unknown as JsonObject } : {}) });
+    }
+    for (const k of Object.keys(was?.values ?? {})) if (now.values[k] === undefined && !newlyHeld.has(k)) writes.push({ record: id, address: k, removed: true });
+    for (const bag of ["alternatives", "suggestions"] as const) {
+      const bw = was?.[bag] ?? {};
+      for (const [addr, items] of Object.entries(now[bag] ?? {})) {
+        const old = (bw[addr] ?? []).map((x) => serialize(x));
+        for (const it of items) {
+          if (old.includes(serialize(it))) continue;
+          const src: JsonObject = { origin: it.origin as Json, via: it.via as Json, ...(it.owner ? { owner: it.owner as Json } : {}) };
+          writes.push({ record: id, address: addr, as: bag === "alternatives" ? "alternative" : "suggestion", value: it.value as Json, source: src });
+        }
+      }
+    }
+  }
+  for (const [key, record] of after.bindings) {
+    if (before.bindings.get(key) === record) continue;
+    const at = key.indexOf("|");
+    writes.push({ binding: { contract: key.slice(0, at), ref: key.slice(at + 1), record } });
+  }
+  for (const [issuer, list] of after.instructions) {
+    const have = before.instructions.get(issuer)?.length ?? 0;
+    for (const i of list.slice(have)) writes.push({ instruction: { issuer, ...i } });
+  }
+  for (const [id, e] of after.edges) if (!sameJson(before.edges.get(id), e)) writes.push({ edge: e });
+  for (const item of after.review.slice(before.reviews.length)) writes.push({ review: item });
+  return writes;
+}
+
+/** A record with its sources spelled per key and its times dropped, so a draft and a rebuilt state compare. */
+function normal(r: Record): Json {
+  const x = r as Extra;
+  const sources: JsonObject = {};
+  for (const k of Object.keys(r.values)) {
+    const s = sourceAt(r, k);
+    if (s) sources[k] = s as unknown as JsonObject;
+  }
+  const { created: _c, updated: _u, sources: _s, ...rest } = x;
+  return { ...(rest as unknown as JsonObject), sources };
+}
+
+/** Where a draft and a state disagree, or null. */
+export function differs(state: State, draft: Draft): string | null {
+  for (const [id, r] of draft.records) {
+    const s = state.records.get(id);
+    if (!s) return `${id} is in the draft but not the state`;
+    if (serialize(normal(s)) !== serialize(normal(r))) return `${id}: draft ${serialize(normal(r))} state ${serialize(normal(s))}`;
+  }
+  for (const id of state.records.keys()) if (!draft.records.has(id)) return `${id} is in the state but not the draft`;
+  for (const [k, v] of draft.bindings) if (state.bindings.get(k) !== v) return `binding ${k}`;
+  for (const [k, v] of draft.instructions) if ((state.instructions.get(k)?.length ?? 0) !== v.length) return `instructions of ${k}`;
+  return null;
+}
+
+/**
+ * The journal (8.5): operations work on a draft, every change becomes an entry, and the state is only ever
+ * what applying the entries gives. A commit whose entries don't describe the whole change is refused, so
+ * the log can never fall behind the state.
+ */
+export class Journal {
+  readonly state: State = emptyState();
+  readonly entries: Entry[] = [];
+  readonly draft: Draft;
+  readonly owner: string;
+  private n = 0;
+
+  constructor(owner: string, records: Record[] = [], at?: string) {
+    this.owner = owner;
+    this.draft = { records: new Map(), bindings: new Map(), instructions: new Map(), edges: new Map(), review: [] };
+    for (const r of records) this.draft.records.set(r.id, structuredClone(r));
+    if (records.length) this.commit({ migration: "backfill" }, () => {}, at);
+  }
+
+  /** Run an operation on the draft, log what it changed, and apply the entry to the state. */
+  commit(by: JsonObject, mutate: (draft: Draft) => void, at?: string): Entry | null {
+    mutate(this.draft);
+    const writes = diffWrites(this.state, this.draft);
+    if (!writes.length) return null;
+    this.n += 1;
+    const entry: Entry = { log: `J-${this.n}`, owner: this.owner, at: at ?? new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), by, writes };
+    applyEntry(this.state, entry);
+    this.entries.push(entry);
+    const problem = differs(this.state, this.draft);
+    if (problem) throw new CrubalError(`the log doesn't describe the change: ${problem}`);
+    return entry;
+  }
 }
 
 /**

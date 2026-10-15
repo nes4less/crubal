@@ -69,6 +69,10 @@ contract: ebayListing
 
 A part key with a prefix is a package part, carried unchanged.
 
+**A contract's name is its identity**, like a facet's key (chapter 4.1): it never renames. Bindings (chapter
+9.2a), runs and log entries name it, and a renamed contract would orphan every one of them. A new label is
+not a rename; a contract that should go away is retired and replaced by one with a new name.
+
 ## 7.3 Maps
 
 Each map line is `from -> to`, in the direction values flow:

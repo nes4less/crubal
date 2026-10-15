@@ -48,7 +48,7 @@ reference it has decided: `(ebayCatalog, 110245563)` is `P-4QX7`.
 |---|---|---|
 | 1 | the reference is already bound | **bound**: it goes to that record |
 | 2 | a strong key (`identify`, chapter 11.2) matches one active record | **matched**: it goes there, and the binding is kept |
-| 3 | weak keys (`match`) find candidates, or strong keys find several | **held**: nothing is minted; the payload waits in review with its candidates |
+| 3 | weak keys (`match`) find candidates, or strong keys find several | **held**: nothing is minted; the payload waits in review with its candidates, archived ones flagged |
 | 4 | nothing matches | **new**: a record is minted, and the binding is kept |
 
 - **A review decision is a binding.** "This one", "a new record" or "these two are the same" is saved against
@@ -59,7 +59,9 @@ reference it has decided: `(ebayCatalog, 110245563)` is `P-4QX7`.
   review decision.
 - **Status.** A bound reference reaches its record whatever the record's status, and a strong key matches
   archived records too: the arrival lands there and the record stays archived (chapter 1.12). A record
-  archived as `merged` resolves through `into`. Weak keys consider active records only.
+  archived as `merged` resolves through `into`. Weak keys propose archived records as candidates as well,
+  each flagged `archived`, so a thing that comes back under a new reference (a discontinued product
+  relisted, say) is decided by review rather than minted twice.
 
 **Levels.** A payload for a lower level resolves its own record first, then its parent the same way. A parent
 that resolves to one record is attached (chapter 1.7). No parent, or candidates only, is not a reason to

@@ -42,7 +42,9 @@ the same checks, history and revocation apply to every one of them.
 within a facility, a league within a session, a team within a league. It nests to any depth and across
 kinds.
 
-- A record is `within` at most one record. The links MUST NOT form a cycle.
+- A record is `within` at most one record. The links MUST NOT form a cycle, and MUST NOT cross owners: a
+  person's own records (14.1) are never within the host's, or an admin's edge on the host's root would
+  reach them.
 - **`within` is not `of`.** `of` is a level of one kind, where values fold (chapter 1.7). `within` carries
   access and never moves a value. A lower record is `of` the record above without being `within` it (a
   seller's unit is `of` a shared product): whoever administers the shared record doesn't administer every
@@ -107,10 +109,12 @@ together. An edge whose `where` doesn't hold for the record, or whose `until` ha
 
 **Audiences** (chapter 12.4) are read off edges: `public` is `view` for everyone; `member` is every person
 the owner has admitted (the signup contract grants their first edge, `consume` or `view`, on the owner's
-root); `staff` is anyone with a `control` or `admin` edge on any of the owner's records; `owner` is the
-owner. An audience says which projection a caller may read; which *rows* of it they see is the view's
-partition (chapter 12.6), so a `control` edge over one league admits its holder to staff views and shows
-them that league only.
+root); `staff` is anyone with a `control` or `admin` edge on any of the owner's records, and anyone holding
+an emergency edge (14.13); `owner` is the owner. An audience says which projection a caller may read; which
+*rows* of it they see is the view's partition (chapter 12.6), so a `control` edge over one league admits its
+holder to staff views and shows them that league only, and an emergency responder reads staff views of
+what their edge covers. A `view` edge admits to `member` and no higher: what it opens is a member view
+partitioned by its relation (a season's stats for `relation subscriber`, 14.10), never a staff projection.
 
 **A contract grants the consumer's edge.** A contract that creates a record for a caller (an order, a
 booking, a submission) also writes that caller's edge on it, `mode: consume` with the contract's relation,

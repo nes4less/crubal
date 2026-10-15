@@ -216,7 +216,9 @@ Every key on an attached record is one of two kinds:
   values**. A change above never changes an owned value, and a change to which keys are projected reaches a
   lower record only through an instruction (chapter 10.7).
 
-A record that wears a class of its own (5.5) owns that class's keys, whatever the record above projects.
+A record that wears a class of its own (5.5) owns that class's lines **at its own level**: its `level::`
+lines, and, when the record stands alone, its unprefixed lines too. Lines above its level stay folded,
+whatever the record above projects.
 
 **Standing alone.** A record without `of` reads nothing from above, so it stores every value itself, folded
 keys included, and wears only its own classes. Its classes' lines with no level prefix are asked of it at its
@@ -321,10 +323,12 @@ mistake. The `reason` says which; a package MAY name reasons of its own.
   sold). Rules MAY suggest archiving; they never archive.
 - **It keeps history true.** Archiving copies every folded value onto the record, with its source, so a later
   change above never rewrites what an archived record says.
-- **An archived record is left alone:** pending instructions skip it, weak keys never propose it as a
-  candidate (a bound reference or a strong key still reaches it, and what lands doesn't change its status,
-  chapter 9.2a), rules don't recompute its produced values, and views leave it out unless they select
-  archived records explicitly.
+- **An archived record is left alone by the engine:** pending instructions skip it, rules don't recompute
+  its produced values, and views leave it out unless they select archived records explicitly. Intake still
+  reaches it: a bound reference or a strong key lands there, a weak key proposes it flagged as archived
+  (chapter 9.2a), and what lands never changes its status.
+- **It holds its snapshot.** An archived record MAY hold values for folded keys (the copies archiving made),
+  the one exception to chapter 1.7's rule that an attached record stores none.
 - **It is reversible.** Unarchiving returns the record to `active` as it was archived; if it is attached, its
   copied values fold up again as in attaching (1.7), differences going to review.
 - **Cascade is the package's rule** (chapter 11.2, `archive`): archiving a record either archives the records
@@ -332,5 +336,6 @@ mistake. The `reason` says which; a package MAY name reasons of its own.
   Unarchiving undoes only what the cascade did.
 
 **Merge.** The survivor keeps its ID. The merged record's values fold into it under the trust order (chapter
-8.4), losers kept as alternatives; its bindings (chapter 9.2a) and lower records move to the survivor; links
-to the merged ID resolve through `into`. An ID is never reused.
+8.4), losers kept as alternatives; its bindings (chapter 9.2a), the records `of` it and the records `within`
+it move to the survivor; links to the merged ID, and edges on it (chapter 14.3), resolve through `into`. An
+ID is never reused.

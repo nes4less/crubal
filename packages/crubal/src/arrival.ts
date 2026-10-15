@@ -14,6 +14,8 @@ export type Arrival = {
   outcome: "bound" | "matched" | "held" | "new";
   record?: string;
   candidates?: string[];
+  /** The candidates that are archived (9.2a). */
+  archived?: string[];
   /** How it was found: `binding`, `identify:<key>`, `match:<keys>`. */
   by?: string;
   ref?: string;
@@ -88,18 +90,23 @@ export function arrive(
     if (hits.length === 1) return finish({ outcome: "matched", by: `identify:${key}` }, store.records.get(hits[0] as string));
     if (hits.length > 1) return finish({ outcome: "held", candidates: hits.sort(), by: `identify:${key}` }, undefined);
   }
-  // 3. Weak keys find candidates among active records: held, nothing minted.
+  // 3. Weak keys find candidates: held, nothing minted. An archived candidate is proposed too, flagged, so
+  //    a discontinued thing coming back under a new reference isn't minted twice; review decides.
   const candidates = new Set<string>();
+  const archived = new Set<string>();
   const hows: string[] = [];
   for (const group of dict.match.get(level) ?? []) {
     if (group.some((k) => values[k] === undefined)) continue;
-    const hits = atLevel.filter((r) => active(r) && group.every((k) => same(r.values[k], values[k])));
+    const hits = atLevel.filter((r) => r.status?.reason !== "merged" && group.every((k) => same(r.values[k], values[k])));
     if (hits.length) {
-      for (const h of hits) candidates.add(h.id);
+      for (const h of hits) {
+        candidates.add(h.id);
+        if (!active(h)) archived.add(h.id);
+      }
       hows.push(group.join("+"));
     }
   }
-  if (candidates.size) return finish({ outcome: "held", candidates: [...candidates].sort(), by: `match:${hows.join(";")}` }, undefined);
+  if (candidates.size) return finish({ outcome: "held", candidates: [...candidates].sort(), by: `match:${hows.join(";")}`, ...(archived.size ? { archived: [...archived].sort() } : {}) }, undefined);
   // 4. New: minted at commit, and bound.
   const id = opts.mint();
   const rec: Record = { id, kind: dict.levels.get(level) ?? level, level, owner: opts.owner, values: {} };

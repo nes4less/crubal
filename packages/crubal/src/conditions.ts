@@ -107,7 +107,7 @@ function instant(s: string): number | null {
  * Compare two temporal values (6.3): moments by instant; a plain date with a moment by the moment's UTC
  * date; local dates only with local dates; times of day as clock times. Undetermined across kinds.
  */
-function compareTime(a: string, b: string): number | "undetermined" {
+export function compareTime(a: string, b: string): number | "undetermined" {
   const ia = instant(a);
   const ib = instant(b);
   if (ia !== null && ib !== null) return Math.sign(ia - ib);

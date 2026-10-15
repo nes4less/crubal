@@ -11,7 +11,7 @@ import { checkRecipe, readRecipes, restamp } from "./migrate.ts";
 import { checkContracts, Exchange, readRoles, verifyBorder } from "./exchange.ts";
 import { checkPackages } from "./packages.ts";
 import { checkViews, readViews, Views } from "./views.ts";
-import { rebuild, stateJson } from "./log.ts";
+import { Journal, rebuild, stateJson } from "./log.ts";
 import { arrive, decide, type Arrival, type ArrivalStore } from "./arrival.ts";
 import { apply as applyInstructions, archive, attach, detach, emptyStore, issue, merge, unarchive } from "./lifecycle.ts";
 import { Access, checkPermissions, readAccess } from "./access.ts";
@@ -296,8 +296,10 @@ function runStoreCase(folder: string, caseDir: string, name: string, shared: Dic
       readDefinitions(text, dict);
       const [contract] = readContracts(text);
       if (!contract) return fail("no contract");
-      const store: ArrivalStore = { records: new Map(records.map((r) => [r.id, r])), bindings: new Map() };
-      if (existsSync(file("bindings.json"))) for (const [k, v] of Object.entries(json("bindings.json") as JsonObject)) store.bindings.set(k, String(v));
+      // Every arrival is an operation on the journal's draft, logged as entries (8.5).
+      const journal = new Journal("test.example", records, "2026-10-15T00:00:00Z");
+      const store: ArrivalStore = journal.draft;
+      if (existsSync(file("bindings.json"))) journal.commit({ migration: "backfill" }, (d) => { for (const [k, v] of Object.entries(json("bindings.json") as JsonObject)) d.bindings.set(k, String(v)); }, "2026-10-15T00:00:01Z");
       const answersFile = json("answers.json");
       const level = isPlainObject(answersFile) ? String(answersFile.level) : "product";
       const answers = (isPlainObject(answersFile) ? answersFile.answers : answersFile) as Json[];
@@ -307,17 +309,22 @@ function runStoreCase(folder: string, caseDir: string, name: string, shared: Dic
       const got: Json[] = [];
       let held: { intake: IntakeRecord; ref?: string } | null = null;
       answers.forEach((a, i) => {
+        const at = `2026-10-15T00:01:${String(i).padStart(2, "0")}Z`;
         if (isPlainObject(a) && isPlainObject(a.decide)) {
           if (!held) throw new Error("a decision with nothing held");
           const choice = a.decide.new === true ? ({ new: true } as const) : { record: String(a.decide.record) };
-          const r = decide(contract, held, choice, store, dict, { mint, owner, level });
-          got.push(r.arrival as unknown as Json);
+          const h = held;
+          journal.commit({ person: "reviewer" }, (d) => {
+            got.push(decide(contract, h, choice, d, dict, { mint, owner, level }).arrival as unknown as Json);
+          }, at);
           held = null;
           return;
         }
-        const r = arrive(contract, JSON.stringify(a), level, store, dict, { mint, owner, intakeId: `I-${i + 1}` });
-        if (r.arrival.outcome === "held") held = { intake: r.intake, ...(r.arrival.ref !== undefined ? { ref: r.arrival.ref } : {}) };
-        got.push(r.arrival as unknown as Json);
+        journal.commit({ contract: contract.name, run: `R-${i + 1}` }, (d) => {
+          const r = arrive(contract, JSON.stringify(a), level, d, dict, { mint, owner, intakeId: `I-${i + 1}` });
+          if (r.arrival.outcome === "held") held = { intake: r.intake, ...(r.arrival.ref !== undefined ? { ref: r.arrival.ref } : {}) };
+          got.push(r.arrival as unknown as Json);
+        }, at);
       });
       const want = json("expected-arrival.json") as { [k: string]: Json }[];
       if (got.length !== want.length) return fail(`${got.length} arrivals, expected ${want.length}: ${serialize(got)}`);
@@ -338,30 +345,46 @@ function runStoreCase(folder: string, caseDir: string, name: string, shared: Dic
 
     // Lifecycle (1.7, 1.12) and instructions (10.7): operations in order, then the records.
     if (existsSync(file("ops.crubal"))) {
-      const store = emptyStore();
-      for (const r of records) store.records.set(r.id, r);
+      // Every operation runs on the journal's draft and is logged; a change the entries don't describe
+      // is refused by the journal itself (8.5).
+      const journal = new Journal("test.example", records, "2026-10-15T00:00:00Z");
+      const store = journal.draft as unknown as ReturnType<typeof emptyStore>;
+      let n = 0;
       for (const op of readTree(readFileSync(file("ops.crubal"), "utf8"))) {
         if (op.kind !== "pair" || !op.key) continue;
         const piece = readPiece(op.value, op.line);
         const detail = (k: string) => piece.detail.find(([n]) => n === k)?.[1].text;
         const [a = "", b] = piece.text.split(" -> ").map((s) => s.trim());
-        if (op.key === "archive") archive(store, a, detail("reason") ?? "archived", dict, detail("into"));
-        else if (op.key === "unarchive") unarchive(store, a, dict);
-        else if (op.key === "merge" && b) merge(store, a, b, dict);
-        else if (op.key === "attach" && b) attach(store, a, b, dict, detail("edit") !== "no");
-        else if (op.key === "detach") detach(store, a, dict);
-        else if (op.key === "instruct") issue(store, piece.text, op.children);
-        else if (op.key === "apply") applyInstructions(store, a, dict);
-        else if (op.key === "write") {
-          const r = store.records.get(a);
-          if (!r) return fail(`write to an unknown record ${a}`);
-          const values = { ...r.values };
-          for (const c of op.children) {
-            const f = c.key ? dict.facets.get(c.key) : undefined;
-            if (c.key) values[c.key] = f ? (readUnder(f, c.value, dict) ?? c.value) : c.value;
-          }
-          store.records.set(a, { ...r, values });
-        } else return fail(`unknown op ${op.key}`);
+        const key = op.key;
+        let problem: string | null = null;
+        journal.commit({ person: "tester" }, () => {
+          if (key === "archive") archive(store, a, detail("reason") ?? "archived", dict, detail("into"));
+          else if (key === "unarchive") unarchive(store, a, dict);
+          else if (key === "merge" && b) merge(store, a, b, dict);
+          else if (key === "attach" && b) attach(store, a, b, dict, detail("edit") !== "no");
+          else if (key === "detach") detach(store, a, dict);
+          else if (key === "instruct") issue(store, piece.text, op.children);
+          else if (key === "apply") applyInstructions(store, a, dict);
+          else if (key === "write") {
+            const r = store.records.get(a);
+            if (!r) {
+              problem = `write to an unknown record ${a}`;
+              return;
+            }
+            const values = { ...r.values };
+            for (const c of op.children) {
+              const f = c.key ? dict.facets.get(c.key) : undefined;
+              if (c.key) values[c.key] = f ? (readUnder(f, c.value, dict) ?? c.value) : c.value;
+            }
+            store.records.set(a, { ...r, values });
+          } else problem = `unknown op ${key}`;
+        }, `2026-10-15T00:01:${String(++n).padStart(2, "0")}Z`);
+        if (problem) return fail(problem);
+      }
+      if (existsSync(file("expected-entries.json"))) {
+        const got = journal.entries.map(({ at: _at, owner: _o, ...e }) => e);
+        const wantE = json("expected-entries.json");
+        if (serialize(got as Json) !== serialize(wantE)) return fail(`entries: ${firstDiff(serialize(got as Json), serialize(wantE))}`);
       }
       const want = json("expected.json") as { records: Rec[]; review?: Json };
       for (const w of want.records) {

@@ -4,7 +4,7 @@
 // is only as good as its grantor; packages declare the permission menu, presets and relations; gated edges
 // turn writes into suggestions; emergency edges are the one grant not made inside the owner.
 
-import { evaluate, parseCondition } from "./conditions.ts";
+import { compareTime, evaluate, parseCondition } from "./conditions.ts";
 import type { Dictionary } from "./defs.ts";
 import { splitTop } from "./lex.ts";
 import type { Json, JsonObject, Record } from "./model.ts";
@@ -193,23 +193,60 @@ export class Access {
     }
   }
 
-  covers(e: Edge, recordId: string): boolean {
-    return e.on === recordId || this.ancestors(recordId).includes(e.on);
+  /** A merged record resolves through `into` (1.12), for edges on it and reaches into it. */
+  surviving(id: string): string {
+    let cur = id;
+    for (let i = 0; i < 100; i++) {
+      const r = this.records.get(cur);
+      if (!r || r.status?.reason !== "merged" || !r.status.into) return cur;
+      cur = r.status.into;
+    }
+    return cur;
   }
 
-  /** Is an edge live (14.4, 14.5): not lapsed, its `where` holding, and its grantor live and covering it? */
+  covers(e: Edge, recordId: string): boolean {
+    const on = this.surviving(e.on);
+    const target = this.surviving(recordId);
+    return on === target || this.ancestors(target).includes(on);
+  }
+
+  /** Does the edge's `where` hold for this record (14.4)? It narrows per record covered. */
+  holds(e: Edge, recordId: string): boolean {
+    if (!e.where) return true;
+    const r = this.records.get(recordId);
+    const vals: JsonObject = { ...(r?.values ?? {}), id: recordId, ...(r?.status ? { status: r.status.state } : {}) };
+    return evaluate(parseCondition(e.where), vals) === true;
+  }
+
+  /** Is an edge live (14.4, 14.5): not lapsed, and its grantor live and covering it? */
   live(e: Edge, seen = new Set<string>()): boolean {
     if (seen.has(e.edge)) return false;
     seen.add(e.edge);
-    if (e.until && this.now && e.until <= this.now) return false;
-    if (e.where) {
-      const r = this.records.get(e.on);
-      const vals: JsonObject = { ...(r?.values ?? {}), ...(r?.status ? { status: r.status.state } : {}) };
-      if (evaluate(parseCondition(e.where), vals) !== true) return false;
+    if (e.until && this.now) {
+      const c = compareTime(e.until, this.now);
+      if (c !== "undetermined" && c <= 0) return false;
     }
     if (e.by === "owner" || e.by === "platform") return true;
     const g = this.edges.get(e.by);
     return !!g && this.live(g, seen) && this.covers(g, e.on);
+  }
+
+  /** Does the caller hold the key to this record: the owner, or a hosted person over a record they own? */
+  owns(callerId: string, recordId: string): boolean {
+    if (callerId === this.owner) return true;
+    const owner = this.records.get(recordId)?.owner;
+    return !!owner && (owner === callerId || owner === `${this.owner}:${callerId}`);
+  }
+
+  /**
+   * The audience a caller belongs to (12.4, 14.4): the owner; staff for anyone with a control or admin
+   * edge, or an emergency edge; member for anyone the owner has admitted by any live edge; else public.
+   */
+  audienceOf(callerId: string): string {
+    if (callerId === this.owner) return "owner";
+    const mine = [...this.edges.values()].filter((e) => e.who === callerId && this.live(e));
+    if (mine.some((e) => e.mode === "control" || e.mode === "admin" || e.by === "platform" || e.relation === "emergency")) return "staff";
+    return mine.length ? "member" : "public";
   }
 
   /** The menu items a list of grants expands to (presets open up). */
@@ -225,8 +262,8 @@ export class Access {
 
   /** A caller's access to a record from every live edge on it or an ancestor (14.4). */
   effective(callerId: string, recordId: string): Effective {
-    if (callerId === this.owner) return { mode: "admin", items: new Set(this.perms.menu.keys()), relations: new Set(["owner"]), gated: false, edges: [] };
-    const mine = [...this.edges.values()].filter((e) => e.who === callerId && this.covers(e, recordId) && this.live(e));
+    if (this.owns(callerId, recordId)) return { mode: "admin", items: new Set(this.perms.menu.keys()), relations: new Set(["owner"]), gated: false, edges: [] };
+    const mine = [...this.edges.values()].filter((e) => e.who === callerId && this.covers(e, recordId) && this.live(e) && this.holds(e, recordId));
     let mode: Mode = "none";
     const items = new Set<string>();
     const relations = new Set<string>();
@@ -245,7 +282,7 @@ export class Access {
   standsIn(callerId: string, recordId: string, partition: string): boolean {
     if (!partition || partition === "none") return true;
     const eff = this.effective(callerId, recordId);
-    if (partition === "owned") return this.records.get(recordId)?.owner === callerId || callerId === this.owner;
+    if (partition === "owned") return this.owns(callerId, recordId);
     if (partition === "administered") return eff.mode === "admin";
     if (partition === "controlled") return rank(eff.mode) >= rank("control");
     const rel = partition.match(/^relation (\S+)$/);
@@ -255,7 +292,7 @@ export class Access {
 
   private scopeOk(item: MenuItem, callerId: string, recordId: string, eff: Effective): boolean {
     if (!item.on) return true;
-    if (item.on === "owned") return this.records.get(recordId)?.owner === callerId;
+    if (item.on === "owned") return this.owns(callerId, recordId);
     if (item.on === "administered") return eff.mode === "admin";
     const rel = item.on.match(/^relation (\S+)$/);
     if (rel) return eff.relations.has(rel[1] as string);
