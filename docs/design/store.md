@@ -1,6 +1,7 @@
 # The persistent store
 
-**Status:** design, 2026-10-15. Not part of the specification: how a store keeps its data is not part of
+**Status:** design, 2026-10-15; first version in `packages/crubal-postgres` (schema, write path, rebuild,
+verify, redaction, owner isolation; the working set is the owner's whole state for now). Not part of the specification: how a store keeps its data is not part of
 conformance (spec chapter 13.6). This is the design of one conforming store, the one crubal.com ships.
 
 ## What it is
