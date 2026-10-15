@@ -13,8 +13,9 @@ the same checks, history and revocation apply to every one of them.
 ## 14.1 Owners and the key
 
 - **A caller is a record**: a person, an organization or a system. Edges name callers by ID.
-- **An owner holds the key.** An owner is a domain (a tenant: a Cashierfu customer, Media Encyclopedia), or a
-  person hosted by one. Every record names its owner in its envelope (chapter 1.1).
+- **An owner holds the key.** An owner is a domain (a tenant of a platform, or a site of its own; Media
+  Encyclopedia is one), or a person hosted by one. Every record names its owner in its envelope (chapter
+  1.1).
 - **Only the owner may:** erase (redaction, chapter 8.5.2), export everything it owns, grant edges to callers
   of other owners (14.8), transfer ownership, and close its data. No edge carries these.
 - **People own aspects of their own data.** A package declares which records a person may own, by kind or
@@ -295,7 +296,7 @@ other.
 ```json
 {
   "edge": "E-9001",
-  "who": "cashierfu.com:staff/S-14",
+  "who": "platform.example:staff/S-14",
   "relation": "emergency",
   "mode": "view",
   "on": "R-ROOT",
@@ -304,7 +305,7 @@ other.
     "kind": "incident",
     "reason": "Card-skimming script reported on the storefront",
     "reference": "INC-2026-114",
-    "approvals": [ { "by": "cashierfu.com:staff/S-02", "sig": "…" }, { "by": "cashierfu.com:staff/S-31", "sig": "…" } ],
+    "approvals": [ { "by": "platform.example:staff/S-02", "sig": "…" }, { "by": "platform.example:staff/S-31", "sig": "…" } ],
     "notify": "now"
   },
   "by": "platform"

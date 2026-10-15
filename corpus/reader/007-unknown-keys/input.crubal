@@ -5,6 +5,6 @@ owner: test.example
 
 product: P-7 [origin: reported, via: L-1]
   title: Christmas Vacation
-  ebay:Studio: Warner Home Video
-  ebay:Features: Closed-captioned, Widescreen
-  ebay:Year: 1997
+  market:Studio: Warner Home Video
+  market:Features: Closed-captioned, Widescreen
+  market:Year: 1997

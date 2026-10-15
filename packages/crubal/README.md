@@ -3,7 +3,7 @@
 The CRUBAL reference implementation. Pure functions, JSON in and JSON out, so a compiled core can replace
 the internals later behind the same API.
 
-**Level reached: Views**, every chapter of the spec (1–13). Conformance claim: `CRUBAL 2 · Views · corpus 2026-10-14`.
+**Level reached: Views**, every chapter of the spec (1–14). Conformance claim: `CRUBAL 2 · Views · corpus 2026-10-15`.
 
 - **Reader:** the text form and JSON both ways, facet types, unknown keys kept exactly, plain-words refusals
   with line numbers.
@@ -32,7 +32,15 @@ the internals later behind the same API.
   `shown to` rules (new and unknown values never public), roles that narrow an audience, the portable shape,
   and read sets that decide which rows a write makes stale.
 
-It passes every corpus folder (87 cases).
+- **The backbone (chapters 1.12, 8.5, 9.2a, 10.7, 14):** the log as effects with rebuild from the log alone
+  (`log.ts`), arrival with bindings and strong and weak keys (`arrival.ts`), folded and owned keys with
+  attach, detach, archive, merge and instructions (`lifecycle.ts`), owners, edges, modes, the grantor chain,
+  permission menus, gates and emergency access (`access.ts`), and partitioned views with the projection
+  stream (`views.ts`).
+
+It passes every corpus folder (112 cases). The corpus and this package name no adopter and no third party:
+`test.example` owns the data, `market:` stands for any marketplace, `bench` for any in-house tool, and
+product, unit and the like are the test package's own kinds, never the core's.
 
 Store also checks Ed25519 signatures against the owner's published key, replays intake records from their
 kept bytes (deterministically, keeping earlier outcomes), reviews unknown and new values by key across all

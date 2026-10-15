@@ -42,6 +42,9 @@ The chapters follow the stack from the bottom. Each refers only to the chapters 
 - **Product, unit, catalog, disc and the like are the media and product packages' words.** They appear in
   this spec only as examples. The core knows kinds, levels, records, classes and views; nothing in it is
   defined in terms of a product or a unit.
+- **Named parties and tools are examples too.** eBay, Wikidata, a distributor, a platform such as
+  Cashierfu, a bench tool such as `me:unitizer`: each stands in for any system, party or contract of its
+  kind. CRUBAL defines none of them, depends on none of them, and reads the same with other names.
 
 ## Conformance levels
 

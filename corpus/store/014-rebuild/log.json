@@ -30,7 +30,7 @@
   },
   {
     "log": "L-4", "prev": "sha256:0000", "owner": "test.example", "at": "2026-10-15T10:10:00Z",
-    "by": { "contract": "unitizer", "run": "R-2" },
+    "by": { "contract": "bench", "run": "R-2" },
     "source": { "origin": "observed" },
     "writes": [
       { "record": "U-1", "envelope": "created", "value": { "kind": "item", "level": "unit", "owner": "test.example", "of": "P-1" } },

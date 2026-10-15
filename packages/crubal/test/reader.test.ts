@@ -67,8 +67,8 @@ test("a minted row key is required where there is no identity", () => {
 });
 
 test("an unknown key keeps its exact text", () => {
-  const w = readText("owner: t.example\nproduct: P-1\n  ebay:Features: a, b [x]\n", emptyDictionaryWithProduct());
-  assert.equal(w.records[0]?.values["ebay:Features"], "a, b [x]");
+  const w = readText("owner: t.example\nproduct: P-1\n  market:Features: a, b [x]\n", emptyDictionaryWithProduct());
+  assert.equal(w.records[0]?.values["market:Features"], "a, b [x]");
 });
 
 function emptyDictionaryWithProduct() {

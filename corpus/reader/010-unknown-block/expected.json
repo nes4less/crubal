@@ -6,8 +6,8 @@
       "id": "P-10", "kind": "item", "level": "product", "owner": "test.example",
       "values": {
         "title": "Christmas Vacation",
-        "ebay:Specifics": "\nFormat: DVD\nStudio: Warner\n  Region: 1",
-        "ebay:Note": "first line\nsecond line"
+        "market:Specifics": "\nFormat: DVD\nStudio: Warner\n  Region: 1",
+        "market:Note": "first line\nsecond line"
       },
       "sources": { "*": { "origin": "reported", "via": "L-1" } }
     }
