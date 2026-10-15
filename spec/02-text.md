@@ -35,7 +35,8 @@ package: me /2026-10-13
 owner: mediaencyclopedia.com
 ```
 
-- `crubal` is the language version.
+- `crubal` is the language version (chapter 11.8). A reader refuses a file written in a higher one than it
+  knows, naming this line.
 - `package` names the package and the frozen version the data was written under. It is required at a border
   (chapter 7) and MAY be left out inside a store.
 - `owner` is the default owner of every record in the file.

@@ -3,6 +3,7 @@
 // extending package may add to what it extends but never change it.
 
 import { type Dictionary, emptyDictionary, type Facet, readDefinitions } from "./defs.ts";
+import { LANGUAGE } from "./read-text.ts";
 import { readContracts } from "./store.ts";
 import { CrubalError, readTree } from "./tree.ts";
 
@@ -11,7 +12,10 @@ export type PackageInfo = {
   version: string;
   owner: string;
   line: number;
-  extends: { name: string; version: string }[];
+  /** The language version it is written in (11.8), and the line that says so. */
+  crubal: number;
+  crubalLine: number;
+  extends: { name: string; version: string; line: number }[];
   prefixes: Map<string, { target: string; line: number }>;
   trust: { entry: string; line: number }[];
   dict: Dictionary;
@@ -30,13 +34,17 @@ export function readPackages(source: string): PackageInfo[] {
     const [head, ...rest] = readTree(text);
     if (!head) throw new CrubalError("an empty package", start + 1);
     const [name = "", version = ""] = head.value.split(/\s+\//).map((s) => s.trim());
-    const info: PackageInfo = { name, version, owner: "", line: head.line, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [] };
+    const info: PackageInfo = { name, version, owner: "", line: head.line, crubal: LANGUAGE, crubalLine: head.line, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [] };
     for (const c of head.children) {
       if (c.key === "owner") info.owner = c.value;
+      if (c.key === "crubal") {
+        info.crubal = Number(c.value);
+        info.crubalLine = c.line;
+      }
       if (c.key === "extends") {
         for (const e of c.value.split(",")) {
           const [en = "", ev = ""] = e.trim().split(/\s+\//);
-          info.extends.push({ name: en.trim(), version: ev.trim() });
+          info.extends.push({ name: en.trim(), version: ev.trim(), line: c.line });
         }
       }
       if (c.key === "prefixes") for (const p of c.children) if (p.key) info.prefixes.set(p.key, { target: p.value, line: p.line });
@@ -68,6 +76,13 @@ export function checkPackages(source: string): PackageInfo[] {
   const pkgs = readPackages(source);
   const byName = new Map(pkgs.map((p) => [p.name, p]));
   for (const p of pkgs) {
+    // Language versions (11.8): never above this reader's, and never extending a package above one's own.
+    if (!Number.isInteger(p.crubal) || p.crubal < 1) throw new CrubalError(`${p.name}: the language version is a whole number`, p.crubalLine);
+    if (p.crubal > LANGUAGE) throw new CrubalError(`${p.name} is written in CRUBAL ${p.crubal}; this reader knows ${LANGUAGE}`, p.crubalLine);
+    for (const e of p.extends) {
+      const base = byName.get(e.name);
+      if (base && base.crubal > p.crubal) throw new CrubalError(`${p.name} (CRUBAL ${p.crubal}) extends ${e.name}, written in CRUBAL ${base.crubal}, which it couldn't read`, e.line);
+    }
     for (const [prefix, { target, line }] of p.prefixes) {
       if (prefix === "crubal") throw new CrubalError("the prefix crubal is reserved for the core", line);
       if (prefix === p.name && target !== `${p.owner}/${p.name}`) throw new CrubalError(`${p.name} can't map its own name to something else`, line);

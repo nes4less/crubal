@@ -1,0 +1,7 @@
+// A reader never reads above its language version (11.8): it refuses, naming the line.
+crubal: 3
+package: test /2026-10-14
+owner: test.example
+
+product: P-1
+  title: Christmas Vacation

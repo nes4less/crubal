@@ -101,8 +101,9 @@ run, the rule or the recipe.
 **What an entry holds:** `log` (its ID), `prev`, `chain` (when there are several), `owner`, `at`, `by`
 (exactly one of `person`, `contract` with `run`, `rule`, `migration`, `instruction` or `take` with the
 presenter's entry), `intake` (when the write came through intake), `source` (the default source of its
-value writes: `origin`, and `owner` and `adopted` when they apply; `via` is the entry itself), `writes`, and
-`sig`.
+value writes: `origin`, and `owner` and `adopted` when they apply; `via` is the entry itself), `writes`,
+`crubal` (the language version, on the first entry of a chain and whenever it changes from the entry
+before, chapter 11.8), and `sig`.
 
 Each write is one of these:
 

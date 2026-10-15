@@ -1,0 +1,11 @@
+// A package never extends one written in a higher language version than its own (11.8): it couldn't read it.
+package: mine /2026-10-14
+  owner: mine.example
+  crubal: 2
+  extends: base /2026-10-01
+title$
+
+package: base /2026-10-01
+  owner: base.example
+  crubal: 3
+format{DVD|Blu-ray}

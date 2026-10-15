@@ -12,6 +12,8 @@ const IMAGE_FIELDS = new Set(["sha256", "w", "h", "type"]);
 const ENVELOPE = new Set(["crubal:wears", "crubal:parts", "crubal:kind", "crubal:owner", "crubal:within", "crubal:status", "crubal:applied", "crubal:created", "crubal:updated"]);
 const NUMBER = /^-?(0|[1-9]\d*)(\.\d+)?$/;
 const ORIGINS = new Set(["observed", "declared", "derived", "reported"]);
+/** The language version this reader knows (11.8). */
+export const LANGUAGE = 2;
 
 type Ctx = { dict: Dictionary; sources: { [address: string]: Source } };
 
@@ -211,6 +213,8 @@ export function readText(source: string, dict: Dictionary): Wrapper {
   for (const node of nodes) {
     if (node.kind !== "pair" || !node.key) throw new CrubalError(`unexpected line: ${node.text}`, node.line);
     if (node.key === "crubal") {
+      // A reader never reads above its language version (11.8): it refuses, naming the line.
+      if (!/^\d+$/.test(node.value.trim()) || Number(node.value) > LANGUAGE) throw new CrubalError(`written in CRUBAL ${node.value}; this reader knows ${LANGUAGE}`, node.line);
       wrapper.crubal = node.value;
       continue;
     }

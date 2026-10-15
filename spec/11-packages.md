@@ -226,7 +226,40 @@ at `https://crubal.com/<name>/<version>/package.crubal` and `…/package.json`.
 package is or who owns it: the owner's well-known file is the truth. A package is listed by adding its
 identity to the registry file in the CRUBAL repository.
 
-## 11.8 Open
+## 11.8 Language versions
 
-- Language versions: what a `crubal: 3` would break, and how a package moves.
+`crubal: 2` names the **language version**: a whole number. The specification and its corpus are dated
+within it (chapter 13.3), and a dated revision only **adds**: a setting, a part, a write kind, a verb, a
+shape. A reader at a later date reads everything written at an earlier date of the same version, and
+carries what it doesn't know unchanged (chapter 13.5).
+
+**What a new version is for.** The next whole number is for a change that breaks what readers already
+hold: the text form (chapter 2), the JSON form or its tags (chapter 3), the envelope (chapter 1.1), the
+canonical form and so every hash (chapter 3.9), or the meaning of a setting, part, verb or write that
+exists. Nothing else moves the number.
+
+**Reading across versions.**
+
+- A reader at version N reads N and every version below it.
+- A reader MUST NOT read above its version: it refuses a file, naming the line that says so, and holds an
+  intake until it upgrades (chapter 10.1), never guessing.
+- A border wrapper names the version of what it carries (chapter 3.8), so two owners at different versions
+  exchange data only in the lower one, which the higher reads.
+
+**Packages move by publishing.** A package names the version it is written in, and MUST NOT extend a
+package at a higher one: it could not read it. A package moves to N+1 by publishing a new package version
+written in it; adopters pin (11.4), so each moves when it is ready and nothing moves under it.
+
+**Data moves by a form recipe.** With the specification of N+1, crubal.com publishes a **form recipe**: a
+deterministic transformation of canonical JSON from N to N+1, proven by corpus cases of its own. A store
+that upgrades applies it to its records, its working package and its projections, as it applies a package
+recipe (chapter 10.4): intake records keep their bytes, and replay folds them under the new form.
+
+**The log keeps its past.** Entries written under N stay as written: an entry carries `crubal` when its
+version differs from the entry before it, and each entry's hash and signature verify under the canonical
+form of its own version (chapter 8.5). A chain therefore reads as segments, one per version, and a rebuild
+(chapter 8.5.3) applies each entry under its own form and the form recipes between.
+
+## 11.9 Open
+
 - The standard units table itself.

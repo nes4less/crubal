@@ -52,6 +52,7 @@ export function checkJson(doc: unknown, path = "$"): void {
 
 export function checkWrapper(w: Wrapper): void {
   checkJson(w);
+  if (!/^\d+$/.test(String(w.crubal)) || Number(w.crubal) > 2) throw new Error(`written in CRUBAL ${w.crubal}; this reader knows 2`);
   if (!Array.isArray(w.records)) throw new Error("a wrapper needs records");
   w.records.forEach((r, i) => {
     for (const k of Object.keys(r)) {
