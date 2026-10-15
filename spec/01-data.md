@@ -19,7 +19,7 @@ engine makes it on behalf of whoever decided it.
 | `kind` | the record's root type | fixed when the record is created (1.2) |
 | `level` | which of the kind's levels this record sits at | `product`, `unit` … (1.2) |
 | `of` | the record one level up, by ID | optional at every level; absent when the record stands alone (1.7) |
-| `owner` | who controls the record | a domain (`mediaencyclopedia.com`) |
+| `owner` | who holds the record's key | a domain (`mediaencyclopedia.com`), or a person hosted by one (chapter 14.1) |
 | `within` | the record this one belongs to for access, by ID | optional; any depth; chapter 14.2 |
 | `status` | `active` or `archived`, with a `reason`, and `into` for a merge | 1.12 |
 | `applied` | for a record below the top level: the last of its parent's instructions it has applied | chapter 10.7 |

@@ -1,21 +1,36 @@
 # 14. Access
 
-This chapter says who may do what to which record, and how people and systems relate to records without
-being given anything. Proving who a caller is belongs to the host (chapter 7.6); everything here is decided
-inside CRUBAL, from data, and logged.
+This chapter says who holds data, who may do what to which record, and how people and systems relate to
+records without being given anything. Proving who a caller is belongs to the host (chapter 7.6); everything
+here is decided inside CRUBAL, from data, and logged.
 
-One structure carries all of it: the **edge**. Ownership, delegated control, taking part, viewing,
-following and paid subscriptions are all edges, so the same checks, history and revocation apply to every
-one of them.
+Two things are kept apart. **Ownership** is holding the key to data: it belongs to owners alone (14.1).
+**Administration** is who may manage what inside an owner's data: it is carried by edges (14.3), and the
+same mechanics apply at every depth. One structure carries all of administration and every relationship:
+the **edge**. Delegated control, taking part, viewing, following and paid subscriptions are all edges, so
+the same checks, history and revocation apply to every one of them.
 
-## 14.1 Principals and boundaries
+## 14.1 Owners and the key
 
 - **A caller is a record**: a person, an organization or a system. Edges name callers by ID.
-- **The owner is the tenant.** An owner (chapter 1.1, a domain) has its own store, log and packages, and
-  holds `own` over every record it has. Nothing in this chapter crosses from one owner to another: owners
-  meet only through offer and take (chapter 7.8).
+- **An owner holds the key.** An owner is a domain (a tenant: a Cashierfu customer, Media Encyclopedia), or a
+  person hosted by one. Every record names its owner in its envelope (chapter 1.1).
+- **Only the owner may:** erase (redaction, chapter 8.5.2), export everything it owns, grant edges to callers
+  of other owners (14.8), transfer ownership, and close its data. No edge carries these.
+- **People own aspects of their own data.** A package declares which records a person may own, by kind or
+  class:
+
+  ```crubal
+  ownership:
+    person: Collection, List, Note, Profile
+  ```
+
+  A person's owned records live in the host's store but in **their own log chain** (chapter 8.5), so they
+  can be exported or moved whole, and erased by them alone. The host owns everything else, including the
+  catalog facts a person contributes to shared records: those are values with sources (chapter 1.9), not
+  owned records.
 - **The platform above owners has no default access.** A service that hosts many owners reaches an owner's
-  records only through an edge that owner grants, and every use of it is logged like any other.
+  records only through an edge that owner grants (14.8), and every use of it is logged.
 
 ## 14.2 Containment: `within`
 
@@ -25,8 +40,8 @@ kinds.
 
 - A record is `within` at most one record. The links MUST NOT form a cycle.
 - **`within` is not `of`.** `of` is a level of one kind, where values fold (chapter 1.7). `within` carries
-  access and never moves a value. A unit is `of` its product without being `within` it: whoever owns the
-  catalog doesn't own every seller's units.
+  access and never moves a value. A unit is `of` its product without being `within` it: whoever administers
+  the catalog doesn't administer every seller's units.
 - **Ancestors.** A record's ancestors are every record up its `within` chain. A store MUST keep each record's
   ancestors so that an access check is a lookup, never a walk, at any depth. Changing a `within` link is an
   envelope write (chapter 8.5), and the store updates the ancestors of everything below it.
@@ -42,22 +57,24 @@ edge: E-71
   who: person:P-2201
   relation: coordinator
   mode: control
-  on: L-9                       // the spring league
+  on: L-9                       // the rec league
   grants: scheduleGames, recordScores
   where: not status is archived
   until: 2027-06-30
-  by: E-12                      // the facility owner's edge
+  by: E-12                      // the facility operator's edge
 ```
 
 | Part | Holds | Default |
 |---|---|---|
-| `who` | the caller | required |
-| `relation` | what the link means: `owner`, `captain`, `player`, `follower`, `subscriber`, or a name the package declares | required |
-| `mode` | `own`, `control`, `consume`, `view` or `none` (14.4) | required |
+| `who` | the caller, of this owner or another (14.8) | required |
+| `relation` | what the link means: `operator`, `captain`, `player`, `follower`, `subscriber`, or a name the package declares | required |
+| `mode` | `admin`, `control`, `consume`, `view` or `none` (14.4) | required |
 | `on` | the record it is on; it also covers every record `within` it | required |
 | `grants` | for `control`: the presets and menu items it carries (14.6) | none |
 | `where` | a condition (chapter 6.3) that narrows it further (14.6) | none |
 | `until` | a moment it lapses at | never |
+| `gate` | `review`: writes under it land as suggestions for review (14.7) | none |
+| `reviewer` | with `gate`: who accepts or denies them | the grantor |
 | `by` | the edge it was granted under (14.5), or `owner` for the owner's own grant | required |
 
 Edges are written and removed only through the border, as logged writes (chapter 8.5), and every one has a
@@ -67,36 +84,38 @@ history.
 
 | Mode | The caller may | Example |
 |---|---|---|
-| **own** | everything on the record and what is within it, including deciding who else controls it | a facility's operator; a team's captain; a collector over their collection |
+| **admin** | administer everything on the record and what is within it, including deciding who else controls it | a facility's operator; a team's captain |
 | **control** | what its `grants` list, on the record and what is within it | front-desk staff with `checkIn`; a league coordinator |
 | **consume** | take part: run the contracts and forms the package opens to consumers, and see and change only their own part | a player submitting availability; a customer buying |
 | **view** | read, as the views built for them allow | a fan; the public |
-| **none** | nothing; the edge is a relation only (14.8) | a follower |
+| **none** | nothing; the edge is a relation only (14.9) | a follower |
 
-Each mode includes the ones below it. **Ownership is full access**: an `own` edge carries every menu item
-(14.6) on its records. Full access is full permission, never a way around the data: `must` rules, archived
-records and the trust order still apply to an owner.
+Each mode includes the ones below it. **`admin` is full administration**: it carries every menu item (14.6)
+on its records, but never the owner's key (14.1). It is never a way around the data either: `must` rules,
+archived records and the trust order still apply.
+
+**An owner** holds `admin` over every record it owns, and the key besides.
 
 **Effective access.** A caller's access to a record is worked out from every live edge the caller holds on
 the record or on any of its ancestors: the highest mode among them, and for `control`, every item they carry
 together. An edge whose `where` doesn't hold for the record, or whose `until` has passed, doesn't count.
 
 **Audiences** (chapter 12.4) are edges every caller of a kind holds implicitly: `public` is `view` for
-everyone, `member` is `view` for every signed-in person, `staff` is anyone with a `control` edge on the
-owner's records, and `owner` is the owner.
+everyone, `member` is `view` for every signed-in person, `staff` is anyone with a `control` or `admin` edge on
+the owner's records, and `owner` is the owner.
 
 ## 14.5 The grantor chain
 
 - **You grant only what you hold.** An edge's mode is at most its grantor's, its `on` is within the grantor's
-  reach, and its `grants` are among the grantor's. An `own` edge may grant anything up to `own`; a `control`
-  edge may grant only if it carries the `grant` item for what it grants.
+  reach, and its `grants` are among the grantor's. An `admin` edge may grant anything up to `admin`; a
+  `control` edge may grant only if it carries the `grant` item for what it grants.
 - **An edge is only as good as its grantor.** An edge is live while the edge named in its `by` is live and
   still covers it. When an edge lapses or is removed, every edge granted under it lapses with it, down the
   chain. Nothing is deleted: lapsed edges stay in the history.
 - **Every chain ends at an owner.** Following `by` from any edge reaches an `owner` grant in a finite number of
-  steps.
-- **Upper owners stay above.** The owner of a league can remove the edges inside a team that sits within it,
-  including the captain's `own`.
+  steps. The owner holds the key at the top of every chain.
+- **Upper admins stay above.** The admin of a league can remove the edges inside a team that sits within it,
+  including the captain's `admin`.
 
 ## 14.6 Permissions: menus, presets and narrowing
 
@@ -105,7 +124,7 @@ A package declares what can be granted on its records:
 ```crubal
 permissions: facility
   menu:
-    checkIn: run checkIn                         on: owned
+    checkIn: run checkIn                         on: administered
     sellPasses: run sellPass, see unit::price
     scheduleGames: edit gameTime, run publishSchedule
     recordScores: edit score
@@ -122,13 +141,14 @@ permissions: facility
 - **Menu items** are the only things that can be granted. Each is a verb with its targets, and optionally
   an `on` scope.
 - **The verbs:** `see` (a value is shown), `edit` (a form may write it), `run` (a contract may start),
-  `review` (queue items may be decided: vocabulary, arrivals, migrations), `archive` and `merge` (chapter
-  1.12), `apply` (instructions, chapter 10.7), `install` (a package version, and the restamp that follows)
-  and `grant` (making edges for the listed items). Targets are facets, classes, views, contracts and queues;
-  `*` means all.
-- **Scopes.** `on: owned` means records the caller owns; `on: relation player` means records the caller
-  holds that relation to; any other `on` is a condition over the record and `caller`. With no `on`, an item
-  covers what the edge it is granted on covers.
+  `review` (queue items may be decided: vocabulary, arrivals, migrations, gated writes), `archive` and
+  `merge` (chapter 1.12), `apply` (instructions, chapter 10.7), `install` (a package version, and the
+  restamp that follows) and `grant` (making edges for the listed items). Targets are facets, classes, views,
+  contracts and queues; `*` means all. The owner's powers (14.1) are not verbs and can't be granted.
+- **Scopes.** `on: owned` means records the caller owns (14.1); `on: administered` means records the caller
+  has `admin` on; `on: relation player` means records the caller holds that relation to; any other `on` is a
+  condition over the record and `caller`. With no `on`, an item covers what the edge it is granted on
+  covers.
 - **Presets** are named bundles of items, each on an audience. A spec `role` (chapter 12.4) is a preset.
 - **À la carte.** An edge's `grants` may mix presets and single items.
 - **Narrowing only.** An edge's `where` adds conditions; it can never widen an item. A specific grant ("may
@@ -137,17 +157,40 @@ permissions: facility
 A package MUST be refused at publish when an item names a verb, facet, class, view, contract or queue that
 doesn't exist, a preset names an item that doesn't exist, or a preset grants anything its audience can't see.
 
-## 14.7 Systems
+## 14.7 Gated edges
+
+An edge with `gate: review` gives access whose writes don't land. Each write made under it becomes a
+**suggestion** on the record (chapter 7.5), and the edge's `reviewer` accepts or denies it. Accepting writes
+the value with its original source; denying keeps it in the history as denied. Both are logged review writes
+(chapter 8.5).
+
+A gate fits any access that should be watched before it is trusted: support from outside (14.8), a new
+member of staff, a community contributor, a utility on trial. Lifting the gate is a new version of the edge,
+logged like any other.
+
+## 14.8 Across owners
+
+An owner MAY grant an edge to a caller of another owner: a peer-to-peer connection, with the other side
+proven by its domain's key (chapter 7.8). Support from the platform that hosts the owner is one such edge.
+
+- Only the owner may grant it (14.1); no admin can.
+- It SHOULD carry an `until`, and SHOULD carry `gate: review` unless the owner chooses otherwise.
+- Every write the foreign caller makes is logged in the owner's log with that caller as `by`, so the owner can
+  see everything it did as a view of its own log.
+- Offer and take (chapter 7.8) remain the way owners share data. A cross-owner edge shares access, not data:
+  the foreign caller works on the owner's records where they are.
+
+## 14.9 Systems
 
 A system is a caller like a person. When a utility registers, it **requests** menu items, as an app requests
-scopes: the enricher asks for `edit` on the facets it fills, `on: wears OpticalDisc`. An owner who approves
-grants a `control` edge carrying exactly those items. What every system may do is therefore a list anyone
-with `view` on the edge can read, and removing the edge cuts it off.
+scopes: the enricher asks for `edit` on the facets it fills, `on: wears OpticalDisc`. An admin who approves
+grants a `control` edge carrying exactly those items, gated while it is on trial if they choose. What every
+system may do is therefore a list anyone with `view` on the edge can read, and removing the edge cuts it off.
 
 An AI agent that signs in is a system or acts for a person; either way it holds only the edges granted to
 it, and its writes carry its own `by` in the log.
 
-## 14.8 Relations
+## 14.10 Relations
 
 An edge with mode `none` is a **relation** only: following a team, watching a listing, favouriting a
 release.
@@ -156,14 +199,14 @@ release.
 - **You can follow only what you can view.** If the caller's view lapses, the relation goes dormant, and it
   comes back if view returns. It is never removed silently.
 - **Relations drive feeds and notifications.** A view MAY declare `partition: relation follower` (or any
-  relation, or `owned`): each projection row carries its record and ancestors, the host hands the index the
-  verified caller's edges, and the index serves a caller only the rows they stand in that relation to. The
-  store decides the rows; the index only matches them (chapter 12.6.1).
+  relation, `owned` or `administered`): each projection row carries its record and ancestors, the host hands
+  the index the verified caller's edges, and the index serves a caller only the rows they stand in that
+  relation to. The store decides the rows; the index only matches them (chapter 12.6.1).
 - **Paid subscriptions are contracts.** A checkout that sells a season's stats creates an edge with
   `mode: view`, `relation: subscriber` and an `until`, and usually a `follower` relation beside it. The
   purchase decides access; the relation decides the feed.
 
-## 14.9 The JSON form
+## 14.11 The JSON form
 
 ```json
 {
@@ -179,23 +222,24 @@ release.
 }
 ```
 
-Permissions hold `menu` (name → `{"verbs": {"run": ["checkIn"]}, "on": "owned"}`) and `presets` (name →
-`{"items": […], "audience": "staff"}`).
+A gated edge adds `"gate": "review"` and, when it isn't the grantor, `"reviewer"`. Permissions hold `menu`
+(name → `{"verbs": {"run": ["checkIn"]}, "on": "administered"}`) and `presets` (name → `{"items": […],
+"audience": "staff"}`); `ownership` maps `person` to the kinds and classes a person may own.
 
-## 14.10 Well-formed access
+## 14.12 Well-formed access
 
 A store MUST refuse a write that:
 
 1. makes a `within` cycle;
 2. grants an edge its grantor can't (14.5): a higher mode, a record outside the grantor's reach, or items the
    grantor doesn't hold or can't grant;
-3. names a preset or item the package doesn't declare;
-4. gives `grants` to an edge whose mode isn't `control`, or a mode other than `none` to a relation the package
-   declares as relation-only.
+3. grants an edge to another owner's caller, unless the owner itself grants it (14.8);
+4. names a preset or item the package doesn't declare;
+5. gives `grants` to an edge whose mode isn't `control`, or a mode other than `none` to a relation the package
+   declares as relation-only;
+6. makes a person the owner of a record the package's `ownership` doesn't let a person own.
 
-## 14.11 Open
+## 14.13 Open
 
-- Whether an organization's stewardship gives all its members full access, or only its admins (a preset the
-  organization grants).
-- Time-limited support access from a platform above owners: its shape as an edge an owner grants, and how
-  its uses are shown to the owner.
+- Emergency access by a platform when the owner can't grant it (locked out, a legal order): whether it
+  exists, and if so as an edge the platform creates itself, always shown to the owner afterwards.

@@ -11,8 +11,8 @@ level's corpus. Each level includes the levels before it.
 | **Dictionary** | 4–5 | `dictionary/`, `dictionary-errors/` |
 | **Rules** | 6 | `rules/`, `rules-errors/` |
 | **Store** | 8–10 | `store/`, `store-errors/` |
-| **Exchange** | 7, 9 (as it applies to borders), 11, 14 (edges, modes, the grantor chain, menus) | `exchange/`, `exchange-errors/`, `package-errors/` |
-| **Views** | 12, 14.8 (partitions by relation) | `views/`, `views-errors/` |
+| **Exchange** | 7, 9 (as it applies to borders), 11, 14 (owners, edges, modes, the grantor chain, menus, gates) | `exchange/`, `exchange-errors/`, `package-errors/` |
+| **Views** | 12, 14.10 (partitions by relation) | `views/`, `views-errors/` |
 
 A level is claimed whole. An implementation that does part of a level conforms only at the level below it.
 
