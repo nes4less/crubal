@@ -30,7 +30,8 @@ the same checks, history and revocation apply to every one of them.
   catalog facts a person contributes to shared records: those are values with sources (chapter 1.9), not
   owned records.
 - **The platform above owners has no default access.** A service that hosts many owners reaches an owner's
-  records only through an edge that owner grants (14.8), and every use of it is logged.
+  records only through an edge that owner grants (14.8), or, for a legal order or a security incident only,
+  an emergency edge under published terms (14.13). Every use of either is logged.
 
 ## 14.2 Containment: `within`
 
@@ -75,7 +76,7 @@ edge: E-71
 | `until` | a moment it lapses at | never |
 | `gate` | `review`: writes under it land as suggestions for review (14.7) | none |
 | `reviewer` | with `gate`: who accepts or denies them | the grantor |
-| `by` | the edge it was granted under (14.5), or `owner` for the owner's own grant | required |
+| `by` | the edge it was granted under (14.5), `owner` for the owner's own grant, or `platform` for an emergency edge (14.13) | required |
 
 Edges are written and removed only through the border, as logged writes (chapter 8.5), and every one has a
 history.
@@ -113,7 +114,8 @@ the owner's records, and `owner` is the owner.
   still covers it. When an edge lapses or is removed, every edge granted under it lapses with it, down the
   chain. Nothing is deleted: lapsed edges stay in the history.
 - **Every chain ends at an owner.** Following `by` from any edge reaches an `owner` grant in a finite number of
-  steps. The owner holds the key at the top of every chain.
+  steps. The owner holds the key at the top of every chain. The one exception is an emergency edge (14.13),
+  which ends at `platform` and can't be granted onward.
 - **Upper admins stay above.** The admin of a league can remove the edges inside a team that sits within it,
   including the captain's `admin`.
 
@@ -239,7 +241,58 @@ A store MUST refuse a write that:
    declares as relation-only;
 6. makes a person the owner of a record the package's `ownership` doesn't let a person own.
 
-## 14.13 Open
+## 14.13 Emergency access
 
-- Emergency access by a platform when the owner can't grant it (locked out, a legal order): whether it
-  exists, and if so as an edge the platform creates itself, always shown to the owner afterwards.
+A platform that hosts owners MAY reach an owner's records without the owner's grant, only through an
+**emergency edge**, and only for a **legal order** or a **security incident** that threatens the owner or
+others. It is the one edge not granted from inside the owner, so everything about it is stricter than any
+other.
+
+- **Not for lockouts.** An owner who can't sign in has an authentication problem, which the host solves by
+  account recovery (chapter 7.6). Recovery restores the owner's own access; it never needs an edge on their
+  data.
+- **Declared in advance.** A platform that can make emergency edges MUST publish its terms for them in its
+  well-known file (chapter 11.7): who can approve, the longest they last, and how owners are told. An owner
+  can always read them before trusting the platform, and a platform with no published terms can make none.
+- **Several people, none of them the requester.** An emergency edge is created only when at least two
+  approvers (or more, as the terms say) have each approved it, none of them the person asking. Each approval
+  is signed with a key kept for this purpose alone, separate from everyday credentials, and given right after
+  a fresh sign-in. No automation can approve.
+- **A stated reason.** The edge carries its kind (`legal` or `incident`), the reason, and the reference of the
+  order or incident.
+- **As narrow and short as possible.** It is `view`, or `control` with only the items it names; never `admin`,
+  never any owner power (14.1), never `grant`. It has an `until` no later than the terms allow, and it can't
+  be extended: more time is a new edge with new approvals.
+- **Writes are gated.** Any write under it lands as a suggestion with the owner as reviewer (14.7), unless a
+  legal order requires the write itself, in which case the order's reference is on the write.
+- **Reads are logged too.** Everything read under an emergency edge is written to the log, record by record,
+  which no other edge requires.
+- **Witnessed on both sides.** The edge, its approvals and every read and write are in the owner's signed log
+  and, as a copy, in the platform's own log. Neither side can redact them (chapter 8.5.2).
+- **The owner is told.** At once, unless a legal order requires a delay. A delay is recorded with the order's
+  reference and its end, and the owner is told when it ends.
+- **The owner can end it**, unless it cites a legal order; then ending it is the order's matter, and the
+  owner's attempt is recorded.
+- **Every emergency edge raises an alert** at the platform and, once it may be told, at the owner.
+
+```json
+{
+  "edge": "E-9001",
+  "who": "cashierfu.com:staff/S-14",
+  "relation": "emergency",
+  "mode": "view",
+  "on": "R-ROOT",
+  "until": "2026-10-16T18:00Z",
+  "emergency": {
+    "kind": "incident",
+    "reason": "Card-skimming script reported on the storefront",
+    "reference": "INC-2026-114",
+    "approvals": [ { "by": "cashierfu.com:staff/S-02", "sig": "…" }, { "by": "cashierfu.com:staff/S-31", "sig": "…" } ],
+    "notify": "now"
+  },
+  "by": "platform"
+}
+```
+
+A store MUST refuse an emergency edge that lacks the approvals its platform's published terms require,
+names the requester as an approver, carries `admin`, `grant` or an owner power, or outlasts the terms.

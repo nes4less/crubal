@@ -207,6 +207,9 @@ https://<domain>/.well-known/crubal.json
 
 - `keys` holds the owner's published signing keys (chapter 8.5); a party with no published key has unsigned
   data, which readers MAY refuse.
+- `emergency`, for a platform that hosts owners: its emergency-access terms (chapter 14.13), as
+  `{"approvers": 2, "longest": "PT24H", "notify": "…", "keys": {…}}`, with the separate keys its approvers
+  sign with. A platform without it can make no emergency edge.
 - Each package lists its versions and where each version's bundle is: the package's definitions in the JSON
   form, the same as its text files read through a Reader (chapters 4.6, 5.9, 6.10, 7.9, 10.6, 11.6).
 - A domain MAY also serve its packages as text, beside the JSON (`…/package.crubal`).
