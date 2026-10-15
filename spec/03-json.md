@@ -198,7 +198,7 @@ Each document type is a JSON object with a distinct identifying member.
 `as` is omitted when it is `current`, and a write carries its own `source` only when it differs from the
 entry's (chapter 8.5).
 
-`by` names exactly one of `person`, `contract` (with `run`), `rule`, `migration` or `take` (with `from`,
+`by` names exactly one of `person`, `contract` (with `run`), `rule`, `migration`, `instruction` or `take` (with `from`,
 chapter 8.5). A write that removes a value has
 `"removed": true` in place of `value`.
 

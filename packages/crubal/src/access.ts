@@ -154,7 +154,8 @@ function durationMs(d: string): number {
 export type Effective = { mode: Mode; items: Set<string>; relations: Set<string>; gated: boolean; edges: Edge[] };
 
 export class Access {
-  readonly edges = new Map<string, Edge>();
+  /** The edges; a store that journals (chapter 8.5) points this at its draft's edges. */
+  edges = new Map<string, Edge>();
   readonly dict: Dictionary;
   readonly perms: Permissions;
   readonly records: Map<string, Record>;

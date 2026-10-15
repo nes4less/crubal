@@ -595,6 +595,10 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
       const now = existsSync(file("now.txt")) ? readFileSync(file("now.txt"), "utf8").trim() : undefined;
       ex.access = new Access(dict, perms, ex.records, edges, "test.example", now);
     }
+    // Every run is a transaction (8.5): the border works on a journal's draft and commits each run.
+    const journal = new Journal("test.example", [], "2026-01-01T00:00:00Z");
+    ex.useJournal(journal);
+    journal.commit({ migration: "backfill" }, () => {}, "2026-01-01T00:00:00Z");
 
     // The runs, in order.
     const results: Json[] = [];
@@ -674,6 +678,11 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
       if (one(got) !== one(want)) return fail(`record: ${firstDiff(one(got), one(want))}`);
       if (extra(got) !== extra(want)) return fail(`alternatives/suggestions: got ${extra(got)}`);
       return pass;
+    }
+    if (existsSync(file("expected-entries.json"))) {
+      const got = journal.entries.map(({ at: _at, owner: _o, ...e }) => e);
+      const wantE = json("expected-entries.json");
+      if (serialize(got as Json) !== serialize(wantE)) return fail(`entries: ${firstDiff(serialize(got as Json), serialize(wantE))}`);
     }
     if (existsSync(file("expected-edges.json"))) {
       const got = [...(ex.access?.edges.values() ?? [])].map(({ line: _l, ...e }) => e as unknown as Json);

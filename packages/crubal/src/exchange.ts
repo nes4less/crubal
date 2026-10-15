@@ -5,6 +5,7 @@
 
 import type { Access, Edge } from "./access.ts";
 import { arrive, type Arrival } from "./arrival.ts";
+import type { Journal } from "./log.ts";
 import type { StreamEntry, Views } from "./views.ts";
 import { serialize } from "./canonical.ts";
 import { evaluate, parseCondition, type StateOf } from "./conditions.ts";
@@ -141,10 +142,12 @@ export class Exchange {
   readonly contracts: Map<string, Contract>;
   readonly roles: Role[];
   /** The records, shared with the Access that decides over them (chapter 14). */
-  readonly records = new Map<string, Record>();
-  readonly bindings = new Map<string, string>();
+  records = new Map<string, Record>();
+  bindings = new Map<string, string>();
   /** Set to make the border consult access: `run` needs the caller's `run` item, gated access suggests. */
   access?: Access;
+  /** Set to make every run a transaction (8.5): the border works on the journal's draft and commits each run. */
+  journal?: Journal;
   /** Set to let stream contracts (12.6.2) carry the views' projection streams. */
   views?: Views;
   /** Per stream contract, the cursor each view's index has acknowledged, with the version it was for. */
@@ -157,6 +160,24 @@ export class Exchange {
     this.dict = dict;
     this.contracts = new Map(contracts.map((c) => [c.name, c]));
     this.roles = roles;
+  }
+
+  /** Work on a journal's draft, so every run the border makes is one logged entry (8.5). */
+  useJournal(journal: Journal) {
+    this.journal = journal;
+    for (const [id, r] of this.records) journal.draft.records.set(id, r);
+    for (const [k, v] of this.bindings) journal.draft.bindings.set(k, v);
+    this.records = journal.draft.records;
+    this.bindings = journal.draft.bindings;
+    if (this.access) {
+      for (const [k, e] of this.access.edges) journal.draft.edges.set(k, e as unknown as JsonObject);
+      this.access.edges = journal.draft.edges as unknown as Map<string, Edge>;
+    }
+  }
+
+  /** Log a run's transaction: what it changed on the draft, and the run's own state (8.5). */
+  private commit(by: JsonObject, log: string, run: JsonObject) {
+    this.journal?.commit(by, () => {}, `2026-01-01T00:00:${String(this.runs).padStart(2, "0")}Z`, [{ run: log, ...run }]);
   }
 
   /** Step 1 of a run (7.4): the menu is the permission (14.6); `who` only narrows. */
@@ -256,6 +277,7 @@ export class Exchange {
     const key = `${name}|${recordId}|${sha256(serialize(payload))}`;
     if (this.sent.has(key)) return { ...head, acted: false, reason: "the same payload was already sent" };
     this.sent.add(key);
+    this.commit({ contract: name, run: log }, log, { contract: name, key, state: "acted" });
     return { ...head, acted: true, payload, key, log };
   }
 
@@ -286,6 +308,7 @@ export class Exchange {
     const gate = this.gate(recordId, callerId);
     if (c.lands === "suggestion" || gate) this.put(suggest(r, outcomes, source));
     else this.put(land(r, { outcomes, contract: name }, source, this.dict.trust, this.dict.facetTrust));
+    this.commit({ contract: name, run: log }, log, { contract: name, record: recordId, state: "closed" });
     return { ...head, outcomes: outcomes as unknown as Json, sources: { origin: c.origin }, log, landed: gate || c.lands === "suggestion" ? "suggestion" : "value", ...(gate ? { gated: gate.edge, reviewer: gate.reviewer ?? gate.by } : {}) };
   }
 
@@ -304,6 +327,7 @@ export class Exchange {
       const edge = this.grantConsumer(c, record.id, callerId);
       if (edge) out.granted = { edge: edge.edge, relation: edge.relation, mode: edge.mode, on: edge.on };
     }
+    this.commit(callerId && c.kind === "form" ? { person: callerId } : { contract: name, run: log }, log, { contract: name, ...(record ? { record: record.id } : {}), state: arrival.outcome === "held" ? "started" : "closed" });
     return out;
   }
 
@@ -385,6 +409,7 @@ export class Exchange {
     }
     const next = { ...r, values, sources, ...(Object.keys(alternatives).length ? { alternatives } : {}) } as Record;
     this.put(next);
+    this.commit({ take: takeName, from: presenter.owner }, log, { contract: takeName, record: recordId, state: "closed" });
     return { contract: takeName, record: recordId, flows, log };
   }
 }

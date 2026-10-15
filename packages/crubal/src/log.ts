@@ -371,10 +371,13 @@ export class Journal {
     if (records.length) this.commit({ migration: "backfill" }, () => {}, at);
   }
 
-  /** Run an operation on the draft, log what it changed, and apply the entry to the state. */
-  commit(by: JsonObject, mutate: (draft: Draft) => void, at?: string): Entry | null {
+  /**
+   * Run an operation on the draft, log what it changed, and apply the entry to the state. `extra` carries
+   * writes the diff can't see (a run's state, a read under an emergency edge, a define).
+   */
+  commit(by: JsonObject, mutate: (draft: Draft) => void, at?: string, extra: JsonObject[] = []): Entry | null {
     mutate(this.draft);
-    const writes = diffWrites(this.state, this.draft);
+    const writes = [...diffWrites(this.state, this.draft), ...extra];
     if (!writes.length) return null;
     this.n += 1;
     const entry: Entry = { log: `J-${this.n}`, owner: this.owner, at: at ?? new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), by, writes };

@@ -32,13 +32,18 @@ the internals later behind the same API.
   `shown to` rules (new and unknown values never public), roles that narrow an audience, the portable shape,
   and read sets that decide which rows a write makes stale.
 
-- **The backbone (chapters 1.12, 8.5, 9.2a, 10.7, 14):** the log as effects with rebuild from the log alone
-  (`log.ts`), arrival with bindings and strong and weak keys (`arrival.ts`), folded and owned keys with
-  attach, detach, archive, merge and instructions (`lifecycle.ts`), owners, edges, modes, the grantor chain,
-  permission menus, gates and emergency access (`access.ts`), and partitioned views with the projection
-  stream (`views.ts`).
+- **The backbone (chapters 1.12, 8.5, 9.2a, 10.7, 12.6, 14):** the log as effects, rebuild from the log
+  alone, `define` writes for the working package, and the journal that makes entries the only way state
+  changes (`log.ts`); arrival with bindings and strong and weak keys (`arrival.ts`); folded and owned keys
+  with attach, detach, archive, merge and instructions (`lifecycle.ts`); owners, edges, modes, the grantor
+  chain, permission menus, gates and emergency access (`access.ts`); partitioned views, the projection
+  stream and stream subscriptions with cursors and resets (`views.ts`, `exchange.ts`); and a border that
+  consults access, journals every run, and grants a consumer's edge (`exchange.ts`).
 
-It passes every corpus folder (115 cases). The corpus and this package name no adopter and no third party:
+Not yet: a run doesn't apply rules (7.4 step 6), so a `must` rule never refuses or holds a value at the
+border; the rules engine runs on its own.
+
+It passes every corpus folder (117 cases). The corpus and this package name no adopter and no third party:
 `test.example` owns the data, `market:` stands for any marketplace, `bench` for any in-house tool, and
 product, unit and the like are the test package's own kinds, never the core's.
 

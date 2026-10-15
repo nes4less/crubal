@@ -1,0 +1,22 @@
+[
+  {
+    "log": "J-1",
+    "by": { "migration": "backfill" },
+    "writes": [
+      { "record": "C-BUY", "envelope": "created", "value": { "kind": "person", "level": "person", "owner": "test.example" } },
+      { "record": "C-BUY", "address": "name", "value": "Buyer", "source": { "origin": "declared", "via": "L-1" } }
+    ]
+  },
+  {
+    "log": "J-2",
+    "by": { "person": "C-BUY" },
+    "writes": [
+      { "record": "O-NEW1", "envelope": "created", "value": { "kind": "order", "level": "order", "owner": "test.example" } },
+      { "record": "O-NEW1", "address": "item", "value": { "$link": "P-1" }, "source": { "origin": "declared", "via": "I-R1" } },
+      { "record": "O-NEW1", "address": "qty", "value": "2", "source": { "origin": "declared", "via": "I-R1" } },
+      { "binding": { "contract": "placeOrder", "ref": "K-77", "record": "O-NEW1" } },
+      { "edge": { "edge": "E-placeOrder-O-NEW1", "who": "C-BUY", "relation": "buyer", "mode": "consume", "on": "O-NEW1", "grants": [], "by": "owner", "line": 11 } },
+      { "run": "L-R1", "contract": "placeOrder", "record": "O-NEW1", "state": "closed" }
+    ]
+  }
+]
