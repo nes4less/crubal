@@ -52,16 +52,24 @@ test      = path " is " value                      ; equals
           / path " has" [ " " value ]              ; has a value · the list holds this item
           / path ( " before " / " after " ) value  ; dates, moments, times of day, or now
           / path ( " over " / " under " ) value    ; numbers, quantities, money, ranked choices
+          / path " is not " value                  ; the same as "not path is value"
+          / path " wears " class                   ; the record there wears the class (chapter 7.6)
+          / path " may " verb " " target           ; the caller there holds that item (chapter 14.6)
           / path " is unique"                      ; global (6.6); in "then" only
           / path " shown to " audience             ; visibility (chapter 12.4); in "then" only
           / path " is " state                      ; a value's state (6.3.2)
-path      = address / aggregate
+path      = address / aggregate / envelope
+envelope  = "id" / "level" / "of" / "within" / "status"   ; the record's envelope (chapter 1.1); "status" is its state
 aggregate = combine " of " address                 ; "worst of parts[*].condition"
           / ( "count" / "least" / "most" ) " of " address   ; how many · smallest · largest
 ```
 
 - **Addresses** are chapter 1.10's, plus the wildcard `[*]` for every row or part, and the level prefix
-  (`unit::condition`) to read a lower level from above.
+  (`unit::condition`) to read a lower level from above. A path MAY start with `caller.` (the caller, chapter
+  7.6) or `context.` (a page's record, chapter 12.2) to read another record than the one the condition is
+  on; `caller` and `context` alone, before `wears` or `may`, name that record itself.
+- **Envelope fields** read as paths: `status` is `active` for a record that has none, so `not status is
+  archived` holds for it; `wears` is tested with `wears`, never read as a value.
 - **Values** are written as in the text form (chapter 2), read by the facet at the path.
 - **`now`** is the moment the rule is evaluated, supplied by the caller so results stay reproducible:
   `when: auctionEnds before now`. Moments compare by instant; a local date or time of day compared with a

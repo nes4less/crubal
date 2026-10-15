@@ -116,8 +116,8 @@ Each write is one of these:
 | **binding** | `contract`, `ref`, and `record` or `"removed": true` | an arrival binding (chapter 9.2a) |
 | **review** | the item, and its `decision` or `"opened": true` | the review queue (chapters 9.5, 10.4) |
 | **instruction** | `record`, its number and the instruction | the record's instructions (chapter 10.7) |
-| **run** | `run`, `contract`, its idempotency key and `state`: `started`, `acted`, `failed`, `closed` | the run's state (chapter 7.5) |
-| **define** | a member of the owner's working package (chapter 11.4) as it now stands: `facet`, `class`, `rule`, `contract`, `kind`, `view`, `shape`, `filter`, `permissions` or `ownership`, in the JSON form, or its name and `"retired": true` | the definition in force from this entry on; `by` is the person or the review decision that changed it |
+| **run** | `run`, `contract`, its idempotency key, `state`: `started`, `acted`, `failed`, `closed`, and on `started` the versions of the contract, the package and the rules it uses (chapter 7.4) | the run's state (chapter 7.5) |
+| **define** | a member of the owner's working package (chapter 11.4) as it now stands: `facet`, `class`, `rule`, `contract`, `kind`, `view`, `shape`, `filter`, `migration`, `permissions` or `ownership`, in the JSON form, or its name and `"retired": true`; or `package`, the package's own settings (chapter 11.1: its trust order, prefixes, pins and thresholds) | the definition in force from this entry on; `by` is the person who changed it, in the same entry as the review write when a review decision did (chapter 9.5) |
 | **install** | the package identity and version | a package of another owner the store adopts; the restamp that follows is its own entries |
 | **read** | `record`, under an emergency edge only (chapter 14.13) | nothing; it is the record that a read happened |
 
@@ -175,7 +175,7 @@ lives where they are stored, and the log entries are the upper record's.
 
 ## 8.8 Record members added by this chapter
 
-Chapter 3.2's record gains two optional members:
+Chapter 3.2's record gains three optional members:
 
 | Member | JSON | Present |
 |---|---|---|

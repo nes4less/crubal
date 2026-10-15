@@ -22,7 +22,7 @@ engine makes it on behalf of whoever decided it.
 | `owner` | who holds the record's key | a domain (`mediaencyclopedia.com`), or a person hosted by one (chapter 14.1) |
 | `within` | the record this one belongs to for access, by ID | optional; any depth; chapter 14.2 |
 | `status` | `active` or `archived`, with a `reason`, and `into` for a merge | 1.12 |
-| `applied` | for a record below the top level: for each issuer of instructions (the record above, each class version), the last one it has applied | chapter 10.7 |
+| `applied` | for a record below the top level: for each issuer of instructions (the record above, each kind version, each class version), the last one it has applied | chapter 10.7 |
 | `wears` | the classes the record wears, in order | classes refine the kind (chapter 5) |
 | `created` · `updated` | times, UTC | RFC 3339, `Z` |
 | `parts` | owned parts (1.6) | absent when there are none |
@@ -87,8 +87,9 @@ range (chapter 4).
 
 ### 1.4.3 Quantity
 
-A number with a unit: `97 min`, `2.4 lb`. The unit is a spelling from the units table. A quantity is a
-number facet's value when the facet names a unit. Two quantities are equal only with the same unit;
+A number with a unit: `97 min`, `2.4 lb`. The unit is a unit of the units table (chapter 11.9), by its
+canonical spelling; the table's other spellings fold to it on intake (chapter 9.2), so a stored quantity
+never holds one. A quantity is a number facet's value when the facet names a unit. Two quantities are equal only with the same unit;
 conversion is a facet setting (chapter 4), never implicit.
 
 ### 1.4.4 Money

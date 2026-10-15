@@ -79,7 +79,7 @@ edge: E-71
 | `on` | the record it is on; it also covers every record `within` it | required |
 | `grants` | for `control`: the presets and menu items it carries (14.6) | none |
 | `where` | a condition (chapter 6.3) that narrows it further (14.6) | none |
-| `until` | a moment it lapses at | never |
+| `until` | a moment it lapses at, or a date: it lapses at the start of that day, UTC | never |
 | `gate` | `review`: writes under it land as suggestions for review (14.7) | none |
 | `reviewer` | with `gate`: who accepts or denies them | the grantor |
 | `by` | the edge it was granted under (14.5), `owner` for the owner's own grant, or `platform` for an emergency edge (14.13) | required |
@@ -260,7 +260,9 @@ A store MUST refuse a write that:
 4. names a preset or item the package doesn't declare;
 5. gives `grants` to an edge whose mode isn't `control`, or a mode other than `none` to a relation the package
    declares as relation-only;
-6. makes a person the owner of a record the package's `ownership` doesn't let a person own.
+6. makes a person the owner of a record the package's `ownership` doesn't let a person own;
+7. gives an edge a relation the package doesn't declare (14.6), or an emergency edge that breaks its terms
+   (14.13).
 
 ## 14.13 Emergency access
 
@@ -300,7 +302,7 @@ other.
 ```json
 {
   "edge": "E-9001",
-  "who": "platform.example:staff/S-14",
+  "who": "platform.example:S-14",
   "relation": "emergency",
   "mode": "view",
   "on": "R-ROOT",
@@ -309,7 +311,7 @@ other.
     "kind": "incident",
     "reason": "Card-skimming script reported on the storefront",
     "reference": "INC-2026-114",
-    "approvals": [ { "by": "platform.example:staff/S-02", "sig": "…" }, { "by": "platform.example:staff/S-31", "sig": "…" } ],
+    "approvals": [ { "by": "platform.example:S-02", "sig": "…" }, { "by": "platform.example:S-31", "sig": "…" } ],
     "notify": "now"
   },
   "by": "platform"

@@ -41,7 +41,7 @@ A claim SHOULD link the corpus run's output. Passing a later corpus version rene
 The corpus (`corpus/`, described in its README) is part of the specification. When a case and a chapter
 disagree, one of them is a bug; it is fixed in a new version of both.
 
-- Every MUST in chapters 1–11 SHOULD have at least one case that tests it.
+- Every MUST in chapters 1–14 SHOULD have at least one case that tests it.
 - Cases use the `test` package (`test.example/test`) and stay independent of any adopter.
 - The corpus is versioned by date, like packages, and a version never changes.
 

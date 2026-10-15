@@ -152,9 +152,9 @@ role: buyer
     review: me:videoCodec
 ```
 
-- The verbs are `see` (a value is shown), `edit` (a form may write it), `run` (a contract may be started) and
-  `review` (vocabulary and migration queue items may be decided). Targets are facets, classes, views and
-  contracts; `*` means all.
+- The verbs are the menu's (chapter 14.6): `see` (a value is shown), `edit` (a form may write it), `run` (a
+  contract may be started), `review` (queue items may be decided) and the rest. Targets are facets, classes,
+  views, contracts and queues; `*` means all.
 - **A role narrows its audience; it never exceeds it.** A grant naming anything its audience can't see MUST
   be refused at publish.
 - A person MAY hold several roles; their grants add up, each capped by its own audience.

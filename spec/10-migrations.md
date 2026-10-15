@@ -142,9 +142,15 @@ instructions: P-4QX7
        yes -> Graded
        no -> -
 
-instructions: class OpticalDisc /2026-11-01
+instructions: class:OpticalDisc/2026-11-01
   1: -sealed
+
+instructions: kind:item/2026-11-01
+  1: +colour
 ```
+
+An issuer is written as it appears in `applied` (chapter 2.3): the record's ID, `class:<Name>/<version>` or
+`kind:<name>/<version>`.
 
 | Instruction | Does |
 |---|---|

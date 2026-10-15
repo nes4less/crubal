@@ -86,7 +86,8 @@ The intake record carries the arrival's outcome and the binding it used, as `arr
   `pick` allows (review then offers both fixes: the data or the definition);
 - `rule`: a `must` rule the value would break;
 - `value`: another value on the same record that it can't stand beside;
-- `global`: a global rule and the other record (a duplicate GTIN).
+- `global`: a global rule and the other record (a duplicate GTIN);
+- `slot`: a part slot, when a part is held as a count the slot doesn't allow (chapter 5.6).
 
 A value the vocabulary lacks is growth, not a contradiction. Off-list values contradict only a fixed list.
 
@@ -118,9 +119,9 @@ Review works **by key across all objects**, never object by object: `market:Stud
 distinct values.
 
 - A vocabulary decision changes a contract's map or the vocabulary (add a value, add an alias, map a value,
-  reject a value); it never edits objects directly. It is logged twice over: the `review` write that records
-  the decision, and the `define` write that carries the changed member of the working package (chapter 8.5,
-  11.4). An arrival decision is a binding (9.2a), and a migration item's decision resolves one held value
+  reject a value); it never edits objects directly. It is one entry holding two writes: the `review` write
+  that records the decision, and the `define` write that carries the changed member of the working package
+  (chapter 8.5, 11.4). An arrival decision is a binding (9.2a), and a migration item's decision resolves one held value
   (chapter 10.4); both are logged review writes.
 - After a decision, the held intake records are **replayed** (9.6), and the objects change through the fold
   like any other intake.

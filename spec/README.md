@@ -1,6 +1,6 @@
 # CRUBAL 2: the specification
 
-**Status:** working draft, 2026-10-14. Not yet published. This spec is the source of truth for the language;
+**Status:** working draft, 2026-10-15. Not yet published. This spec is the source of truth for the language;
 the design review that produced it is recorded in Media Encyclopedia's blueprint, which it supersedes.
 
 CRUBAL is a language and engine for data about any kind of thing. Everything is a key and a value. Records
@@ -56,7 +56,7 @@ An implementation claims one level, and every level includes the ones above it i
 | **Dictionary** | also reads facets and classes, folds aliases, and checks values against their facets (chapters 4–5) |
 | **Rules** | also evaluates rules, and refuses a write that breaks a `must` rule (chapter 6) |
 | **Store** | also keeps sources and signed logs, runs intake with raw bytes kept, and applies migration recipes (chapters 8–10) |
-| **Exchange** | also runs contracts, offer and take, and verifies signatures across owners (chapters 7, 9, 11) |
+| **Exchange** | also runs contracts, offer and take, and verifies signatures across owners, and decides access (chapters 7, 9, 11, 14) |
 | **Views** | also computes stored projections with their filter buckets, audiences and roles, publishes the projection stream, and serves it through an index, its own or any that conforms (chapter 12) |
 
 A claim is proven by passing that level's folder of the [test corpus](../corpus/README.md).

@@ -60,6 +60,8 @@ contract: ebayListing
 | `missed` | for a scheduled contract: `once`, `all` or `skip` (7.11) | send, receive; default `once` |
 | `stream` | the views whose projection streams the contract carries (chapter 12.6.2); it takes the place of `writes` and `needs` | send |
 | `to` | the party the data goes to (an offer's audience, 7.8; a stream's index, chapter 12.6.2) | offer, send with `stream` |
+| `from` | the presenter, by domain (7.8) | take |
+| `mode` · `terms` | how shared data is held, and the presenter's terms for `controlled` (7.8) | offer, take · offer |
 | `who` | who may run it: a condition over the caller (7.6) | all |
 | `origin` | the origin of the values it brings in (chapter 1.9) | receive, form, take; default `reported` for systems and `declared` for forms |
 | `lands` | `value` (the default), `suggestion` (7.5) or `observation` (chapter 9.7) | receive, form, take |
@@ -131,7 +133,8 @@ A run goes through seven steps, in order. Only step 4 has an effect.
 Every run has a **run ID** (`R-118`), and the log entry for its writes names it (chapter 8).
 
 - **Idempotency.** A run's key is the contract, the record (or the `ref` when the run has no record yet,
-  chapter 9.2a) and the hash of its mapped-out payload. A host MUST NOT act twice for the same key unless the
+  chapter 9.2a) and the hash of its mapped-out payload; for a scheduled run, the tick takes the payload's
+  place (7.11), and for a stream batch, the view and its `seq` range (chapter 12.6.2). A host MUST NOT act twice for the same key unless the
   earlier run failed before acting.
 - **Many records, one record at a time.** A run over several records (an import, a batch listing) is one
   entry and one idempotency key per record (chapter 8.5): each item is `acted` or `failed` on its own, a
@@ -258,8 +261,12 @@ A package MUST be refused at publish when a contract breaks these:
 3. Every our-side address names a facet the package defines (or an unknown-key prefix in `reads`).
 4. Every our-side value in a value map is a real value of its facet.
 5. `credential` is a name, never a value; nothing in the contract is a secret.
-6. `when`, `who` and `show` are conditions that parse (chapter 6.3).
+6. `when` is `asked`, `entry`, a schedule (7.11) or a condition that parses (chapter 6.3), and `who` is a
+   condition that parses.
 7. `undo` names a contract of the same package.
+8. `stream` names views of the package and comes with `to` and without `writes` or `needs`; `when: entry`
+   comes only with `stream`; `missed` comes only with a schedule.
+9. `relation` is a relation the package declares (chapter 14.6).
 
 ## 7.11 Schedules
 
@@ -281,8 +288,8 @@ schedule = "every " ( N " minutes" / N " hours" / "minute" / "hour"
   one run and at or before `now` is due.
 - **A schedule begins when its contract is published** (chapter 11.5): nothing before that is due, so a
   contract published in October never owes a year of nightly runs.
-- **A tick runs once.** A run's idempotency key is the contract and the tick (7.5), so a host that restarts
-  never runs a tick twice; the run's entry carries the tick as its cause.
+- **A tick runs once.** A run's idempotency key is the contract, the tick and the record when there is one
+  (7.5), so a host that restarts never runs a tick twice; the run's entry carries the tick as its cause.
 - **Missed ticks** are the contract's choice, `missed`: `once` (the default: one run, for the latest tick
   due), `all` (one run per tick, in order) or `skip` (none). What was skipped is reported, never run.
 - **What runs.** A contract with `for` runs over every record it selects, one entry each (chapter 8.5). A

@@ -65,6 +65,7 @@ JSON here is RFC 8259 JSON in UTF-8. A document MUST NOT contain duplicate membe
 | `parts` | array of part objects (3.6) | when there are parts |
 | `sources` | object: address → source (3.7) | in full form; left out in plain form |
 | `alternatives` · `suggestions` | object: address → array of values with sources (chapter 8.4) | when there are any; left out in plain form |
+| `held` | object: address → a held value and what holds it (chapter 8.8) | when a value is held; left out in plain form |
 
 A member not in this table MUST be refused. Packages extend records with facets, never with members.
 
@@ -172,7 +173,8 @@ Each document type is a JSON object with a distinct identifying member.
   arrival is held.
 - `outcome` is one of `absorbed`, `new`, `conflict`, `contradiction`, `unknown`, `ignored`. A
   `contradiction` MUST carry `cites`, naming exactly one of `type` (the facet), `rule`, `value` (an
-  address on the same object) or `global` (a global rule and the other record).
+  address on the same object), `global` (a global rule and the other record) or `slot` (a part slot,
+  chapter 5.6). A `new` that is a unit question carries `cites` naming `unit`, the spelling (chapter 11.9).
 
 **Log entry.** One write, hash-linked to the owner's previous entry (chapter 8).
 

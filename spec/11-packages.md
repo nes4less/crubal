@@ -19,7 +19,7 @@ package: me /2026-10-13
     wd: https://www.wikidata.org/entity/
     schema: https://schema.org/
     ebay: ebay.com
-  units: crubal:units /2026-10-14
+  units: crubal.com/units /2026-10-15
   confirm: 2
   split: 3
 ```
@@ -33,13 +33,14 @@ package: me /2026-10-13
 | `licence` | an SPDX licence identifier |
 | `extends` | the packages it builds on, each pinned to a version (11.4) |
 | `prefixes` | nicknames its files use, each mapped to a full identity: a package (`domain/name`), a vocabulary's base URL, or a party's domain. The package's own name is its default nickname for itself |
-| `units` | the units table it uses, pinned |
+| `units` | the units table it uses, pinned by identity and version (11.9) |
 | `confirm` · `split` · `recur` | thresholds: independent observations to confirm a value (default 2), instances to propose a version split (default 3), distinct records before a recurring notable or unknown key is proposed as a facet (default 5) (chapter 9) |
 | `trust` · `facet-trust` | the trust order (11.3) |
 | `terms` | how each audience may use what it's shown: `public: search yes, answer yes, train no` (chapter 12.5.1) |
 
 The rest of the package is its member files: `facet:`, `class:`, `rule:`, `contract:`, `kind:`, `view:`,
-`migration:`, `permissions:` and `ownership:` (chapter 14) blocks, in any number of files. A package MAY also publish **reference records** (data files in
+`shape:`, `filter:`, `role:` (chapter 12), `migration:`, `permissions:` and `ownership:` (chapter 14)
+blocks, in any number of files. A package MAY also publish **reference records** (data files in
 the text form, chapter 2) that others read but don't own copies of: the units table is one.
 
 **Prefixes are nicknames.** Identity is always the full `domain/name`; a prefix only abbreviates it inside a
@@ -122,8 +123,8 @@ Adopted values (chapter 8.2) are outside the trust order: they don't change unti
 ## 11.4 Versions and extending
 
 - **A package version is a frozen set** of its members' versions. Publishing produces a members list naming
-  every facet, class, rule, contract, kind, view and recipe with its version, and the package's version
-  names that list.
+  every facet, class, rule, contract, kind, view, shape, filter, recipe and permission declaration with its
+  version, and the package's version names that list.
 - **Inside a package, everything follows current.** Its own members always refer to each other's current
   versions. The owner's **working package** is the set of its members as they now stand: every change to a
   member is a `define` write in the owner's log (chapter 8.5), made by a person or by a review decision
@@ -151,6 +152,8 @@ Publishing MUST run, and the bundle MUST pass, every well-formedness check:
 | 7.10 | contracts, including that no secret appears |
 | 10.5 | recipes |
 | 11.1–11.4 | prefixes, kinds, trust order entries name real contracts and origins, `extends` doesn't widen |
+| 12.8 | views, shapes, filters and roles |
+| 14.6 | permission menus, presets, relations and ownership |
 
 A published version MUST NOT change. A mistake is fixed by a new version.
 
@@ -166,7 +169,7 @@ A published version MUST NOT change. A mistake is fixed by a new version.
   "licence": "CC-BY-4.0",
   "extends": [ { "package": "crubal.com/commerce", "version": "2026-10-01" } ],
   "prefixes": { "commerce": "crubal.com/commerce", "wd": "https://www.wikidata.org/entity/" },
-  "units": { "package": "crubal:units", "version": "2026-10-14" },
+  "units": { "package": "crubal.com/units", "version": "2026-10-15" },
   "trust": ["person", "me:unitizer", "observed", "declared", "reported"],
   "facet-trust": { "runtime": ["observed", "person"] },
   "members": { "facet:videoCodec": "2026-10-13", "class:OpticalDisc": "2026-10-13" }

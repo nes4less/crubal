@@ -64,7 +64,7 @@ A definition is a block under `facet: key`. Its settings:
 |---|---|---|
 | text | `length` | the most characters (a shortcut, 4.4) |
 | number | `unit` | a unit spelling (`min`, `lb`), an ISO 4217 code (`USD`), or `currency` for money in any currency |
-| number | `accepts` | other units a value may arrive in; they are converted to `unit` by the units table on the way in, with the rounding the table states |
+| number | `accepts` | other units a value may arrive in; they are converted to `unit` by the units table on the way in, kept to `places` when the facet has them, else to the rounding the table states (chapter 11.9) |
 | number | `range` | `1..600`, optionally `step 0.5` (a shortcut, 4.4) |
 | number | `places` | the most decimal places kept |
 | date | `precision` | `year`, `month`, `day`, `hour`, `minute`, `second`, or `any` (all accepted) |
@@ -239,8 +239,8 @@ A package MUST be refused at publish when any definition breaks these:
 3. `identity` names a child of the compound, and that child is a link.
 4. `ordered` is set only when `pick` is not `1`.
 5. `ranked`, `scored`, `fixed` and `...` are set only on choice facets; `fixed` and `...` not both.
-6. `unit` and `accepts` are spellings from the units table or ISO 4217 codes, and `accepts` is set only with
-   `unit`.
+6. `unit` and `accepts` name units of the units table by their canonical spelling, ISO 4217 codes, or (for
+   `unit`) `currency`, and `accepts` is set only with `unit`.
 7. Every `qualifiers` entry names a facet whose own values can't be qualified.
 8. No alias collides (4.3).
 9. `range` has `min` ≤ `max`, and `step`, when set, divides the span.
