@@ -114,6 +114,29 @@ Without quotes, a value's spelling suggests its shape. The facet decides (chapte
 | a URL | image, under an image facet | image fields go in the detail (2.6) |
 | anything else | text, choice, or raw for an unknown key | |
 
+### 2.4.1 Long text
+
+A text value with line breaks is written as a **block**: `|` after the separator, then the text on the
+lines below, each indented more than the key.
+
+```crubal
+note: | [origin: declared, via: L-1]
+  Shrink-wrapped, with the original price sticker.
+  |
+  The case has a crack at the hinge; see https://img.example/p-4qx7-case.jpg
+    (close-up, lower left).
+```
+
+- The block's lines are taken **raw**: nothing in them is a comment, and quoting does not apply. Their
+  indentation is kept relative to the first line's, so an indented line inside the text stays indented.
+- A blank line means nothing anywhere in the text form (2.1), so an empty line inside the text is written as
+  a line holding only `|`. Blank lines at the end of a block are not part of the text.
+- The block ends at the first line indented no more than the key.
+- The block's detail, when it has one, goes on the `|` line.
+- A block holds one text value: never a list, a choice, or a many-valued facet. A quoted string with `\n`
+  (2.5) says the same thing on one line; the pairs are the same.
+- A printer writes the block form for a text value holding a line break and the one-line form otherwise.
+
 **Unknown keys.** A Reader MUST keep an unknown key's value as raw: the exact characters after the separator,
 with the trailing comment and spaces removed and nothing else changed. A short list under an unknown key stays
 one raw value (`a, b` is the raw text `a, b`). When lines are indented under an unknown key, they are part of
@@ -219,7 +242,8 @@ The printer writes canonical text:
 - inside a record: envelope lines first (full mode), then values in the order of the record's class
   placement when the printer knows it, otherwise in the order received;
 - two spaces per level, `: ` after each key, short lists when every item fits on one line within 100
-  characters and no item has a detail with more than one pair, long lists otherwise;
+  characters and no item has a detail with more than one pair, long lists otherwise, the block form (2.4.1)
+  for text holding a line break;
 - quotes only by 2.5, and `-` for does not apply.
 
 Layout is not data. Two texts that read to the same pairs are the same data, whatever their order, quoting,

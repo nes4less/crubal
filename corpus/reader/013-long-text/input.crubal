@@ -1,0 +1,15 @@
+// Long text (2.4.1): a block after `|`, taken raw. Nothing in it is a comment, an empty line is a lone `|`,
+// indentation inside the text is kept relative to its first line, and the detail sits on the `|` line.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  note: | [origin: observed, via: L-7]
+    Shrink-wrapped, with the original price sticker // not a comment.
+    |
+    The case has a crack at the hinge; see https://img.example/p-1-case.jpg
+      (close-up, lower left).
+
+  subtitle: Special Edition

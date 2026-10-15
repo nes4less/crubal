@@ -24,6 +24,9 @@ export type Node = {
   /** The column the line's text starts at. */
   indent: number;
   children: Node[];
+  /** A long-text block (2.4.1): `value` is the block's text, taken raw, and `detail` what followed the `|`. */
+  block?: true;
+  detail?: string;
 };
 
 /** Remove a `//` comment that starts the line or follows white space, outside quotes. */
@@ -98,8 +101,33 @@ export function readTree(source: string): Node[] {
   const stack: { node: Node; indent: number }[] = [{ node: root, indent: -1 }];
   const lines = source.replace(/^﻿/, "").split(/\r?\n/);
 
+  // A long-text block (2.4.1): after `key: |`, every line indented more than the key is the text, taken raw
+  // (no comment, indentation kept relative to the first line); a line holding only `|` is an empty line.
+  let block: { node: Node; indent: number; base: number | null; lines: string[] } | null = null;
+  const closeBlock = () => {
+    if (!block) return;
+    while (block.lines.length && block.lines[block.lines.length - 1] === "") block.lines.pop();
+    block.node.value = block.lines.join("\n");
+    block = null;
+  };
+
   lines.forEach((raw, i) => {
     const line = i + 1;
+    if (block) {
+      const trimmed = raw.trim();
+      const indent = raw.length - raw.trimStart().length;
+      if (trimmed === "" || indent > block.indent) {
+        if (trimmed === "") {
+          block.lines.push("");
+          return;
+        }
+        if (/^ *\t/.test(raw)) throw new CrubalError("indent with spaces, not tabs", line);
+        if (block.base === null) block.base = indent;
+        block.lines.push(trimmed === "|" ? "" : raw.slice(Math.min(block.base, indent)));
+        return;
+      }
+      closeBlock();
+    }
     if (/^ *\t/.test(raw)) throw new CrubalError("indent with spaces, not tabs", line);
     const stripped = stripComment(raw);
     if (!stripped.trim()) return;
@@ -132,6 +160,13 @@ export function readTree(source: string): Node[] {
     const node = lineNode(body, line, indent);
     parent.children.push(node);
     stack.push({ node, indent });
+    const pipe = node.kind === "pair" ? node.value.match(/^\|(?:\s+(\[.*\]))?$/) : null;
+    if (pipe) {
+      node.block = true;
+      if (pipe[1]) node.detail = pipe[1];
+      block = { node, indent, base: null, lines: [] };
+    }
   });
+  closeBlock();
   return root.children;
 }

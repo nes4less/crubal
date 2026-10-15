@@ -98,6 +98,12 @@ function addressItem(key: string, f: Facet, item: Json): string {
 
 /** Read a facet's value from its node: one value, a list, or a compound. */
 function readValue(f: Facet, node: Node, ctx: Ctx, address: string): Json | undefined {
+  // A long-text block (2.4.1): the text as taken, with its detail from the `|` line.
+  if (node.block) {
+    if (f.type !== "text" || f.many) throw new CrubalError(`a block holds one text value; ${f.key} is ${f.many ? "many-valued" : f.type}`, node.line);
+    const p = readPiece(node.detail ?? "", node.line);
+    return value(f, { text: node.value, quoted: true, detail: p.detail }, ctx, address, node.line);
+  }
   const raw = node.value;
   // An empty is the whole value (chapter 1.5).
   if (raw && node.children.length === 0 && /^(_|-|n\/a|N\/A)( \[.*\])?$/.test(raw.trim())) {
@@ -141,7 +147,7 @@ function readFields(children: Node[], within: Map<string, Facet> | null, ctx: Ct
     const f = within ? within.get(c.key) : ctx.dict.facets.get(c.key);
     const address = prefix ? `${prefix}.${c.key}` : c.key;
     if (!f) {
-      obj[c.key] = c.children.length ? `${c.value}\n${innerText(c)}` : c.value;
+      obj[c.key] = c.block ? c.value : c.children.length ? `${c.value}\n${innerText(c)}` : c.value;
       continue;
     }
     const v = readValue(f, c, ctx, address);

@@ -63,4 +63,4 @@ A claim is proven by passing that level's folder of the [test corpus](../corpus/
 
 ## Open in the spec (not in the design)
 
-- Long text in the text form: quoted strings with `\n` work, but a readable block form is not designed.
+Nothing at present. What a chapter leaves open, it says in its last section.

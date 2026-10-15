@@ -1,0 +1,15 @@
+{
+  "crubal": "2",
+  "package": "test /2026-10-14",
+  "records": [
+    {
+      "id": "P-1", "kind": "item", "level": "product", "owner": "test.example",
+      "values": {
+        "title": "Christmas Vacation",
+        "note": "Shrink-wrapped, with the original price sticker // not a comment.\n\nThe case has a crack at the hinge; see https://img.example/p-1-case.jpg\n  (close-up, lower left).",
+        "subtitle": "Special Edition"
+      },
+      "sources": { "*": { "origin": "declared", "via": "L-1" }, "note": { "origin": "observed", "via": "L-7" } }
+    }
+  ]
+}

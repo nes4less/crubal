@@ -102,6 +102,14 @@ function printValue(f: Facet, key: string, v: Json, address: string, depth: numb
     out.lines.push(`${pad}${key}: ${valueLine(f, v, address, out)}`);
     return;
   }
+  // Text holding a line break takes the block form (2.4.1): `key: |`, its detail on that line, the lines
+  // below, an empty line written as `|`.
+  if (f.type === "text" && !f.many && typeof v === "string" && v.includes("\n")) {
+    const src = out.mode === "full" ? out.sources[address] : undefined;
+    out.lines.push(`${pad}${key}: |${detailText(sourcePairs(src))}`);
+    for (const l of v.split("\n")) out.lines.push(l === "" ? `${pad}  |` : `${pad}  ${l}`);
+    return;
+  }
   if (f.type === "compound") {
     const children = f.children ?? new Map<string, Facet>();
     out.lines.push(`${pad}${key}:`);
