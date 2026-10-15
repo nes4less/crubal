@@ -11,6 +11,7 @@ import { checkRecipe, readRecipes, restamp } from "./migrate.ts";
 import { checkContracts, Exchange, readRoles, verifyBorder } from "./exchange.ts";
 import { checkPackages } from "./packages.ts";
 import { checkViews, readViews, Views } from "./views.ts";
+import { formOf } from "./forms.ts";
 import { Journal, rebuild, redactable, redactableWrite, stateJson } from "./log.ts";
 import { arrive, decide, type Arrival, type ArrivalStore } from "./arrival.ts";
 import { apply as applyInstructions, archive, attach, detach, emptyStore, issue, merge, unarchive } from "./lifecycle.ts";
@@ -38,11 +39,11 @@ const LEVEL_FOLDERS: { [level: string]: string[] } = {
   store: ["reader", "reader-errors", "dictionary", "dictionary-errors", "rules", "rules-errors", "store", "store-errors"],
   exchange: [
     "reader", "reader-errors", "dictionary", "dictionary-errors", "rules", "rules-errors", "store", "store-errors",
-    "exchange", "exchange-errors", "package-errors",
+    "exchange", "exchange-errors", "package-errors", "forms",
   ],
   views: [
     "reader", "reader-errors", "dictionary", "dictionary-errors", "rules", "rules-errors", "store", "store-errors",
-    "exchange", "exchange-errors", "package-errors", "views", "views-errors",
+    "exchange", "exchange-errors", "package-errors", "forms", "views", "views-errors",
   ],
 };
 
@@ -888,6 +889,52 @@ function runViewsCase(folder: string, caseDir: string, name: string, shared: Dic
 
 const isPlainObject = (v: Json | undefined): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);
 
+/**
+ * Forms as data (7.7, docs/design/index-and-forms.md): `form.crubal` names the contract, the record and
+ * optionally the caller (several `form:` blocks give several forms); `access.crubal` makes editability
+ * follow edges and gates; `arrival.json` is a held arrival whose candidates the form offers;
+ * `expected-form.json` is the form (or the forms) exactly.
+ */
+function runFormsCase(folder: string, caseDir: string, name: string, shared: Dictionary): CaseResult {
+  const file = (f: string) => join(caseDir, f);
+  const json = (f: string) => JSON.parse(readFileSync(file(f), "utf8")) as Json;
+  const pass = { folder, name, pass: true };
+  const fail = (detail: string) => ({ folder, name, pass: false, detail });
+  try {
+    const input = readFileSync(file("input.crubal"), "utf8");
+    const { defs, data } = splitCaseInput(input);
+    const dict = copy(shared);
+    if (defs.trim()) readDefinitions(defs, dict);
+    const contracts = readContracts(defs);
+    const records = data.trim() ? readText(data, dict).records.map((r) => foldRecord(r, dict)) : [];
+    const byId = new MemoryRecords(records.map((r) => [r.id, r]));
+    let access: Access | undefined;
+    if (existsSync(file("access.crubal"))) {
+      const { perms, edges } = readAccess(readFileSync(file("access.crubal"), "utf8"));
+      access = new Access(dict, perms, byId, edges, "test.example");
+    }
+    const arrival = existsSync(file("arrival.json")) ? (json("arrival.json") as unknown as import("./arrival.ts").Arrival) : undefined;
+    // form.crubal reads like run.crubal: `form:` starts one, `record:` and `caller:` belong to it.
+    const asks: { form: string; record?: string; caller?: string }[] = [];
+    for (const n of readTree(readFileSync(file("form.crubal"), "utf8"))) {
+      if (n.key === "form") asks.push({ form: n.value.trim() });
+      else if ((n.key === "record" || n.key === "caller") && asks.length) (asks[asks.length - 1] as { [k: string]: string })[n.key] = n.value.trim();
+    }
+    const forms: Json[] = [];
+    for (const ask of asks) {
+      const c = contracts.find((x) => x.name === ask.form);
+      if (!c) return fail(`no contract ${ask.form}`);
+      const rec = ask.record ? byId.get(ask.record) : undefined;
+      forms.push(formOf(c, rec, dict, { records: byId, ...(ask.caller ? { caller: ask.caller } : {}), ...(access ? { access } : {}), ...(arrival ? { arrival } : {}) }));
+    }
+    const want = json("expected-form.json");
+    const got: Json = Array.isArray(want) ? forms : (forms[0] ?? {});
+    return serialize(got) === serialize(want) ? pass : fail(`form: ${firstDiff(serialize(got), serialize(want))}`);
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : String(e));
+  }
+}
+
 /** Run one level's corpus folders under `root`. */
 export function runCorpus(root: string, level: string): CaseResult[] {
   const folders = LEVEL_FOLDERS[level];
@@ -905,7 +952,9 @@ export function runCorpus(root: string, level: string): CaseResult[] {
         results.push(runStoreCase(folder, join(dir, name), name, dict));
         continue;
       }
-      const r = folder.startsWith("views")
+      const r = folder === "forms"
+        ? runFormsCase(folder, join(dir, name), name, dict)
+        : folder.startsWith("views")
         ? runViewsCase(folder, join(dir, name), name, dict, root)
         : folder.startsWith("exchange") || folder === "package-errors"
         ? runExchangeCase(folder, join(dir, name), name, dict, root)

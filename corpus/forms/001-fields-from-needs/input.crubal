@@ -1,0 +1,25 @@
+// A form's fields are the contract's needs, in order and under their sections (7.7, 5.3.3), each carrying
+// its facet's settings narrowed by the line and the record's current value and state; a level-prefixed
+// need is the record's own only at that level. A field asked only when its condition holds says so.
+contract: unitizer
+  kind: form
+  origin: observed
+  needs:
+    section: Condition
+    !condition{NM|VG|G}
+    sealed
+    notes$120 when condition is NM
+    section: Price
+    unit::price
+    title
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: DVD
+
+unit: U-1 of P-1 [origin: observed, via: L-2]
+  condition: VG
+  price: 9.99USD

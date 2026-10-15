@@ -61,6 +61,12 @@ starts the run; `acted: L-Rn` and `failed: L-Rn` (with `reason:`) finish it; `un
 reversing contract naming its cause; a `run:` with `for-run: L-Rn` is a late answer that closes that run. Offer-and-take cases add the presenter's record as `presenter.json`; border cases
 hold a signed wrapper in `border.json`, the presenter's key in `keys.json` and `expected-border.json`.
 
+`forms/` cases (Exchange level; 7.7, docs/design/index-and-forms.md) hold definitions, a form contract and
+records in `input.crubal`, a `form.crubal` read like `run.crubal` (`form:` names the contract, `record:` and
+`caller:` belong to it; several `form:` lines give several forms), an optional `access.crubal` so editability
+follows edges and gates, an optional `arrival.json` (a held arrival whose candidates the form offers), and
+`expected-form.json`: the form as data, exactly.
+
 ### Cases for the backbone chapters
 
 - **Rebuild (8.5.3):** a `store/` case with `log.json` and `expected-state.json` rebuilds the state from the

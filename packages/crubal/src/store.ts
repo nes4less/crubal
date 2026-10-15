@@ -137,7 +137,18 @@ export function readContracts(source: string): Contract[] {
       c.partLines[p.key] = p.line;
       const list = () => splitTop(p.value, ",", p.line).filter(Boolean);
       if (p.key === "needs") {
-        c.needs = p.value ? splitTop(p.value, ",", p.line).map((t) => readClassLine(t, p.line)) : p.children.map((l) => readClassLine(l.text, l.line));
+        // Needs are an unnamed class (5.8): its lines, placed by the same sections (5.3.3, 7.7).
+        if (p.value) c.needs = splitTop(p.value, ",", p.line).map((t) => readClassLine(t, p.line));
+        else {
+          let section: string | undefined;
+          for (const l of p.children) {
+            if (l.kind === "pair" && l.key === "section") {
+              section = unq(l.value);
+              continue;
+            }
+            c.needs.push(readClassLine(l.text, l.line, section));
+          }
+        }
         continue;
       }
       if (p.key === "gives") c.gives = list();

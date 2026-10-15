@@ -1,0 +1,79 @@
+{
+  "contract": "unitizer",
+  "record": "U-1",
+  "origin": "observed",
+  "sections": [
+    {
+      "title": "Condition",
+      "fields": [
+        {
+          "key": "condition",
+          "label": "Condition",
+          "type": "choice",
+          "required": true,
+          "values": [
+            {
+              "value": "NM"
+            },
+            {
+              "value": "VG"
+            },
+            {
+              "value": "G"
+            }
+          ],
+          "ranked": true,
+          "current": "VG",
+          "editable": true
+        },
+        {
+          "key": "sealed",
+          "label": "Sealed",
+          "type": "yes-no",
+          "words": [
+            "Sealed",
+            "Opened"
+          ],
+          "editable": true
+        },
+        {
+          "key": "notes",
+          "label": "Notes",
+          "type": "text",
+          "length": "120",
+          "when": "condition is NM",
+          "asked": false,
+          "editable": true
+        }
+      ]
+    },
+    {
+      "title": "Price",
+      "fields": [
+        {
+          "key": "unit::price",
+          "label": "Price",
+          "type": "number",
+          "unit": "USD",
+          "places": "2",
+          "current": {
+            "$money": "9.99",
+            "currency": "USD"
+          },
+          "editable": true
+        },
+        {
+          "key": "title",
+          "label": "Title",
+          "type": "text",
+          "current": "Christmas Vacation",
+          "editable": true
+        }
+      ]
+    }
+  ],
+  "submit": {
+    "run": "unitizer",
+    "record": "U-1"
+  }
+}

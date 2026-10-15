@@ -1,0 +1,19 @@
+// Facets and classes the form cases use.
+condition{NM|VG|G|F|P} ranked
+sealed? words: Sealed, Opened
+price#USD places: 2
+notes$ 
+discFormat{DVD-5|DVD-9|BD-25|BD-50}
+asin$ unique
+
+class: Disc
+  facets:
+    discFormat
+    condition
+
+class: BoxSet
+  for: item
+  facets:
+    title
+  parts:
+    disc: Disc *

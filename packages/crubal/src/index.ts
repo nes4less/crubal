@@ -23,3 +23,4 @@ export { Access, checkPermissions, foreign, MODES, readAccess, VERBS, type Edge,
 export { isSchedule, nextTick, readSchedule, ticksDue, type Schedule } from "./schedule.ts";
 export { bundleHash, bundleOf, classJson, contractJson, emptyParsed, kindJson, parsePackage, printBundle, readBundle, readBundleInto, readBundleOnto, recipeJson, ruleJson, signBundle, verifyBundle, viewJson, type Parsed } from "./bundle.ts";
 export { classify, publish, type Change, type PublishOptions } from "./publish.ts";
+export { formOf, type FormOptions } from "./forms.ts";

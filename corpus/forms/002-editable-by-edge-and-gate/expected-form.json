@@ -1,0 +1,118 @@
+[
+  {
+    "contract": "bench",
+    "record": "U-1",
+    "origin": "observed",
+    "sections": [
+      {
+        "fields": [
+          {
+            "key": "condition",
+            "label": "Condition",
+            "type": "choice",
+            "required": true,
+            "values": [
+              {
+                "value": "NM"
+              },
+              {
+                "value": "VG"
+              },
+              {
+                "value": "G"
+              },
+              {
+                "value": "F"
+              },
+              {
+                "value": "P"
+              }
+            ],
+            "ranked": true,
+            "current": "VG",
+            "editable": true
+          },
+          {
+            "key": "sealed",
+            "label": "Sealed",
+            "type": "yes-no",
+            "words": [
+              "Sealed",
+              "Opened"
+            ],
+            "editable": true
+          },
+          {
+            "key": "notes",
+            "label": "Notes",
+            "type": "text",
+            "editable": false
+          }
+        ]
+      }
+    ],
+    "submit": {
+      "run": "bench",
+      "record": "U-1"
+    }
+  },
+  {
+    "contract": "bench",
+    "record": "U-1",
+    "origin": "observed",
+    "sections": [
+      {
+        "fields": [
+          {
+            "key": "condition",
+            "label": "Condition",
+            "type": "choice",
+            "required": true,
+            "values": [
+              {
+                "value": "NM"
+              },
+              {
+                "value": "VG"
+              },
+              {
+                "value": "G"
+              },
+              {
+                "value": "F"
+              },
+              {
+                "value": "P"
+              }
+            ],
+            "ranked": true,
+            "current": "VG",
+            "editable": true,
+            "gated": "E-2"
+          },
+          {
+            "key": "sealed",
+            "label": "Sealed",
+            "type": "yes-no",
+            "words": [
+              "Sealed",
+              "Opened"
+            ],
+            "editable": true,
+            "gated": "E-2"
+          },
+          {
+            "key": "notes",
+            "label": "Notes",
+            "type": "text",
+            "editable": false
+          }
+        ]
+      }
+    ],
+    "submit": {
+      "run": "bench",
+      "record": "U-1"
+    }
+  }
+]

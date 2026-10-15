@@ -1,0 +1,22 @@
+permissions: shop
+  menu:
+    grade: edit condition, edit sealed
+  relations: bench, trial
+
+edge: E-1
+  who: C-1
+  relation: bench
+  mode: control
+  on: U-1
+  grants: grade
+  by: owner
+
+edge: E-2
+  who: C-2
+  relation: trial
+  mode: control
+  on: U-1
+  grants: grade
+  gate: review
+  reviewer: C-1
+  by: owner

@@ -1,0 +1,21 @@
+// Editable follows the caller's edges (14.6): a field is editable when the caller holds `edit` on its facet
+// for the record; under a gated edge (14.7) it is editable and the form says writes land as suggestions.
+kind: person
+  levels: person
+contract: bench
+  kind: form
+  origin: observed
+  needs:
+    !condition
+    sealed
+    notes
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+person: C-1 [origin: declared, via: L-1]
+person: C-2 [origin: declared, via: L-1]
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+unit: U-1 of P-1 [origin: observed, via: L-2]
+  condition: VG

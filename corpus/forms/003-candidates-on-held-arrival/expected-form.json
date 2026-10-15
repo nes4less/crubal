@@ -1,0 +1,36 @@
+{
+  "contract": "pick",
+  "origin": "declared",
+  "sections": [
+    {
+      "fields": [
+        {
+          "key": "title",
+          "label": "Title",
+          "type": "text",
+          "required": true,
+          "editable": true
+        },
+        {
+          "key": "asin",
+          "label": "Asin",
+          "type": "text",
+          "editable": true
+        }
+      ]
+    }
+  ],
+  "candidates": [
+    {
+      "record": "P-1"
+    },
+    {
+      "record": "P-2",
+      "archived": true
+    }
+  ],
+  "ref": "B000001",
+  "submit": {
+    "run": "pick"
+  }
+}

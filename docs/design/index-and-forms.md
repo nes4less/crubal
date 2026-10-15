@@ -1,6 +1,6 @@
 # The reference index and the form contract
 
-**Status:** design, 2026-10-15; ruled. Two pieces of the host (host.md) that face people: the index that
+**Status:** design, 2026-10-15; ruled; the form as data is built (`formOf`, corpus `forms/`); the index is next. Two pieces of the host (host.md) that face people: the index that
 serves a view's pages, counts and search from the projection stream (spec 12.6.1), and the shape a form
 takes when a host renders a contract of kind `form` (7.7). Neither decides anything about visibility: the
 store decided when it projected; the index matches edges and roles; a form's fields are the contract's
@@ -71,7 +71,7 @@ no UI.
   ],
   "parts": [ { "slot": "disc", "rows": [ { "row": "disc1", "fields": [ … ] } ] } ],
   "candidates": [ … ],
-  "submit": "POST /o/<owner>/run/unitizer"
+  "submit": { "run": "unitizer", "record": "U-9KD2" }
 }
 ```
 
@@ -83,7 +83,8 @@ no UI.
 - **An arrival form** (a form with `ref`, 9.2a) carries `candidates` when the arrival is held, so the
   person decides on the spot; their choice is the review decision.
 - **Parts** come as rows per slot, with the slot's class lines as fields; a `fungible` slot adds `count`.
-- **Submit** is the form's run: `POST /o/<owner>/run/<contract>` with `{record, answers}`; the host maps the
+- **Submit** names the form's run (`{run, record}`; the host turns it into `POST /o/<owner>/run/<contract>`
+  with `{record, answers}`); the host maps the
   answers back through the contract's `reads`, and the run lands as a form run (origin from the contract,
   `by: person`). Nothing is minted or written until then; drafts are the session's and die with it.
 - **Validation before submit** is a courtesy, never the decision: the host MAY check a value against its
