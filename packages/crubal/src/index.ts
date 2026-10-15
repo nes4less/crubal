@@ -19,3 +19,4 @@ export { applyEntry, emptyState, rebuild, redactable, stateJson, type Entry, typ
 export { arrive, decide, surviving, type Arrival, type ArrivalStore } from "./arrival.ts";
 export { apply, archive, attach, detach, effective, emptyStore, foldUp, issue, issuersFor, merge, ownedKeys, pending, readInstructionBlocks, unarchive, type Instruction, type Store } from "./lifecycle.ts";
 export { Access, checkPermissions, foreign, MODES, readAccess, VERBS, type Edge, type Effective, type MenuItem, type Mode, type Permissions, type Preset } from "./access.ts";
+export { isSchedule, nextTick, readSchedule, ticksDue, type Schedule } from "./schedule.ts";

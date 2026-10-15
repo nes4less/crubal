@@ -1,0 +1,29 @@
+// A scheduled trigger (7.11): the host offers its clock, and every tick due since the last runs. The first
+// reading at 02:00 begins the schedule (nothing earlier is owed); at 03:30 the 03:00 tick runs; two days
+// later two ticks were missed and, with the default `missed: once`, only the latest runs. A tick never runs
+// twice: the second reading at 03:30 is a no-op.
+kind: party
+  levels: party
+
+shape: card3
+  slots:
+    !title -> heading
+
+view: discs3
+  select:
+    level: product
+  shape: card3
+
+contract: nightlyFeed
+  kind: send
+  stream: discs3
+  to: index.example
+  credential: feed
+  when: every day at 03:00
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation

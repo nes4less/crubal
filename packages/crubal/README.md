@@ -44,7 +44,7 @@ A run applies the rules (7.4 step 6): a value a `must` rule won't have is parked
 the rule and never lands, a `suggest` fills and a derivation lands with `origin: derived` and the rule as
 its `via`, a changed verdict holds, and each is a logged effect.
 
-It passes every corpus folder (118 cases). The corpus and this package name no adopter and no third party:
+It passes every corpus folder (119 cases). The corpus and this package name no adopter and no third party:
 `test.example` owns the data, `market:` stands for any marketplace, `bench` for any in-house tool, and
 product, unit and the like are the test package's own kinds, never the core's.
 

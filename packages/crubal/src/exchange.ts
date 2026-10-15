@@ -12,6 +12,7 @@ import { evaluate, parseCondition, type StateOf } from "./conditions.ts";
 import type { ClassLine, Dictionary } from "./defs.ts";
 import type { Json, JsonObject, Record, Source } from "./model.ts";
 import { Engine, type Result, type Rule } from "./rules.ts";
+import { isSchedule, readSchedule, ticksDue } from "./schedule.ts";
 import { type Contract, fieldPath, type IntakeOutcome, type Keys, land, receive, sha256, verifyChain } from "./store.ts";
 import { CrubalError, readTree } from "./tree.ts";
 
@@ -53,8 +54,8 @@ function callerStates(caller: Record | undefined, roles: Role[]): StateOf {
 // ─── Publish checks (7.10) ───────────────────────────────────────────────────
 
 const PARTS: { [kind: string]: string[] } = {
-  send: ["needs", "gives", "writes", "reads", "stream", "to", "when", "who", "auth", "scope", "credential", "retry", "undo", "for", "label", "describe", "version"],
-  receive: ["needs", "gives", "reads", "when", "who", "origin", "lands", "evidence", "absorb", "ignore", "keep-raw", "prefix", "ref", "relation", "auth", "scope", "credential", "retry", "undo", "for", "label", "describe", "version"],
+  send: ["needs", "gives", "writes", "reads", "stream", "to", "when", "missed", "who", "auth", "scope", "credential", "retry", "undo", "for", "label", "describe", "version"],
+  receive: ["needs", "gives", "reads", "when", "missed", "who", "origin", "lands", "evidence", "absorb", "ignore", "keep-raw", "prefix", "ref", "relation", "auth", "scope", "credential", "retry", "undo", "for", "label", "describe", "version"],
   store: ["needs", "stores", "when", "who", "for", "label", "describe", "version"],
   form: ["needs", "gives", "writes", "reads", "when", "who", "origin", "lands", "ref", "relation", "for", "label", "describe", "version"],
   offer: ["needs", "gives", "to", "mode", "terms", "for", "when", "who", "label", "describe", "version"],
@@ -101,9 +102,17 @@ export function checkContracts(contracts: Contract[], dict: Dictionary, ownPrefi
         throw new CrubalError(of ? `${v} is an alias of ${of.value}; a value map must name the real value` : `${v} is not a value of ${key}`, s.valueLines[i] ?? s.line);
       });
     }
-    // `when` is a condition, `asked` (a caller starts it) or `entry` (a stream contract runs as its views publish).
-    for (const cond of [c.who, c.when]) if (cond && cond !== "asked" && cond !== "entry") parseCondition(cond, c.line);
+    // `when` is a condition, `asked` (a caller starts it), `entry` (a stream contract runs as its views
+    // publish) or a schedule (7.11).
+    if (c.who) parseCondition(c.who, c.line);
+    if (c.when && c.when !== "asked" && c.when !== "entry") {
+      if (isSchedule(c.when)) readSchedule(c.when, c.partLines.when);
+      else parseCondition(c.when, c.line);
+    }
     if (c.when === "entry" && !c.stream.length) throw new CrubalError(`${c.name} runs on entry but carries no stream`, c.partLines.when);
+    const missed = c.parts.missed;
+    if (missed && !["once", "all", "skip"].includes(missed)) throw new CrubalError(`${c.name}: missed is once, all or skip`, c.partLines.missed);
+    if (missed && !isSchedule(c.when)) throw new CrubalError(`${c.name}: missed belongs to a scheduled contract`, c.partLines.missed);
     if (c.undo && !names.has(c.undo)) throw new CrubalError(`${c.name}'s undo names ${c.undo}, which isn't a contract here`, c.partLines.undo);
     const cred = c.parts.credential;
     if (cred && /[^A-Za-z0-9._-]/.test(cred)) throw new CrubalError(`${c.name}'s credential must be a name, never a secret`, c.partLines.credential);
@@ -445,6 +454,51 @@ export class Exchange {
       if (list.length) batches.push(`${name}|${v}|${version}|${list[0]?.seq}-${list.at(-1)?.seq}`);
     }
     return { ...head, entries, cursor: out, ...(batches.length ? { key: batches.join(" ") } : {}), log };
+  }
+
+  private lastTick = new Map<string, string>();
+
+  /**
+   * A scheduled contract's tick (7.11): the host offers its clock as `now`; every tick due since the last
+   * one runs (or only the latest, or none, by `missed`), each run keyed by the contract and the tick so a
+   * restarted host never runs a tick twice. A send contract with `for` runs over every record it selects;
+   * a stream contract pushes; any other runs once with no record.
+   */
+  tick(name: string, now: string, callerId?: string): RunResult {
+    const c = this.contracts.get(name);
+    if (!c) throw new Error(`no contract ${name}`);
+    if (!isSchedule(c.when)) throw new Error(`${name} isn't scheduled`);
+    const sch = readSchedule(c.when as string);
+    // A schedule begins when its contract is published (7.11): here, at the first clock reading.
+    if (!this.lastTick.has(name)) {
+      this.lastTick.set(name, now);
+      return { contract: name, now, ticks: [], runs: [], began: now };
+    }
+    const due = ticksDue(sch, this.lastTick.get(name), now);
+    const missed = c.parts.missed ?? "once";
+    const run = missed === "all" ? due : missed === "once" ? due.slice(-1) : [];
+    const skipped = due.filter((t) => !run.includes(t));
+    const results: Json[] = [];
+    for (const tick of run) {
+      const key = `${name}|${tick}`;
+      if (this.sent.has(key)) continue;
+      this.sent.add(key);
+      if (c.stream.length) {
+        const r = this.streamRun(name, callerId);
+        results.push({ tick, ...r } as Json);
+        continue;
+      }
+      const targets = c.parts.for ? [...this.records.values()].filter((r) => (r.wears ?? []).includes(c.parts.for as string) || r.level === c.parts.for || r.kind === c.parts.for).map((r) => r.id) : [];
+      if (!targets.length) {
+        const log = this.nextLog();
+        this.commit({ contract: name, run: log }, log, { contract: name, tick, key, state: "acted" });
+        results.push({ tick, log, acted: true });
+        continue;
+      }
+      for (const id of targets) results.push({ tick, ...this.run(name, id, callerId) } as Json);
+    }
+    if (due.length) this.lastTick.set(name, due[due.length - 1] as string);
+    return { contract: name, now, ticks: run, ...(skipped.length ? { skipped } : {}), runs: results };
   }
 
   /** The index acknowledges what it holds: the store resumes from there (12.6.2). */

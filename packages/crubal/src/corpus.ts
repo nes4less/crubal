@@ -602,9 +602,14 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
 
     // The runs, in order.
     const results: Json[] = [];
-    let current: { run?: string; on?: string; caller?: string; offer?: string; arrive?: string; level?: string; answer?: string; stream?: string; ack?: string; cursor?: string } = {};
+    let current: { run?: string; on?: string; caller?: string; offer?: string; arrive?: string; level?: string; answer?: string; stream?: string; ack?: string; cursor?: string; tick?: string; now?: string } = {};
     const parseCursor = (s: string | undefined) => (s ? Object.fromEntries(s.split(",").map((p) => p.trim().split("=")).map(([v, n]) => [v ?? "", Number(n)])) : undefined);
     const flush = () => {
+      if (current.tick) {
+        results.push(ex.tick(current.tick, current.now ?? "", current.caller) as Json);
+        current = {};
+        return;
+      }
       if (current.stream) {
         results.push(ex.streamRun(current.stream, current.caller, parseCursor(current.cursor)) as Json);
         current = {};
@@ -645,6 +650,10 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
         flush();
         current.ack = n.value;
       } else if (n.key === "cursor") current.cursor = n.value;
+      else if (n.key === "tick") {
+        flush();
+        current.tick = n.value;
+      } else if (n.key === "now") current.now = n.value;
       else if (n.key === "revise") {
         flush();
         const [view = "", version = ""] = n.value.split(" /");

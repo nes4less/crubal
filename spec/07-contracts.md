@@ -56,7 +56,8 @@ contract: ebayListing
 | `writes` | the map out (7.3) | send, form |
 | `reads` | the map in (7.3) | receive, send (its answer), form |
 | `stores` | the map both ways (7.3) | store |
-| `when` | the trigger: a condition (chapter 6.3) that starts a run when it becomes true, `asked` for runs started by a caller, or `entry` for a stream contract that runs as its views publish (chapter 12.6.2) | all; default `asked` |
+| `when` | the trigger: a condition (chapter 6.3) that starts a run when it becomes true, `asked` for runs started by a caller, `entry` for a stream contract that runs as its views publish (chapter 12.6.2), or a schedule (7.11) | all; default `asked` |
+| `missed` | for a scheduled contract: `once`, `all` or `skip` (7.11) | send, receive; default `once` |
 | `stream` | the views whose projection streams the contract carries (chapter 12.6.2); it takes the place of `writes` and `needs` | send |
 | `to` | the party the data goes to (an offer's audience, 7.8; a stream's index, chapter 12.6.2) | offer, send with `stream` |
 | `who` | who may run it: a condition over the caller (7.6) | all |
@@ -260,6 +261,30 @@ A package MUST be refused at publish when a contract breaks these:
 6. `when`, `who` and `show` are conditions that parse (chapter 6.3).
 7. `undo` names a contract of the same package.
 
-## 7.11 Open
+## 7.11 Schedules
 
-- Scheduled triggers (`every day at 03:00`): a trigger evaluated against the host's clock supplied as `now`.
+A contract's `when` MAY be a **schedule**:
+
+```
+schedule = "every " ( N " minutes" / N " hours" / "minute" / "hour"
+                    / "day" [ " at " hh:mm ]
+                    / weekday [ " at " hh:mm ]
+                    / "month on " D [ " at " hh:mm ] )  [ " [zone: " iana "]" ]
+```
+
+`every day at 03:00`, `every hour`, `every 15 minutes`, `every monday at 09:00`, `every month on 1 at
+00:00 [zone: America/Chicago]`. A time of day is UTC unless the zone says otherwise; a monthly day is 1 to
+28, so every month has it.
+
+- **Ticks are computed.** The ticks of a schedule follow from the schedule and a moment alone, so every
+  store agrees on them. The host offers its clock as `now` (chapter 6.3), and every tick after the last
+  one run and at or before `now` is due.
+- **A schedule begins when its contract is published** (chapter 11.5): nothing before that is due, so a
+  contract published in October never owes a year of nightly runs.
+- **A tick runs once.** A run's idempotency key is the contract and the tick (7.5), so a host that restarts
+  never runs a tick twice; the run's entry carries the tick as its cause.
+- **Missed ticks** are the contract's choice, `missed`: `once` (the default: one run, for the latest tick
+  due), `all` (one run per tick, in order) or `skip` (none). What was skipped is reported, never run.
+- **What runs.** A contract with `for` runs over every record it selects, one entry each (chapter 8.5). A
+  stream contract pushes its views' entries (chapter 12.6.2). Any other runs once, with no record.
+- Rules never schedule anything: a schedule is a trigger, and only a contract has one (chapter 6).
