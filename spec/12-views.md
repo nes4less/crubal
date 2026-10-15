@@ -161,9 +161,11 @@ role: buyer
 
 ## 12.5 Pages, search engines and structured data
 
-- **The public projection is canonical.** It is the one stored, cached and indexed, and the one crawlers see.
-  Other audiences are served the public projection plus what their `show` rules and roles add, at request
-  time.
+- **One view, one audience.** Every view is built for exactly one audience (its `show`), and its projection
+  and index hold only what that audience sees. A page for another audience (a staff catalog, a member's
+  shelf) is a view of its own with that `show`, with its own projection and index. The audiences are few
+  (12.4), so the projections stay few.
+- **The public projection is canonical.** It is the one cached, indexed and served to crawlers.
 - **Indexable filters are declared.** Each bucket of a filter listed in `index` gets its own page with a
   canonical URL (`/dvds/comedy`, `/dvds/1980s`). Every other filter combination, and every page after the
   first, is served as not-to-be-indexed. Crawlers never enter the combinations.
@@ -209,6 +211,10 @@ ones, held, new and unknown values left out, and `show` rules applied.
 - **Staleness.** A write to a key in a view's read set, on a record or on anything it reads through (upper
   levels, shared parts, rollups from lower levels), marks that record's projection stale. Only stale rows are
   rebuilt.
+- **Role marks.** In a view above `member`, a slot whose value only some roles may `see` (12.4) carries the
+  role it needs. The store decides the marks; the index only drops a marked slot for a caller without that
+  role, using the roles of the verified caller the host hands it (chapter 7.6). Roles never add a slot a
+  view doesn't hold.
 - **The projection stream.** Every change to a projection is published, in order, as a projection entry
   (12.7): the view and its version, the audience, the record, and either its new row or `"removed": true`
   when the record leaves the selection or the audience. Entries are numbered per view and audience, so an
@@ -227,6 +233,7 @@ choice.
 
 - An index MUST read only the projection streams of the views it serves. It never reads records, the log or
   another view's rows, so it can't show anything a view leaves out.
+- It MUST drop role-marked slots for callers without the role, and decides nothing else about visibility.
 - Its pages and counts MUST follow 12.2 and 12.3, over the rows it holds.
 - An index MAY be behind the store, and MUST say which entry number it reflects.
 - **Actions check again.** Nothing that acts relies on an index. A contract checks its `needs` against the
@@ -266,7 +273,8 @@ A projection entry, as the stream carries it:
 }
 ```
 
-A record leaving the view is `{"projection", "audience", "seq", "record", "removed": true}`.
+A record leaving the view is `{"projection", "audience", "seq", "record", "removed": true}`. In a view above
+`member`, `marks` maps a slot to the role it needs: `"marks": { "cost": "buyer" }`.
 
 ## 12.8 Well-formed views
 
