@@ -73,6 +73,70 @@ decisions. Cashierfu is the platform in the examples; every call here holds for 
 | Well-known | `/.well-known/crubal.json` | owners' keys, packages and versions, emergency terms |
 | Terms | `robots.txt`, headers, `/.well-known/ai-terms` | from the owner's package `terms` |
 
+## Identity and credentials
+
+There are three directions a call can take, and the spec settles the line for each: authentication is the
+host's, authorization is CRUBAL's, and no secret enters CRUBAL. What follows is the host's side.
+
+### Inbound: who is calling us
+
+| Caller | Proven by | Becomes |
+|---|---|---|
+| a person | a session from the identity provider (OIDC; Supabase Auth for ME) | their `person` record, or their hosted-person owner |
+| a system of the owner's (a utility, a bench tool) | an API key the host issued, hashed in the host's schema, bound to one record | its `system` record |
+| an outside system calling back (a webhook) | the partner's own signature or token, verified by that partner's adapter | the same `system` record the outbound side uses |
+| another owner (offer and take, a cross-owner edge) | a signature over the request with that owner's domain key, published in its well-known file (7.8) | a caller of that owner, written `domain:ID` |
+| nobody | | `public` |
+
+The host hands the store the caller ID and nothing else; from there every decision is an edge, a menu item
+or a `who`. A system has **one record whichever direction the call goes**, so the inbound and outbound
+layers meet in one place and never contradict each other.
+
+### Outbound: how we authenticate to the world
+
+A contract says `auth` (the scheme), `scope` (what it asks for) and `credential` (a **name**, 7.6). The
+host owns everything behind the name:
+
+- **Credentials are per owner.** One package and one contract serve every owner, so `credential:
+  ebay-seller` resolves to *this owner's* eBay. The credential store is keyed by (owner, name) and holds
+  scheme-shaped material: a key, a username and password, or an OAuth grant (access token, refresh token,
+  expiry, the scopes granted).
+- **Connecting is a host flow, recorded as data.** An owner connects an account in the host (the OAuth
+  consent for `oauth2`; pasting a key for `apikey`). The host stores the material under the name, and
+  writes or updates a `system` record for the partner through a form contract of the core party package:
+  the name, the scheme, the scopes granted, `connected` or `expired`, and when. That record is the visible
+  side of the connection, so views can show it and edges can govern who may reconnect it, and it carries no
+  secret.
+- **Lifecycle is the host's.** Refreshing a token before it expires, rotating a key, re-running consent
+  when a scope is missing: none of it touches a package. A credential replaced under the same name changes
+  nothing in CRUBAL.
+- **Failure is a run.** An act refused for authentication is a run that `failed` with reason
+  `credential`; the contract's `retry` applies after a refresh, and a connection that can't be refreshed
+  marks the `system` record `expired`, which rules and views can see.
+- **`scope` is checked at connect time and at run time.** The host asks the provider for the contract's
+  scopes when connecting and refuses a run whose contract asks for a scope the grant doesn't hold, before
+  acting.
+- **Adapters never see names.** The host resolves the name and hands the adapter the material; an adapter
+  is the same code for every owner.
+
+### Between owners
+
+Identity between owners is the domain key (7.8, 11.7). Requests carry it as an HTTP message signature
+(RFC 9421) over the method, target, date and body digest, made with the domain's Ed25519 key; the receiving
+host fetches the signer's well-known file, verifies, and treats the caller as that owner. `to: link` offers
+use the unguessable token the spec names instead of a signature. Hosted persons who publish a key of their
+own sign the same way with it.
+
+### What is kept where
+
+| | Lives in | Never in |
+|---|---|---|
+| sessions, identity links (subject → owner → record) | the host's schema | the owner's log |
+| API key hashes | the host's schema | |
+| credentials (keys, grants, refresh tokens) | the host's secret store (environment for one owner, a vault for many) | the host's database tables, the log, any package |
+| the fact and state of a connection | a `system` record in the owner's data | |
+| signing keys | the host's key store or a KMS | |
+
 ## The HTTP surface
 
 Owner-scoped, small, and the same for every owner. Authentication is a session cookie or a bearer key; the
@@ -145,3 +209,6 @@ in CRUBAL, it is not host code.
   long-lived service. The host is written for both; the first deployment should be whichever ME's launch
   needs least new infrastructure for, which is serverless.
 - **The send split** is an engine change with new corpus cases; it changes what today's `run` logs.
+- **Signed requests between owners** (RFC 9421 with the domain key) as the protocol for offer, take and
+  cross-owner edges; the alternative is bearer tokens issued per pair of owners, which would need a
+  registration step the spec doesn't have.
