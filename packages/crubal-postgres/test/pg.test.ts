@@ -13,6 +13,9 @@ import { type Draft, Journal, rebuild, stateJson, type Entry } from "../../cruba
 import type { JsonObject, Record } from "../../crubal/src/model.ts";
 import { serialize } from "../../crubal/src/canonical.ts";
 import { verifyChain } from "../../crubal/src/store.ts";
+import { foldRecord } from "../../crubal/src/dictionary.ts";
+import { readText } from "../../crubal/src/read-text.ts";
+import { readViews, Views } from "../../crubal/src/views.ts";
 import { connect, testSchema, type Pool } from "../src/db.ts";
 import { PgStore } from "../src/store.ts";
 
@@ -143,4 +146,53 @@ test("owners never see each other", { skip: !url }, async () => {
   assert.deepEqual([...(await b.state()).records.keys()], ["K-1"]);
   assert.equal((await a.entries()).length, 1);
   assert.equal((await b.entries()).length, 1);
+});
+
+test("projections and the stream match the memory views, rebuilding only stale rows", { skip: !url }, async () => {
+  const viewsDir = join(corpus, "..", "views");
+  const dict = emptyDictionary();
+  readDefinitions(readFileSync(join(corpus, "..", "reader", "_package.crubal"), "utf8"), dict);
+  readDefinitions(readFileSync(join(corpus, "..", "reader", "_facets.crubal"), "utf8"), dict);
+  const viewText = readFileSync(join(viewsDir, "_views.crubal"), "utf8");
+  readDefinitions(viewText, dict);
+  const set = readViews(viewText);
+  const records = readText(readFileSync(join(viewsDir, "_records.crubal"), "utf8"), dict).records.map((r) => foldRecord(r, dict));
+  const owner = "views.example";
+  const own = (r: Record): Record => ({ ...r, owner });
+  const store = new PgStore(pool, owner, { projecting: { dict, views: set } });
+  await store.commit({ migration: "backfill" }, (d) => { for (const r of records) d.records.set(r.id, own(structuredClone(r))); }, "2026-10-15T16:00:00Z");
+  const memory = new Views(dict, set);
+  for (const r of records) memory.put(own(r));
+
+  const first = await store.project("discs");
+  assert.ok(same(first, memory.stream("discs")), `first publish differs:\n pg  ${serialize(first as unknown as JsonObject)}\n mem ${serialize(memory.stream("discs") as unknown as JsonObject)}`);
+
+  // The write of views/010-stream: a new title for P-1, and P-5 gets the title that puts it in the view.
+  const write = readText(readFileSync(join(viewsDir, "010-stream", "write.crubal"), "utf8"), dict).records;
+  await store.commit({ person: "staff-1" }, (d) => {
+    for (const w of write) {
+      const was = d.records.get(w.id) as Record;
+      d.records.set(w.id, { ...was, values: { ...was.values, ...w.values }, sources: { ...was.sources, ...Object.fromEntries(Object.keys(w.values).map((k) => [k, { origin: "declared", via: "L-9" }])) } });
+    }
+  }, "2026-10-15T16:00:01Z");
+  const stale = (await pool.query("select record from stale where owner = $1 and view = 'discs' order by record", [owner])).rows.map((r: { record: string }) => r.record);
+  assert.deepEqual(stale, ["P-1", "P-5"], "only the written records are marked stale");
+  for (const w of write) {
+    const was = records.find((r) => r.id === w.id) as Record;
+    memory.put(own({ ...was, values: { ...was.values, ...w.values } }));
+  }
+  const second = await store.project("discs");
+  const wantSecond = memory.stream("discs");
+  assert.ok(same(second, wantSecond), `second publish differs:\n pg  ${serialize(second as unknown as JsonObject)}\n mem ${serialize(wantSecond as unknown as JsonObject)}`);
+  assert.equal((await pool.query("select count(*)::int as n from stale where owner = $1", [owner])).rows[0].n, 0, "the marks are cleared");
+  assert.ok(same(await store.entriesSince("discs", first.length), second), "an index resuming from its cursor gets the second batch");
+
+  // Erasure (views/013): P-1 loses its title, the required slot, so its row leaves the view.
+  await store.commit({ person: "staff-1" }, (d) => {
+    const was = d.records.get("P-1") as Record;
+    d.records.set("P-1", { ...was, values: { ...was.values, title: { $empty: "unknown" } } });
+  }, "2026-10-15T16:00:02Z");
+  const third = await store.project("discs");
+  assert.deepEqual(third, [{ projection: "discs", audience: "public", seq: first.length + second.length + 1, record: "P-1", removed: true }]);
+  assert.equal((await pool.query("select count(*)::int as n from projections where owner = $1 and record = 'P-1'", [owner])).rows[0].n, 0);
 });

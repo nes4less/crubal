@@ -7,7 +7,9 @@ import type { JsonObject } from "../../crubal/src/model.ts";
 import { entryHash, verifyChain, writeHash, type Keys } from "../../crubal/src/store.ts";
 import { type Client, type Pool, transaction } from "./db.ts";
 import { isObj, loadState, persist, wipeState } from "./state.ts";
+import { entriesSince, markStale, type Projecting, publish } from "./projector.ts";
 import { copyWorking, loadWhole, Needs, settle, type WorkingRecords, workingState } from "./working.ts";
+import type { StreamEntry } from "../../crubal/src/views.ts";
 
 /** A state's maps copied, so a draft can be changed without touching what was loaded. */
 function draftOf(state: State): Draft {
@@ -16,15 +18,59 @@ function draftOf(state: State): Draft {
   return { records: s.records, bindings: s.bindings, instructions: s.instructions as Draft["instructions"], edges: s.edges, review: s.reviews };
 }
 
+export type StoreOptions = {
+  chain?: string;
+  /** What the store projects with (12.6): the dictionary, the views and, for partitioned ones, the permissions. */
+  projecting?: Projecting;
+  /** Publish every view right after each write commits (`fresh: write`); else the host calls `project`. */
+  fresh?: "write" | "asked";
+};
+
 export class PgStore {
   readonly pool: Pool;
   readonly owner: string;
   readonly chain: string;
+  readonly options: StoreOptions;
 
-  constructor(pool: Pool, owner: string, chain = "main") {
+  constructor(pool: Pool, owner: string, options: StoreOptions | string = {}) {
     this.pool = pool;
     this.owner = owner;
-    this.chain = chain;
+    this.options = typeof options === "string" ? { chain: options } : options;
+    this.chain = this.options.chain ?? "main";
+  }
+
+  /**
+   * Publish the views whose rows a write made stale (12.6): every view, or the named one, for its own
+   * audience or the one given. Runs outside any write transaction. Returns the stream entries published.
+   */
+  async project(view?: string, audience?: string): Promise<StreamEntry[]> {
+    const p = this.options.projecting;
+    if (!p) throw new Error("the store has no views to project");
+    const names = view ? [view] : [...p.views.views.keys()];
+    const out: StreamEntry[] = [];
+    for (const name of names) out.push(...(await transaction(this.pool, (client) => publish(client, this.owner, p, name, audience))));
+    return out;
+  }
+
+  /** The entries of a view's stream after `seq` (12.6.2). */
+  async entriesSince(view: string, seq: number, audience?: string): Promise<StreamEntry[]> {
+    const p = this.options.projecting;
+    if (!p) throw new Error("the store has no views");
+    const client = await this.pool.connect();
+    try {
+      return await entriesSince(client, this.owner, p, view, seq, audience);
+    } finally {
+      client.release();
+    }
+  }
+
+  /** After a persist: mark what the entry made stale, inside the same transaction. */
+  private async afterPersist(client: Client, before: State, after: State, seq: number): Promise<void> {
+    if (this.options.projecting) await markStale(client, this.owner, this.options.projecting, before, after, seq);
+  }
+
+  private async freshen(): Promise<void> {
+    if (this.options.projecting && this.options.fresh === "write") await this.project();
   }
 
   /** The owner's state as the tables hold it. */
@@ -77,7 +123,11 @@ export class PgStore {
       const linked = await this.link(client, entry, head);
       const { state: after } = await settle(client, this.owner, base, (s) => applyEntry(s, linked));
       await persist(client, this.owner, base, after);
+      await this.afterPersist(client, base, after, head.seq + 1);
       return linked;
+    }).then(async (e) => {
+      await this.freshen();
+      return e;
     });
   }
 
@@ -123,7 +173,11 @@ export class PgStore {
       const problem = differs(after, draft);
       if (problem) throw new Error(`the log doesn't describe the change: ${problem}`);
       await persist(client, this.owner, before, after);
+      await this.afterPersist(client, before, after, head.seq + 1);
       return linked;
+    }).then(async (e) => {
+      if (e) await this.freshen();
+      return e;
     });
   }
 
@@ -143,6 +197,8 @@ export class PgStore {
         const { state } = await settle(client, this.owner, base, (s) => applyEntry(s, row.entry));
         await persist(client, this.owner, base, state);
       }
+      // Projections follow: with nothing stored, the next publish rebuilds every row of every view.
+      for (const table of ["projections", "projection_stream", "stale"]) await client.query(`delete from ${table} where owner = $1`, [this.owner]);
       return loadState(client, this.owner);
     });
   }

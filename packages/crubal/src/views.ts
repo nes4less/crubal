@@ -199,6 +199,8 @@ export type ProjectOptions = {
   page?: number;
   /** Access (chapter 14) for partitioned views: the index serves a caller only the rows their edges match. */
   access?: Access;
+  /** Only these records: a projector rebuilding the rows a write made stale (12.6) asks for them alone. */
+  only?: string[];
 };
 export type Projection = { rows: JsonObject[]; records: string[]; counts: { [filter: string]: { [bucket: string]: number } }; pages: number; indexable: boolean };
 /** One entry of a view's projection stream (12.6, 12.7). */
@@ -227,9 +229,11 @@ export class Views {
   private records: RecordSet = new MemoryRecords();
   private engine: Engine;
 
-  constructor(dict: Dictionary, set: ViewSet) {
+  /** Over a record set of the caller's (a store's working set), or an empty memory set to `put` into. */
+  constructor(dict: Dictionary, set: ViewSet, records?: RecordSet) {
     this.dict = dict;
     this.set = set;
+    if (records) this.records = records;
     this.engine = new Engine(dict, []);
   }
 
@@ -328,7 +332,9 @@ export class Views {
   /** The records a view selects, curated and ordered, before filters and paging. */
   select(v: View, opts: ProjectOptions = {}): Record[] {
     const audience = opts.audience ?? v.show;
-    let rows = (v.level ? this.records.atLevel(v.level) : this.records.all()).filter((r) => {
+    const pool = opts.only ? opts.only.flatMap((id) => this.records.get(id) ?? []) : v.level ? this.records.atLevel(v.level) : this.records.all();
+    let rows = pool.filter((r) => {
+      if (v.level && r.level !== v.level) return false;
       if (v.wears.some((w) => !this.wearsOf(r).includes(w))) return false;
       if (v.hide.includes(r.id)) return false;
       const vals = { ...this.effective(r), id: r.id };

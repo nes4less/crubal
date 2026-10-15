@@ -37,7 +37,19 @@ application settles the same way, so an attach among sixty records loads the two
 neighbours, never the sixty. `store.trace` says what the last operation loaded. An operation passed to
 `commit` MUST therefore be a pure function of the draft it is given: it may be run more than once.
 
+## Projections and the stream
+
+A store given `projecting: { dict, views, perms? }` marks, inside each write's transaction, the rows the
+entry made stale: for every record it changed, in every view, what the engine's `staleAfter` names, worked
+out on the state before the entry (`src/projector.ts`). `project(view?, audience?)` publishes outside any
+write transaction: the first time (and after a new version) it rebuilds every row, afterwards only the
+marked ones, through the engine's `Views` over a working set that loads what the view reads; it compares
+them with the stored projection, appends one stream entry per row that changed or left, numbered per view
+and audience, and clears the marks. `entriesSince(view, seq)` is what an index reads from its cursor.
+With `fresh: "write"` every commit publishes as soon as it returns. The test replays the corpus stream case
+(views/010) and the erasure removal (views/013) and gets the memory `Views.stream` entries byte for byte.
+
 ## Not yet here
 
-The projector and the projection stream tables in use, intake rows with raw bytes, cursors and schedules,
-the operations command. Each lands with a test of the same kind.
+Intake rows with raw bytes, cursors and schedules on their tables, the stream contract run from the
+store, and the operations command. Each lands with a test of the same kind.
