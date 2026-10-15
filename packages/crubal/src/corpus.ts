@@ -59,7 +59,7 @@ function loadDictionary(root: string, folder: string): Dictionary {
 }
 
 function copy(d: Dictionary): Dictionary {
-  return { facets: new Map(d.facets), classes: new Map(d.classes), levels: new Map(d.levels), vary: new Map(d.vary), varyLines: new Map(d.varyLines), trust: [...d.trust], facetTrust: new Map(d.facetTrust), identify: new Map(d.identify), match: new Map(d.match), archive: new Map(d.archive) };
+  return { facets: new Map(d.facets), classes: new Map(d.classes), kinds: new Map(d.kinds), levels: new Map(d.levels), vary: new Map(d.vary), varyLines: new Map(d.varyLines), trust: [...d.trust], facetTrust: new Map(d.facetTrust), identify: new Map(d.identify), match: new Map(d.match), archive: new Map(d.archive) };
 }
 
 /** Each expected entry must match an actual one on every field it states; entry sets must be the same. */

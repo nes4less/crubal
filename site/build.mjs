@@ -257,26 +257,11 @@ if (existsSync(join(out, "404", "index.html"))) cpSync(join(out, "404", "index.h
 // ─── Standard packages, the registry and the well-known file (chapter 11.7) ──
 
 const crubal = await import(join(root, "packages", "crubal", "src", "index.ts"));
+// crubal.com's signing key (8.5, 11.7): the public half here and in the well-known file; the private half only in the build's environment.
+const SIGNING_PUBLIC = "ZdAEPbw_CMLYZIjYM-xXBRF2tSu0Wb5aO76ebEqi4Do";
 const STD = ["core", "units", "product", "service", "commerce", "media"];
 const stdPackages = [];
 
-function classJson(c) {
-  return {
-    class: c.name,
-    ...(c.label ? { label: c.label } : {}),
-    for: c.for,
-    ...(c.uses.length ? { uses: c.uses } : {}),
-    facets: c.lines.map((l) => ({
-      facet: l.facet,
-      ...(l.required ? { required: true } : {}),
-      ...(l.values ? { values: l.values } : {}),
-      ...(l.level ? { level: l.level } : {}),
-      ...(l.when ? { when: l.when } : {}),
-      ...(l.section ? { section: l.section } : {}),
-    })),
-    ...(c.parts.length ? { parts: c.parts.map((p) => ({ slot: p.slot, wears: p.wears, pick: p.many ? "any" : "1", ...(p.fungible ? { fungible: true } : {}), ...(p.match ? { match: p.match } : {}) })) } : {}),
-  };
-}
 
 const facetSummary = (f) => {
   if (f.type === "choice") return `${(f.values ?? []).slice(0, 8).map((v) => v.value).join(", ")}${(f.values ?? []).length > 8 ? ", …" : ""}${f.open ? " (open)" : f.fixed ? " (fixed)" : ""}`;
@@ -302,22 +287,12 @@ for (const name of STD) {
   const head = readTree(src).find((n) => n.key === "package");
   const label = head?.children.find((c) => c.key === "label")?.value ?? info.name;
   const intro = src.split("\n").filter((l) => l.startsWith("//")).map((l) => l.replace(/^\/\/\s?/, "")).join(" ");
-  const bundle = {
-    crubal: "2",
-    package: info.name,
-    version: info.version,
-    id,
-    owner: info.owner,
-    label,
-    licence: "CC-BY-4.0",
-    ...(info.extends.length ? { extends: info.extends.map((e) => ({ package: e.name, version: e.version })) } : {}),
-    ...(info.prefixes.size ? { prefixes: Object.fromEntries([...info.prefixes].map(([k, v]) => [k, v.target])) } : {}),
-    ...(kinds.length ? { kinds } : {}),
-    facets: facets.map(crubal.facetJson),
-    ...(dict.classes.size ? { classes: [...dict.classes.values()].map(classJson) } : {}),
-    ...(rules.length ? { rules: rules.map((r) => ({ rule: r.name, for: r.for, ...(r.whenText ? { when: r.whenText } : {}), then: r.thenText, strength: r.strength, ...(r.because ? { because: r.because } : {}) })) } : {}),
-    ...(records.length ? { records } : {}),
-  };
+  // The bundle as docs/design/publishing.md defines it: every member in its JSON form, the members list, the
+  // reference records, the hash, and the signature when the publisher's key is in the environment.
+  const key = process.env.CRUBAL_SIGNING_KEY ? { d: process.env.CRUBAL_SIGNING_KEY, x: SIGNING_PUBLIC } : undefined;
+  const { bundle } = crubal.publish(src, { date: info.version.split(".")[0], ...(records.length ? { records } : {}), ...(key ? { key } : {}) });
+  bundle.version = info.version;
+  if (!key) console.warn(`  ${name}: unsigned (CRUBAL_SIGNING_KEY not set)`);
   for (const at of [`/${name}/`, `/${name}/${info.version}/`]) {
     mkdirSync(join(out, at), { recursive: true });
     writeFileSync(join(out, at, "package.crubal"), src);
@@ -386,7 +361,7 @@ writeFileSync(
       crubal: "2",
       owner: "crubal.com",
       // crubal.com's signing key (8.5, 11.7): the public half; the private half is in the publisher's key store.
-      keys: { "crubal.com": { alg: "Ed25519", public: "ZdAEPbw_CMLYZIjYM-xXBRF2tSu0Wb5aO76ebEqi4Do", from: "2026-10-15" } },
+      keys: { "crubal.com": { alg: "Ed25519", public: SIGNING_PUBLIC, from: "2026-10-15" } },
       packages: stdPackages.map((p) => ({ package: p.id, latest: p.version, versions: { [p.version]: `${ORIGIN}/${p.name}/${p.version}/package.json` } })),
     },
     null,

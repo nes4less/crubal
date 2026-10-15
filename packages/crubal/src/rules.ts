@@ -23,6 +23,7 @@ export type Rule = {
   then: Expr | null;
   strength: Strength;
   because?: string;
+  version?: string;
   /** A production: `key is <value | template | aggregate>`. */
   produces?: { key: string; kind: "fill" | "template" | "rollup"; right: string };
   /** Where it came from when it was expanded from a shortcut. */
@@ -66,6 +67,7 @@ export function readRules(source: string): Rule[] {
     const thenNode = get("then");
     if (!thenNode) throw new CrubalError(`the rule ${node.value} needs a then`, node.line);
     const because = get("because")?.value;
+    const version = get("version")?.value.trim();
     out.push(
       makeRule({
         name: node.value.trim(),
@@ -75,6 +77,7 @@ export function readRules(source: string): Rule[] {
         thenText: thenNode.value,
         strength,
         ...(because ? { because } : {}),
+        ...(version ? { version } : {}),
       }),
     );
   }

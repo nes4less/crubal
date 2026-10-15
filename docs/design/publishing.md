@@ -1,6 +1,8 @@
 # Publishing and installing
 
-**Status:** design, 2026-10-15. Not part of the specification; spec chapters 10, 11.4–11.8 and 8.5 say what
+**Status:** design, 2026-10-15; the bundle, the JSON readers (by printing), `crubal publish` with the
+classifier and the recipe check, and signed bundles on crubal.com are built; `store.install` and definitions
+from the store are next. Not part of the specification; spec chapters 10, 11.4–11.8 and 8.5 say what
 a published package and an installed one are. This document says how a bundle is made, signed, served,
 found, verified, installed, and how a store builds its definitions from what it has installed. One pipe,
 two ends.

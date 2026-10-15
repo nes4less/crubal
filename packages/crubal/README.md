@@ -39,7 +39,10 @@ the internals later behind the same API.
   chain, permission menus, gates and emergency access (`access.ts`); partitioned views, the projection
   stream and stream subscriptions with cursors and resets (`views.ts`, `exchange.ts`); the record set every
   module reads through, so a backend that loads only what an operation needs can stand in for the memory
-  one (`records.ts`, docs/design/store.md); and a border that
+  one (`records.ts`, docs/design/store.md); a package as one JSON document, printed back to the text form so
+  the text readers stay the one parser, hashed and signed (`bundle.ts`), and cut as a version with members by
+  diff, the change classifier of 4.8 and 5.11 and the recipe requirement (`publish.ts`, `crubal publish`;
+  docs/design/publishing.md); and a border that
   consults access, journals every run, and grants a consumer's edge (`exchange.ts`).
 
 A run applies the rules (7.4 step 6): a value a `must` rule won't have is parked as a contradiction citing

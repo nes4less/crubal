@@ -20,6 +20,9 @@ export type PackageInfo = {
   trust: { entry: string; line: number }[];
   dict: Dictionary;
   contracts: string[];
+  /** The rest of the header (11.1), as written. */
+  header: { [key: string]: string };
+  terms: { [audience: string]: string };
 };
 
 const ORIGINS = new Set(["observed", "declared", "derived", "reported"]);
@@ -34,7 +37,7 @@ export function readPackages(source: string): PackageInfo[] {
     const [head, ...rest] = readTree(text);
     if (!head) throw new CrubalError("an empty package", start + 1);
     const [name = "", version = ""] = head.value.split(/\s+\//).map((s) => s.trim());
-    const info: PackageInfo = { name, version, owner: "", line: head.line, crubal: LANGUAGE, crubalLine: head.line, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [] };
+    const info: PackageInfo = { name, version, owner: "", line: head.line, crubal: LANGUAGE, crubalLine: head.line, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {} };
     for (const c of head.children) {
       if (c.key === "owner") info.owner = c.value;
       if (c.key === "crubal") {
@@ -48,6 +51,8 @@ export function readPackages(source: string): PackageInfo[] {
         }
       }
       if (c.key === "prefixes") for (const p of c.children) if (p.key) info.prefixes.set(p.key, { target: p.value, line: p.line });
+      if (c.key === "terms") for (const t of c.children) if (t.key) info.terms[t.key] = t.value.trim();
+      if (c.key && !["owner", "crubal", "extends", "prefixes", "terms"].includes(c.key)) info.header[c.key] = c.value.trim();
     }
     for (const node of rest) {
       if (node.key === "trust") for (const t of node.children) info.trust.push({ entry: t.text.trim(), line: t.line });

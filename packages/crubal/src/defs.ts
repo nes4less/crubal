@@ -93,9 +93,14 @@ export type ClassDef = {
   version?: string;
 };
 
+/** A kind as declared (11.2), beyond what the engine indexes by level. */
+export type KindDef = { name: string; line: number; levels: string[]; base?: string; schema?: string | { [level: string]: string }; follows?: { [facet: string]: string } };
+
 export type Dictionary = {
   facets: Map<string, Facet>;
   classes: Map<string, ClassDef>;
+  /** kind name → its declaration (11.2) */
+  kinds: Map<string, KindDef>;
   /** level name → kind name */
   levels: Map<string, string>;
   /** level name → the facets that vary at the step into it (11.2) */
@@ -114,7 +119,7 @@ export type Dictionary = {
 };
 
 export function emptyDictionary(): Dictionary {
-  const d: Dictionary = { facets: new Map(), classes: new Map(), levels: new Map(), vary: new Map(), varyLines: new Map(), trust: [], facetTrust: new Map(), identify: new Map(), match: new Map(), archive: new Map() };
+  const d: Dictionary = { facets: new Map(), classes: new Map(), kinds: new Map(), levels: new Map(), vary: new Map(), varyLines: new Map(), trust: [], facetTrust: new Map(), identify: new Map(), match: new Map(), archive: new Map() };
   // Core facets (spec 1.6, 5.6).
   d.facets.set("crubal:count", { ...blank("crubal:count", "number") });
   const notables = blank("crubal:notables", "compound");
@@ -578,6 +583,14 @@ export function readDefinitions(source: string, into: Dictionary = emptyDictiona
         const levels = node.children.find((c) => c.key === "levels");
         const names = levels ? splitTop(levels.value, ",", levels.line) : [kind];
         for (const level of names) into.levels.set(level, kind);
+        const def: KindDef = { name: kind, line: node.line, levels: names };
+        const base = node.children.find((c) => c.key === "base");
+        if (base) def.base = base.value.trim();
+        const schema = node.children.find((c) => c.key === "schema");
+        if (schema) def.schema = schema.children.length ? Object.fromEntries(schema.children.filter((c) => c.key).map((c) => [c.key as string, c.value.trim()])) : schema.value.trim();
+        const follows = node.children.find((c) => c.key === "follows");
+        if (follows) def.follows = Object.fromEntries(follows.children.filter((c) => c.key).map((c) => [c.key as string, c.value.trim()]));
+        into.kinds.set(kind, def);
         const vary = node.children.find((c) => c.key === "vary");
         for (const step of vary?.children ?? []) {
           if (!step.key) continue;
