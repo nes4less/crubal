@@ -60,7 +60,7 @@ const PARTS: { [kind: string]: string[] } = {
   store: ["needs", "stores", "origin", "when", "who", "for", "label", "describe", "version"],
   form: ["needs", "gives", "writes", "reads", "when", "who", "origin", "lands", "ref", "relation", "for", "label", "describe", "version"],
   offer: ["needs", "gives", "to", "mode", "terms", "for", "when", "who", "label", "describe", "version"],
-  take: ["needs", "from", "reads", "mode", "lands", "origin", "absorb", "ignore", "keep-raw", "prefix", "ref", "when", "who", "for", "label", "describe", "version"],
+  take: ["needs", "from", "offer", "reads", "mode", "lands", "origin", "absorb", "ignore", "keep-raw", "prefix", "ref", "when", "who", "for", "label", "describe", "version"],
 };
 
 function ourKey(address: string): string {
@@ -676,39 +676,144 @@ export class Exchange {
     return { contract: name, acked: cursor };
   }
 
-  /** Offer and take (7.8): only what the offer gives and the take reads flows. */
-  take(takeName: string, offerName: string, recordId: string, presenter: Record): RunResult {
+  /** The classes a record wears, those of the records above it included (5.5). */
+  private wearsOf(r: Record): string[] {
+    const up = r.of ? this.records.get(r.of) : undefined;
+    return [...(up ? this.wearsOf(up) : []), ...(r.wears ?? [])];
+  }
+
+  /**
+   * An offer (7.8): the records the contract's `for` selects, with only the facets it gives, each value with
+   * its source; the mode and terms ride along. A value the owner took under `reshare: no` never flows on.
+   * Who may see it is the host's decision from `to`.
+   */
+  offer(name: string, owner: string, only?: string[]): Offer {
+    const c = this.contracts.get(name);
+    if (!c || c.kind !== "offer") throw new Error(`no offer ${name}`);
+    const wears = c.parts.for;
+    const pool = only ? only.flatMap((id) => this.records.get(id) ?? []) : this.records.all();
+    const records: Record[] = [];
+    for (const r of pool) {
+      if (r.status?.state === "archived") continue;
+      if (wears && !this.wearsOf(r).includes(wears)) continue;
+      const values: JsonObject = {};
+      const sources: { [a: string]: Source } = {};
+      for (const key of c.gives) {
+        const v = r.values[key];
+        if (v === undefined || (isObj(v) && "$empty" in v)) continue;
+        const s = r.sources?.[key] ?? r.sources?.["*"];
+        if (s?.reshare === false) continue;
+        values[key] = v;
+        if (s) sources[key] = { origin: s.origin, via: s.via, ...(s.owner ? { owner: s.owner } : {}) };
+      }
+      if (!Object.keys(values).length) continue;
+      records.push({ id: r.id, kind: r.kind, level: r.level, owner: r.owner, values, sources, ...(r.of ? { of: r.of } : {}) });
+    }
+    return { contract: name, owner, to: c.to ?? "private", mode: c.mode ?? "gathered", terms: { ...c.terms }, gives: [...c.gives], records };
+  }
+
+  /**
+   * Offer and take (7.8): only what the offer gives and the take reads flows, by the offer's mode.
+   * `dump` copies once and never updates; `observed` stores a link and no value; `gathered` copies and
+   * takes the presenter's updates as intake, never over a value the consumer entered; `controlled` copies
+   * under the presenter's terms, which do override, expire and withdraw. The entry names the presenter's
+   * entry the values came from (8.5.1).
+   */
+  take(takeName: string, offer: string | Offer, recordId: string, presenter: Record): RunResult {
     const t = this.contracts.get(takeName);
-    const o = this.contracts.get(offerName);
+    const o: Offer | undefined = typeof offer === "string" ? this.localOffer(offer) : offer;
     const r = this.records.get(recordId);
     if (!t || !o || !r) throw new Error("a take needs its take contract, the offer and the record");
     if (t.from && t.from !== presenter.owner) return { contract: takeName, record: recordId, stopped: "from" };
+    const mode = o.mode;
+    if (t.mode && t.mode !== mode) return { contract: takeName, record: recordId, stopped: "mode", offered: mode };
     const log = this.nextLog();
     const values: JsonObject = { ...r.values };
     const sources: { [a: string]: Source } = { ...(r.sources ?? {}) };
     const alternatives: { [a: string]: JsonObject[] } = { ...((r as unknown as { alternatives?: { [a: string]: JsonObject[] } }).alternatives ?? {}) };
     const flows: string[] = [];
+    let from: string | undefined;
+    const fromPresenter = (a: string) => sources[a]?.owner === presenter.owner;
+    if (mode === "observed") {
+      // A read-through is never stored (7.8): the record links to the presenter's, naming what it reads.
+      for (const m of t.reads) if (o.gives.includes(m.from) && presenter.values[m.from] !== undefined) flows.push(m.from);
+      values["crubal:observes"] = { $link: `${presenter.owner}/${presenter.id}` };
+      sources["crubal:observes"] = { origin: "reported", via: log, owner: presenter.owner };
+      this.put({ ...r, values, sources });
+      this.commit({ take: takeName, from: presenter.owner }, log, { contract: takeName, record: recordId, state: "closed" });
+      return { contract: takeName, record: recordId, mode, observes: flows, log };
+    }
     for (const m of t.reads) {
       const theirs = m.from;
       if (!o.gives.includes(theirs)) continue; // not offered: doesn't flow
       const v = presenter.values[theirs];
       if (v === undefined) continue;
-      flows.push(theirs);
       const theirSource = presenter.sources?.[theirs] ?? presenter.sources?.["*"];
+      from ??= theirSource?.via ? `${presenter.owner}/${theirSource.via}` : presenter.owner;
       const src: Source = { origin: theirSource?.origin ?? "reported", via: log, owner: presenter.owner };
+      if (mode === "controlled") {
+        if (o.terms.expires) src.until = o.terms.expires;
+        if (o.terms.reshare === "no") src.reshare = false;
+        if (o.terms.revocable === "yes") src.revocable = true;
+      }
       const current = values[m.to];
-      if (current === undefined || (isObj(current) && "$empty" in current)) {
+      const empty = current === undefined || (isObj(current) && "$empty" in current);
+      if (empty) {
         values[m.to] = v;
         sources[m.to] = src;
-      } else if (serialize(current) !== serialize(v)) {
-        // A presenter never overrides the consumer's value unless the consumer took controlled terms.
+        flows.push(theirs);
+      } else if (serialize(current) === serialize(v)) {
+        if (mode !== "dump" && fromPresenter(m.to)) sources[m.to] = { ...sources[m.to], ...src, via: sources[m.to]?.via ?? log } as Source;
+      } else if (mode === "dump") {
+        // Copied once, never updated.
+      } else if (mode === "controlled" || fromPresenter(m.to)) {
+        // The presenter's update: under controlled terms it wins; gathered, it replaces only its own earlier value.
+        values[m.to] = v;
+        sources[m.to] = src;
+        flows.push(theirs);
+      } else {
+        // A presenter never overrides a value a person entered on the consumer's side.
         alternatives[m.to] = [...(alternatives[m.to] ?? []), { value: v, origin: src.origin, via: log, owner: presenter.owner }];
       }
     }
+    // Withdrawal under revocable terms: a value this presenter gave and no longer offers or holds is removed.
+    const withdrawn: string[] = [];
+    for (const [a, s] of Object.entries(sources)) {
+      if (!fromPresenter(a) || !s.revocable) continue;
+      const line = t.reads.find((m) => m.to === a);
+      const still = line && o.gives.includes(line.from) && presenter.values[line.from] !== undefined;
+      if (still) continue;
+      delete values[a];
+      delete sources[a];
+      withdrawn.push(a);
+    }
     const next = { ...r, values, sources, ...(Object.keys(alternatives).length ? { alternatives } : {}) } as Record;
     this.put(next);
-    this.commit({ take: takeName, from: presenter.owner }, log, { contract: takeName, record: recordId, state: "closed" });
-    return { contract: takeName, record: recordId, flows, log };
+    this.commit({ take: takeName, from: from ?? presenter.owner }, log, { contract: takeName, record: recordId, state: "closed" });
+    return { contract: takeName, record: recordId, mode, flows, ...(withdrawn.length ? { withdrawn } : {}), log };
+  }
+
+  /** A local offer contract as an offer object, for a take run against a presenter record at hand. */
+  private localOffer(name: string): Offer | undefined {
+    const o = this.contracts.get(name);
+    return o ? { contract: name, owner: "", to: o.to ?? "private", mode: o.mode ?? "gathered", terms: { ...o.terms }, gives: [...o.gives], records: [] } : undefined;
+  }
+
+  /** Taken values past their terms' `expires` (7.8) are removed, each record one entry; the ids changed. */
+  expire(now: string): string[] {
+    const out: string[] = [];
+    for (const r of this.records.all()) {
+      const gone = Object.entries(r.sources ?? {}).filter(([, s]) => typeof s.until === "string" && s.until <= now).map(([a]) => a);
+      if (!gone.length) continue;
+      const values = { ...r.values };
+      const sources = { ...(r.sources ?? {}) };
+      for (const a of gone) { delete values[a]; delete sources[a]; }
+      this.put({ ...r, values, sources });
+      const log = this.nextLog();
+      this.commit({ take: "expired", at: now }, log, { contract: "expired", record: r.id, state: "closed" });
+      out.push(r.id);
+    }
+    return out;
   }
 }
 
@@ -720,6 +825,9 @@ function suggest(r: Record, outcomes: IntakeOutcome[], source: Source): Record {
   }
   return { ...r, suggestions: s } as unknown as Record;
 }
+
+/** An offer as one owner's host serves it to another (7.8): the border wrapper's content. */
+export type Offer = { contract: string; owner: string; to: string; mode: string; terms: { [term: string]: string }; gives: string[]; records: Record[]; log?: JsonObject[] };
 
 // ─── Borders (8.5.1) ─────────────────────────────────────────────────────────
 

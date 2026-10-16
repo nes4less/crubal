@@ -1,0 +1,4 @@
+[
+  { "contract": "catalogTake", "record": "P-4", "mode": "dump", "flows": ["runtime"], "log": "L-R1" },
+  { "contract": "catalogTake", "record": "P-4", "mode": "dump", "flows": [], "log": "L-R2" }
+]

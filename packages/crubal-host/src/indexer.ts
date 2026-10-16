@@ -5,7 +5,7 @@
 
 import { Access } from "../../crubal/src/access.ts";
 import type { Json, JsonObject } from "../../crubal/src/model.ts";
-import { type Nested, partitionOf, type View } from "../../crubal/src/views.ts";
+import { type Nested, partitionOf, type StreamEntry, type View } from "../../crubal/src/views.ts";
 import type { Pool } from "../../crubal-postgres/src/db.ts";
 import type { PgStore } from "../../crubal-postgres/src/store.ts";
 
@@ -44,22 +44,29 @@ export class Index {
     const cur = (await this.pool.query("select seq from index_cursors where owner = $1 and view = $2 and version = $3 and audience = $4", [owner, view, version, v.show])).rows[0] as Row | undefined;
     let seq = cur ? Number(cur.seq) : 0;
     const entries = await store.entriesSince(view, seq, v.show);
+    return this.ingest(owner, view, version, v.show, entries, seq);
+  }
+
+  /** Apply stream entries to the rows, idempotently by seq (12.6.2): from a store's stream or pushed by a presenter. */
+  async ingest(owner: string, view: string, version: string, audience: string, entries: StreamEntry[], from?: number): Promise<number> {
+    const cur = (await this.pool.query("select seq from index_cursors where owner = $1 and view = $2 and version = $3 and audience = $4", [owner, view, version, audience])).rows[0] as Row | undefined;
+    let seq = from ?? (cur ? Number(cur.seq) : 0);
     for (const e of entries) {
       if (e.seq <= seq) continue;
-      if (e.reset) await this.pool.query("delete from index_rows where owner = $1 and view = $2 and audience = $3", [owner, view, v.show]);
-      if (e.removed) await this.pool.query("delete from index_rows where owner = $1 and view = $2 and version = $3 and audience = $4 and record = $5", [owner, view, version, v.show, e.record]);
+      if (e.reset) await this.pool.query("delete from index_rows where owner = $1 and view = $2 and audience = $3", [owner, view, audience]);
+      if (e.removed) await this.pool.query("delete from index_rows where owner = $1 and view = $2 and version = $3 and audience = $4 and record = $5", [owner, view, version, audience, e.record]);
       else if (e.row) {
         await this.pool.query(
           `insert into index_rows (owner, view, version, audience, record, row, buckets, marks, ancestors, sort, pin, seq, search)
            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, to_tsvector('simple', $13))
            on conflict (owner, view, version, audience, record) do update set row = excluded.row, buckets = excluded.buckets, marks = excluded.marks,
              ancestors = excluded.ancestors, sort = excluded.sort, pin = excluded.pin, seq = excluded.seq, search = excluded.search`,
-          [owner, view, version, v.show, e.record, e.row, e.buckets ?? {}, e.row.marks ?? null, Array.isArray(e.row.ancestors) ? e.row.ancestors : [], JSON.stringify(e.sort ?? []), e.pin ?? null, e.seq, textOf(e.row)],
+          [owner, view, version, audience, e.record, e.row, e.buckets ?? {}, e.row.marks ?? null, Array.isArray(e.row.ancestors) ? e.row.ancestors : [], JSON.stringify(e.sort ?? []), e.pin ?? null, e.seq, textOf(e.row)],
         );
       }
       seq = e.seq;
     }
-    await this.pool.query("insert into index_cursors (owner, view, version, audience, seq) values ($1, $2, $3, $4, $5) on conflict (owner, view, version, audience) do update set seq = excluded.seq", [owner, view, version, v.show, seq]);
+    await this.pool.query("insert into index_cursors (owner, view, version, audience, seq) values ($1, $2, $3, $4, $5) on conflict (owner, view, version, audience) do update set seq = excluded.seq", [owner, view, version, audience, seq]);
     return seq;
   }
 

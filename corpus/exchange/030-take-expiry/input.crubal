@@ -1,0 +1,24 @@
+// expires (7.8): a taken value lapses at its term. Under controlled terms the presenter's title overrode the
+// consumer's own, so both taken values lapse; after the date an expiry sweep removes them in one entry.
+contract: catalogOffer
+  kind: offer
+  gives: title, format, runtime
+  to: public
+  mode: controlled
+  terms:
+    expires: 2026-12-31
+
+contract: catalogTake
+  kind: take
+  from: distributor.example
+  reads:
+    title -> title
+    runtime -> runtime
+  mode: controlled
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-4 [origin: declared, via: L-1]
+  title: Xmas Vacation

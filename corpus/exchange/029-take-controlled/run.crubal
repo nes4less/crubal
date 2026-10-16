@@ -1,0 +1,10 @@
+run: catalogTake
+on: P-4
+offer: catalogOffer
+
+give: ourOffer
+
+run: catalogTake
+on: P-4
+offer: catalogOffer
+presenter: presenter2.json

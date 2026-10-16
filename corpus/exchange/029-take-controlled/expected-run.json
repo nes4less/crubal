@@ -1,0 +1,5 @@
+[
+  { "contract": "catalogTake", "record": "P-4", "mode": "controlled", "flows": ["title", "runtime"], "log": "L-R1" },
+  { "contract": "ourOffer", "owner": "test.example", "to": "public", "mode": "gathered", "terms": {}, "gives": ["title", "runtime"], "records": [] },
+  { "contract": "catalogTake", "record": "P-4", "mode": "controlled", "flows": ["runtime"], "withdrawn": ["title"], "log": "L-R2" }
+]

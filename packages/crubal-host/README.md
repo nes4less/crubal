@@ -75,6 +75,13 @@ GET  /o/<owner>/records/<id>[?full=1]    the values the caller may see
 GET  /o/<owner>/forms/<contract>?record= the form as data for this caller
 GET  /o/<owner>/stream/<contract>?cursor=view=seq   ·   POST …/ack { cursor }
 GET  /o/<owner>/v/<view>?…&shape=<name>  (a further shape the view names: crubal:jsonld, crubal:portable)
+GET  /o/<owner>/offer                       the offers this caller may read (7.8 `to`: public, link token, followers, named parties)
+GET  /o/<owner>/offer/<contract>[?link=]    one offer as a border wrapper: records with sources, mode, terms, the signed entries
+POST /o/<owner>/offer/<contract>/link       the owner mints the link token (kept across republishing)
+POST /o/<owner>/offer/<contract>/unpublish  the token stops working, nothing is deleted
+POST /o/<owner>/take/<contract>             the owner takes: a signed fetch of the presenter's offer, the wrapper verified against its keys, each record taken into ours (bound by the presenter's id)
+POST /o/<owner>/inbox/<contract>            a presenter's pushed stream entries, signed; they land in the index under the presenter's name
+POST /push · POST /expire                    loops behind the host key: push `when: entry` streams and acknowledge; sweep taken values past their terms
 GET  /o/<owner>/review (open items by key)   ·   POST /o/<owner>/review { key, decision, … }
 POST /o/<owner>/install { bundle }       owner only
 GET  /o/<owner>/export                   owner only: the log and the intake

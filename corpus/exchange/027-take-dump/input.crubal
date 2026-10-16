@@ -1,0 +1,22 @@
+// dump (7.8): copied once, never updated. The runtime lands; the consumer's own title stays with no
+// alternative; a second take with a changed runtime changes nothing.
+contract: catalogOffer
+  kind: offer
+  gives: title, format, runtime
+  to: public
+  mode: dump
+
+contract: catalogTake
+  kind: take
+  from: distributor.example
+  reads:
+    title -> title
+    runtime -> runtime
+  mode: dump
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-4 [origin: declared, via: L-1]
+  title: Xmas Vacation

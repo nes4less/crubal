@@ -57,7 +57,7 @@ export function serve(host: Host): Server {
 
     // The loops, for a scheduler, behind the host key.
     const hostKeyOk = !host.o.hostKey || req.headers["x-host-key"] === host.o.hostKey;
-    if (parts[0] === "project" || parts[0] === "tick" || parts[0] === "retry") {
+    if (parts[0] === "project" || parts[0] === "tick" || parts[0] === "retry" || parts[0] === "push" || parts[0] === "expire") {
       if (method !== "POST") throw new HttpError(405, "POST");
       if (!hostKeyOk) throw new HttpError(403, "the host key");
       const o = JSON.parse(bodyOf() || "{}") as JsonObject;
@@ -65,6 +65,8 @@ export function serve(host: Host): Server {
       const now = typeof o.now === "string" ? o.now : undefined;
       if (parts[0] === "project") return json(res, 200, await host.project(owner));
       if (parts[0] === "retry") return json(res, 200, await host.retry(now, owner));
+      if (parts[0] === "push") return json(res, 200, await host.push(now, owner));
+      if (parts[0] === "expire") return json(res, 200, await host.expire(now, owner));
       return json(res, 200, await host.tick(now, owner));
     }
 
@@ -201,6 +203,47 @@ export function serve(host: Host): Server {
         const b = JSON.parse(bodyOf() || "{}") as { cursor?: { [view: string]: number } };
         return json(res, 200, await border.ack(name, b.cursor ?? {}));
       }
+    }
+    // Offers (7.8): what this owner shares, to whom `to` says; a take fetches one; a link is minted by the owner.
+    if (what === "offer" && method === "GET") {
+      const border = await host.borderFor(owner, store);
+      const offers = [...border.contracts.values()].filter((c) => c.kind === "offer");
+      if (!name) {
+        const list: JsonObject[] = [];
+        for (const c of offers) if (await host.mayTake(owner, c, callerId, q("link"))) list.push({ contract: c.name, gives: [...c.gives], mode: c.mode ?? "gathered", terms: { ...c.terms }, to: c.to ?? "private" });
+        return json(res, 200, { owner, offers: list });
+      }
+      const c = border.contracts.get(name);
+      if (!c || c.kind !== "offer") throw new HttpError(404, `no offer ${name}`);
+      if (!(await host.mayTake(owner, c, callerId, q("link")))) throw new HttpError(callerId ? 403 : 401, `${name} isn't offered to you`);
+      return json(res, 200, (await border.offer(name)) as unknown as Json);
+    }
+    if (what === "offer" && name && rest[0] === "link" && method === "POST") {
+      if (!isOwner) throw new HttpError(403, "the owner publishes a link");
+      return json(res, 200, { contract: name, link: await host.offerLink(owner, name) });
+    }
+    if (what === "offer" && name && rest[0] === "unpublish" && method === "POST") {
+      if (!isOwner) throw new HttpError(403, "the owner unpublishes");
+      await host.unpublishOffer(owner, name);
+      return json(res, 200, { contract: name, unpublished: true });
+    }
+    if (what === "take" && name && method === "POST") {
+      if (!isOwner) throw new HttpError(403, "the owner takes");
+      return json(res, 200, await host.take(owner, name, at));
+    }
+    // A presenter pushing a stream (12.6.2): the signed party's entries land in the index under its name.
+    if (what === "inbox" && name && method === "POST") {
+      if (!callerId || !/:owner$/.test(callerId)) throw new HttpError(401, "a signed request from the presenter");
+      const presenter = callerId.replace(/:owner$/, "");
+      const b = JSON.parse(bodyOf() || "{}") as { entries?: { [view: string]: JsonObject[] } };
+      const index = new Index(host.pool);
+      const cursor: JsonObject = {};
+      for (const [view, list] of Object.entries(b.entries ?? {})) {
+        const first = list[0];
+        const [vname, version = ""] = String(first?.projection ?? view).split(" /");
+        cursor[view] = await index.ingest(presenter, vname ?? view, version, String(first?.audience ?? "public"), list as unknown as never[]);
+      }
+      return json(res, 200, { contract: name, from: presenter, cursor });
     }
     // The review queue (9.5): open items by key; a decision is one entry, then the affected intakes replay.
     if (what === "review" && method === "GET") {

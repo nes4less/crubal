@@ -1,0 +1,5 @@
+run: catalogTake
+on: P-4
+offer: catalogOffer
+
+expire: 2027-01-01T00:00:00Z

@@ -1,0 +1,8 @@
+run: catalogTake
+on: P-4
+offer: catalogOffer
+
+run: catalogTake
+on: P-4
+offer: catalogOffer
+presenter: presenter2.json

@@ -66,3 +66,12 @@ create table if not exists host_identities (
   caller text not null,
   primary key (provider, subject)
 );
+
+-- Link offers (7.8 `to: link`): one unguessable token per offer; unpublishing revokes, republishing keeps it.
+create table if not exists host_offer_links (
+  owner text not null,
+  contract text not null,
+  token text not null,
+  revoked boolean not null default false,
+  primary key (owner, contract)
+);

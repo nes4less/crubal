@@ -1,0 +1,4 @@
+{ "id": "P-4", "kind": "item", "level": "product", "owner": "test.example",
+  "values": { "title": "Xmas Vacation", "runtime": { "$qty": "92", "unit": "min" } },
+  "sources": { "*": { "origin": "declared", "via": "L-1" }, "runtime": { "origin": "observed", "via": "L-R2", "owner": "distributor.example" } },
+  "alternatives": { "title": [ { "value": "Christmas Vacation", "origin": "declared", "via": "L-R1", "owner": "distributor.example" } ] } }

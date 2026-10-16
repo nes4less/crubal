@@ -1,0 +1,22 @@
+// gathered (7.8): the presenter's update replaces the value it gave before (the consumer didn't edit it),
+// and still never overrides the consumer's own title, which keeps the presenter's as an alternative.
+contract: catalogOffer
+  kind: offer
+  gives: title, format, runtime
+  to: public
+  mode: gathered
+
+contract: catalogTake
+  kind: take
+  from: distributor.example
+  reads:
+    title -> title
+    runtime -> runtime
+  mode: gathered
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-4 [origin: declared, via: L-1]
+  title: Xmas Vacation

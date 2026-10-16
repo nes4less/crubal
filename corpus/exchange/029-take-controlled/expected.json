@@ -1,0 +1,4 @@
+{ "id": "P-4", "kind": "item", "level": "product", "owner": "test.example",
+  "values": { "runtime": { "$qty": "92", "unit": "min" } },
+  "sources": { "*": { "origin": "declared", "via": "L-1" },
+    "runtime": { "origin": "observed", "via": "L-R2", "owner": "distributor.example", "until": "2027-01-01", "reshare": false, "revocable": true } } }

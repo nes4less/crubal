@@ -1,0 +1,3 @@
+run: catalogTake
+on: P-4
+offer: catalogOffer

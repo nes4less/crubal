@@ -4,7 +4,9 @@
 clone), E, F and P's retype and dry run built (store contracts, frame, retype, `dryRun` and
 `crubal-pg dry-run`), D built (split, observations landing at the border, the proposal at the threshold and its
 decision), G, H, I, J built (lists, nested page views with their staleness, dependent counts in the engine
-and the index, `crubal:jsonld` and further shapes served by `?shape=`), corpus 178. The units table is global per process: one owner's extension at a time until it
+and the index, `crubal:jsonld` and further shapes served by `?shape=`), K and L built (offer routes with link
+tokens, the cross-host take with the wrapper verified, the four modes and terms, the stream push loop and
+inbox), corpus 183, 8 host tests. The units table is global per process: one owner's extension at a time until it
 is made per dictionary. Everything the specification states that the engine, the store or the host
 doesn't do yet, and nothing that depends on a kind, a vocabulary or an adopter. Each item says what it is,
 how it works, what it writes, and what proves it. The coding round takes them in the order of the last

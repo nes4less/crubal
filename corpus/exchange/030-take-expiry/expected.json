@@ -1,0 +1,3 @@
+{ "id": "P-4", "kind": "item", "level": "product", "owner": "test.example",
+  "values": {},
+  "sources": { "*": { "origin": "declared", "via": "L-1" } } }

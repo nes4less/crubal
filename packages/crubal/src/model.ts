@@ -4,7 +4,16 @@
 export type Json = string | number | boolean | Json[] | JsonObject;
 export type JsonObject = { [key: string]: Json };
 
-export type Source = { origin: string; via: string; owner?: string; adopted?: boolean };
+export type Source = {
+  origin: string;
+  via: string;
+  owner?: string;
+  adopted?: boolean;
+  /** Taken under terms (7.8): when the value lapses, whether it may flow on, whether the presenter may withdraw it. */
+  until?: string;
+  reshare?: boolean;
+  revocable?: boolean;
+};
 
 /** A record's status (1.12): absent means active. */
 export type Status = { state: "active" | "archived"; reason?: string; into?: string };

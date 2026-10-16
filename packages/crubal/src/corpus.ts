@@ -690,7 +690,7 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
 
     // The runs, in order.
     const results: Json[] = [];
-    let current: { run?: string; on?: string; caller?: string; offer?: string; arrive?: string; level?: string; answer?: string; stream?: string; ack?: string; cursor?: string; tick?: string; now?: string; prepare?: string; acted?: string; failed?: string; reason?: string; undo?: string; forRun?: string; decideRun?: string; decision?: string } = {};
+    let current: { run?: string; on?: string; caller?: string; offer?: string; presenter?: string; arrive?: string; level?: string; answer?: string; stream?: string; ack?: string; cursor?: string; tick?: string; now?: string; prepare?: string; acted?: string; failed?: string; reason?: string; undo?: string; forRun?: string; decideRun?: string; decision?: string } = {};
     const parseCursor = (s: string | undefined) => (s ? Object.fromEntries(s.split(",").map((p) => p.trim().split("=")).map(([v, n]) => [v ?? "", Number(n)])) : undefined);
     const flush = () => {
       // The send split (docs/design/runs.md): prepare, then acted or failed; undo names its cause.
@@ -742,7 +742,7 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
       if (!current.run || !current.on) return;
       const c = contracts.find((x) => x.name === current.run);
       if (current.offer) {
-        results.push(ex.take(current.run, current.offer, current.on, json("presenter.json") as unknown as Rec) as Json);
+        results.push(ex.take(current.run, current.offer, current.on, json(current.presenter ?? "presenter.json") as unknown as Rec) as Json);
       } else if (c?.kind === "receive" || current.forRun) {
         // A late answer names its run (7.5): the receive closes it and lands with its via.
         results.push(ex.receiveRun(current.run, current.on, readFileSync(file(current.answer ?? "answer.json"), "utf8"), current.caller, current.forRun) as Json);
@@ -787,7 +787,15 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
       else if (n.key === "answer") current.answer = n.value;
       else if (n.key === "caller") current.caller = n.value;
       else if (n.key === "offer") current.offer = n.value;
-      else if (n.key === "write") {
+      else if (n.key === "presenter") current.presenter = n.value;
+      else if (n.key === "give") {
+        // The owner's own offer (7.8), as its host would serve it.
+        flush();
+        results.push(ex.offer(n.value, "test.example") as unknown as Json);
+      } else if (n.key === "expire") {
+        flush();
+        results.push(ex.expire(n.value) as unknown as Json);
+      } else if (n.key === "write") {
         flush();
         const r = ex.get(n.value);
         if (!r) return fail(`write to an unknown record ${n.value}`);

@@ -139,6 +139,10 @@ export function emptyDictionary(): Dictionary {
   items.ordered = true;
   items.label = "Items";
   d.facets.set("crubal:items", items);
+  // The core's read-through link (7.8 observed): the presenter's record this one reads, never copied.
+  const observes = blank("crubal:observes", "link");
+  observes.label = "Observes";
+  d.facets.set("crubal:observes", observes);
   return d;
 }
 

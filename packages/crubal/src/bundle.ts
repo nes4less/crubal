@@ -118,6 +118,7 @@ export function contractJson(c: Contract): JsonObject {
   for (const k of ["label", "describe", "for"]) if (c.parts[k] !== undefined) o[k] = c.parts[k] as string;
   if (c.needs.length) o.needs = c.needs.map(classLineJson);
   if (c.gives.length) o.gives = [...c.gives];
+  if (Object.keys(c.terms).length) o.terms = { ...c.terms };
   if (c.stores.length) o.stores = c.stores.map(mapJson);
   else {
     if (c.writes.length) o.writes = c.writes.map(mapJson);
@@ -132,7 +133,7 @@ export function contractJson(c: Contract): JsonObject {
   if (c.ignore.length) o.ignore = [...c.ignore];
   if (c.keepRaw.length) o["keep-raw"] = [...c.keepRaw];
   for (const [k, v] of Object.entries(c.parts)) {
-    if (["label", "describe", "for", "needs", "gives", "writes", "reads", "stream", "when", "who", "from", "to", "mode", "undo", "ref", "origin", "prefix", "lands", "absorb", "ignore", "keep-raw", "kind"].includes(k)) continue;
+    if (["label", "describe", "for", "needs", "gives", "terms", "writes", "reads", "stream", "when", "who", "from", "to", "mode", "undo", "ref", "origin", "prefix", "lands", "absorb", "ignore", "keep-raw", "kind"].includes(k)) continue;
     if (k === "retry") {
       const m = v.match(/^(\d+)\s+every\s+(\S+)$/);
       o.retry = m ? { times: m[1] as string, every: m[2] as string } : v;
@@ -373,9 +374,13 @@ function contractText(c: JsonObject): string[] {
   if (Array.isArray(c.needs)) out.push("  needs:", ...c.needs.map((l) => `    ${lineText(l as JsonObject)}`));
   for (const k of ["writes", "reads", "stores"]) if (Array.isArray(c[k])) out.push(`  ${k}:`, ...(c[k] as JsonObject[]).flatMap(mapText));
   for (const k of ["gives", "stream", "when", "who", "from", "to", "mode", "undo", "ref", "origin", "prefix", "lands", "ignore", "keep-raw"]) out.push(...kv("  ", k, c[k]));
+  if (isObj(c.terms) && Object.keys(c.terms).length) {
+    out.push("  terms:");
+    for (const [k, v] of Object.entries(c.terms)) out.push(`    ${k}: ${String(v)}`);
+  }
   if (c.absorb === false) out.push("  absorb: no");
   for (const [k, v] of Object.entries(c)) {
-    if (["contract", "kind", "label", "describe", "for", "needs", "writes", "reads", "stores", "gives", "stream", "when", "who", "from", "to", "mode", "undo", "ref", "origin", "prefix", "lands", "ignore", "keep-raw", "absorb"].includes(k)) continue;
+    if (["contract", "kind", "label", "describe", "for", "needs", "writes", "reads", "stores", "gives", "terms", "stream", "when", "who", "from", "to", "mode", "undo", "ref", "origin", "prefix", "lands", "ignore", "keep-raw", "absorb"].includes(k)) continue;
     if (k === "retry" && isObj(v)) out.push(`  retry: ${v.times} every ${v.every}`);
     else out.push(...kv("  ", k, v));
   }

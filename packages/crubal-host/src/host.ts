@@ -3,6 +3,8 @@
 // install, the loops. It owns no model: everything goes through PgStore and PgBorder.
 
 import { createHash, createPrivateKey, generateKeyPairSync, randomBytes, sign as edSign } from "node:crypto";
+import { type Offer, verifyBorder } from "../../crubal/src/exchange.ts";
+import type { StreamEntry } from "../../crubal/src/views.ts";
 import { readFileSync } from "node:fs";
 import type { Json, JsonObject } from "../../crubal/src/model.ts";
 import type { Contract, Keys } from "../../crubal/src/store.ts";
@@ -11,7 +13,7 @@ import { type Client, migrate as migrateStore, type Pool, transaction } from "..
 import { PgStore } from "../../crubal-postgres/src/store.ts";
 import { Credentials, type OAuthProvider } from "./credentials.ts";
 import type { EmergencyTerms } from "./emergency.ts";
-import { verifyRequest } from "./signatures.ts";
+import { verifyRequest, signRequest } from "./signatures.ts";
 
 const SCHEMA_SQL = readFileSync(new URL("./schema.sql", import.meta.url), "utf8");
 
@@ -42,6 +44,8 @@ export type HostOptions = {
   oauth?: { [name: string]: OAuthProvider };
   /** The owner's notice of an emergency edge or a dead run; the console otherwise. */
   notify?: (owner: string, notice: JsonObject) => void | Promise<void>;
+  /** Another owner's host by domain: its base URL; `https://<domain>` otherwise. */
+  hostOf?: (domain: string) => string;
 };
 
 const envName = (s: string) => s.replace(/[^A-Za-z0-9]/g, "_").toUpperCase();
@@ -173,6 +177,149 @@ export class Host {
       const body = await res.text();
       return { acted: true, ...(body ? { body } : {}) };
     };
+  }
+
+  // ─── Between owners (7.8, 12.6.2) ─────────────────────────────────────────
+
+  /** Another owner's host, by domain. */
+  hostOf(domain: string): string {
+    return this.o.hostOf ? this.o.hostOf(domain) : `https://${domain}`;
+  }
+
+  /** A request to another owner's host, signed with this owner's domain key (RFC 9421). */
+  async signedFetch(owner: string, method: string, url: string, body?: string): Promise<Response> {
+    const key = await this.keyOf(owner);
+    if (!key) throw new Error(`${owner} has no key to sign with`);
+    const headers = signRequest({ method, url, ...(body !== undefined ? { body } : {}), keyid: owner, privateD: key.private, publicX: key.public, created: Math.floor(Date.parse(this.now()) / 1000) });
+    return fetch(url, { method, headers: { ...headers, ...(body !== undefined ? { "content-type": "application/json" } : {}) }, ...(body !== undefined ? { body } : {}) });
+  }
+
+  /** May this caller read an offer (7.8 `to`)? Public to anyone; link by token; followers and named parties by edge or signature. */
+  async mayTake(owner: string, c: Contract, callerId: string | undefined, link: string | undefined): Promise<boolean> {
+    const to = (c.to ?? "private").split(",").map((s) => s.trim()).filter(Boolean);
+    if (callerId === owner) return true;
+    if (to.includes("public")) return true;
+    if (to.includes("link") && link) {
+      const { rows } = await this.pool.query("select 1 from host_offer_links where owner = $1 and contract = $2 and token = $3 and not revoked", [owner, c.name, link]);
+      return rows.length > 0;
+    }
+    if (!callerId) return false;
+    const domain = callerId.replace(/:owner$/, "");
+    if (to.some((p) => p !== "public" && p !== "link" && p !== "followers" && p !== "private" && (p === domain || p === callerId))) return true;
+    if (to.includes("followers")) {
+      const store = await this.storeFor(owner);
+      const edges = [...(await store.state()).edges.values()];
+      return edges.some((e) => (e.who === callerId || e.who === domain) && /^follow/.test(String(e.relation)));
+    }
+    return false;
+  }
+
+  /** Publish an offer by link (7.8): the token, minted once and kept across republishing. */
+  async offerLink(owner: string, contract: string): Promise<string> {
+    const { rows } = await this.pool.query("select token from host_offer_links where owner = $1 and contract = $2", [owner, contract]);
+    if (rows[0]) {
+      await this.pool.query("update host_offer_links set revoked = false where owner = $1 and contract = $2", [owner, contract]);
+      return String((rows[0] as { token: string }).token);
+    }
+    const token = randomBytes(24).toString("base64url");
+    await this.pool.query("insert into host_offer_links (owner, contract, token) values ($1, $2, $3)", [owner, contract, token]);
+    return token;
+  }
+
+  /** Unpublish a link offer: the token stops working, nothing is deleted. */
+  async unpublishOffer(owner: string, contract: string): Promise<void> {
+    await this.pool.query("update host_offer_links set revoked = true where owner = $1 and contract = $2", [owner, contract]);
+  }
+
+  /**
+   * A take across hosts (7.8, 8.5.1): fetch the presenter's offer with a signed request, verify the wrapper
+   * against the presenter's keys, then take each offered record into ours: the one bound to it, or a new
+   * record bound from now on. Each take is one entry naming the presenter's.
+   */
+  async take(owner: string, takeName: string, at = this.now()): Promise<JsonObject> {
+    const store = await this.storeFor(owner);
+    const border = await this.borderFor(owner, store);
+    const t = border.contracts.get(takeName);
+    if (!t || t.kind !== "take") throw new Error(`no take contract ${takeName}`);
+    const from = t.from;
+    if (!from) throw new Error(`${takeName} names no presenter (from)`);
+    const offerName = t.parts.offer;
+    const names = offerName ? [offerName] : ((await (await this.signedFetch(owner, "GET", `${this.hostOf(from)}/o/${from}/offer`)).json()) as { offers?: JsonObject[] }).offers?.filter((o) => (o.gives as string[]).some((g) => t.reads.some((m) => m.from === g))).map((o) => String(o.contract)) ?? [];
+    const taken: JsonObject[] = [];
+    for (const name of names) {
+      const res = await this.signedFetch(owner, "GET", `${this.hostOf(from)}/o/${from}/offer/${name}`);
+      if (!res.ok) { taken.push({ offer: name, stopped: `http ${res.status}` }); continue; }
+      const offer = (await res.json()) as Offer;
+      const verified = verifyBorder({ records: offer.records, ...(offer.log ? { log: offer.log } : {}) }, await this.resolveKeys(from));
+      if (verified.verified !== true) { taken.push({ offer: name, stopped: "unverified", ...verified }); continue; }
+      for (const presenter of offer.records) {
+        const key = `take|${from}|${presenter.id}`;
+        let recordId = (await store.state()).bindings.get(key);
+        if (!recordId) {
+          // A record of ours for theirs: minted empty, bound by the presenter's id from now on.
+          const n = (await this.pool.query("select count(*) as n from bindings where owner = $1 and key like 'take|%'", [owner])).rows[0] as { n: string };
+          recordId = `T-${Number(n.n) + 1}`;
+          const id = recordId;
+          await store.commit({ take: takeName, from }, (d) => {
+            d.records.set(id, { id, kind: presenter.kind, level: presenter.level, owner, values: {}, sources: {} });
+            d.bindings.set(key, id);
+          }, at);
+        }
+        const r = await border.take(takeName, offer, recordId, presenter, undefined, at);
+        taken.push({ offer: name, presenter: presenter.id, record: recordId, ...r });
+      }
+    }
+    return { contract: takeName, from, taken };
+  }
+
+  /**
+   * Push streams (12.6.2): every stream contract with `when: entry` sends its entries since the cursor to
+   * the party it names (its adapter, else a signed POST to that host's inbox), and the acknowledgement
+   * moves the cursor.
+   */
+  async push(now = this.now(), owner?: string): Promise<JsonObject[]> {
+    const out: JsonObject[] = [];
+    for (const o of owner ? [{ owner }] : await this.owners()) {
+      const store = await this.storeFor(o.owner);
+      const border = await this.borderFor(o.owner, store);
+      for (const c of border.contracts.values()) {
+        if (!c.stream.length || c.when !== "entry") continue;
+        const r = await border.streamRun(c.name, undefined, undefined, now);
+        const entries = (r.entries ?? {}) as { [view: string]: StreamEntry[] };
+        if (!Object.values(entries).some((l) => l.length)) continue;
+        const adapter = this.o.adapters?.[c.name];
+        const payload: JsonObject = { contract: c.name, from: o.owner, entries: entries as unknown as Json };
+        let acted = false;
+        let failed: string | undefined;
+        if (adapter) {
+          const a = await adapter(c, payload, String(r.log ?? ""));
+          acted = "acted" in a && a.acted === true;
+          if ("failed" in a) failed = a.failed;
+        } else {
+          const url = c.parts["host:url"] ?? (c.to ? `${this.hostOf(c.to)}/o/${c.to}/inbox/${c.name}` : undefined);
+          if (!url) { failed = "nowhere to push: no to and no host:url"; }
+          else {
+            const res = await this.signedFetch(o.owner, "POST", url, JSON.stringify(payload));
+            acted = res.ok;
+            if (!res.ok) failed = `http ${res.status}`;
+          }
+        }
+        if (acted) await border.ack(c.name, r.cursor as { [view: string]: number });
+        out.push({ owner: o.owner, contract: c.name, ...(acted ? { acted: true, cursor: r.cursor as Json } : { failed: failed ?? "not acted" }) });
+      }
+    }
+    return out;
+  }
+
+  /** Taken values past their terms (7.8), for every owner or one. */
+  async expire(now = this.now(), owner?: string): Promise<JsonObject[]> {
+    const out: JsonObject[] = [];
+    for (const o of owner ? [{ owner }] : await this.owners()) {
+      const border = await this.borderFor(o.owner);
+      const ids = await border.expire(now, now);
+      if (ids.length) out.push({ owner: o.owner, expired: ids });
+    }
+    return out;
   }
 
   /** An owner's border over its own definitions, with the adapters. */

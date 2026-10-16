@@ -49,11 +49,15 @@ type Extra = Record & { alternatives?: { [a: string]: JsonObject[] }; suggestion
 function sourceOf(entry: Entry, write: JsonObject): Source {
   const base = isObj(entry.source) ? entry.source : {};
   const own = isObj(write.source) ? write.source : {};
-  const merged = { ...base, ...own } as { origin?: string; owner?: string; adopted?: boolean; via?: string };
+  const merged = { ...base, ...own } as Partial<Source>;
   // A copied value keeps the source of where it came from (1.12, 1.7), so a write may name its own `via`.
   const s: Source = { origin: merged.origin ?? "reported", via: merged.via ?? String(entry.log) };
   if (merged.owner) s.owner = merged.owner;
   if (merged.adopted) s.adopted = true;
+  // The terms a value was taken under (7.8) ride on the write and come back with it.
+  if (typeof merged.until === "string") s.until = merged.until;
+  if (merged.reshare === false) s.reshare = false;
+  if (merged.revocable === true) s.revocable = true;
   return s;
 }
 

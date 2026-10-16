@@ -8,12 +8,13 @@ import { Access, type Edge, type Permissions } from "../../crubal/src/access.ts"
 import type { Dictionary } from "../../crubal/src/defs.ts";
 import { Exchange, type Role, type RunResult } from "../../crubal/src/exchange.ts";
 import type { Draft, Journal } from "../../crubal/src/log.ts";
-import type { Json, JsonObject } from "../../crubal/src/model.ts";
+import type { Json, JsonObject, Record } from "../../crubal/src/model.ts";
 import { MemoryRecords } from "../../crubal/src/records.ts";
 import type { Rule } from "../../crubal/src/rules.ts";
 import { isSchedule, readSchedule, ticksDue } from "../../crubal/src/schedule.ts";
 import { openItems } from "../../crubal/src/review.ts";
 import { type Contract, receive } from "../../crubal/src/store.ts";
+import type { Offer } from "../../crubal/src/exchange.ts";
 import type { StreamEntry } from "../../crubal/src/views.ts";
 import type { PgStore } from "./store.ts";
 
@@ -196,6 +197,34 @@ export class PgBorder {
     const observations = (await q("select json from observations where owner = $1 and json->>'supports' = any($2) order by ord", [this.owner, ids])).map((r) => r.json as JsonObject);
     const items = (await q("select json from review where owner = $1 and json->>'key' = any($2) order by ord", [this.owner, ids.map((id) => `split:${id}`)])).map((r) => r.json as JsonObject);
     return { observations, review: openItems(items) };
+  }
+
+  /** The owner's offer (7.8), with the signed log entries its values came from, for another owner's take. */
+  async offer(name: string, only?: string[]): Promise<Offer> {
+    const state = await this.store.state();
+    const ex = new Exchange(this.o.dict, this.o.contracts, this.o.roles ?? [], this.o.rules ?? []);
+    ex.records = state.records;
+    const o = ex.offer(name, this.owner, only);
+    const vias = [...new Set(o.records.flatMap((r) => Object.values(r.sources ?? {}).map((s) => s.via)))];
+    const { rows } = await this.store.pool.query("select entry from log where owner = $1 and log_id = any($2) order by seq", [this.owner, vias]);
+    o.log = rows.map((r: Row) => r.entry as JsonObject);
+    return o;
+  }
+
+  /** A take (7.8) of a presenter's record into one of ours, by the offer's mode; one entry naming the presenter's. */
+  async take(takeName: string, offer: Offer, recordId: string, presenter: Record, callerId?: string, at?: string): Promise<RunResult> {
+    return this.run((ex) => ex.take(takeName, offer, recordId, presenter), at);
+  }
+
+  /** Taken values past their terms (7.8): removed, one entry per record. */
+  async expire(now: string, at?: string): Promise<string[]> {
+    const { out } = await this.store.commitFrom((draft: Draft) => {
+      const ex = new Exchange(this.o.dict, this.o.contracts, this.o.roles ?? [], this.o.rules ?? []);
+      ex.records = draft.records;
+      const ids = ex.expire(now);
+      return { by: { take: "expired", at: now }, extra: [], out: ids };
+    }, at);
+    return out;
   }
 
   /** A decision on a dead run (runs.md): retry (a new run, the key released) or drop; then the act for a retry. */

@@ -73,6 +73,8 @@ export type Contract = {
   writes: MapLine[];
   /** A store contract's one map (7.3): `reads` and `writes` are derived from it. */
   stores: MapLine[];
+  /** An offer's terms (7.8): reshare, expires, revocable, and what else the package names. */
+  terms: { [term: string]: string };
   ignore: string[];
   keepRaw: string[];
   absorb: boolean;
@@ -124,6 +126,7 @@ export function readContracts(source: string): Contract[] {
       reads: [],
       writes: [],
       stores: [],
+      terms: {},
       ignore: [],
       keepRaw: [],
       absorb: true,
@@ -163,6 +166,11 @@ export function readContracts(source: string): Contract[] {
       else if (p.key === "undo") c.undo = p.value;
       else if (p.key === "ref") c.ref = p.value;
       else if (p.key === "stream") c.stream = list();
+      else if (p.key === "terms") {
+        // `terms:` with one term per line, or `terms: reshare no, expires 2027-01-01` on the line.
+        for (const t of p.children) if (t.key) c.terms[t.key] = t.value.trim();
+        for (const t of list()) { const [k, ...v] = t.trim().split(/[:\s]+/); if (k && v.length) c.terms[k] = v.join(" "); }
+      }
       if (p.key === "kind") c.kind = p.value;
       else if (p.key === "origin") c.origin = p.value;
       else if (p.key === "prefix") c.prefix = p.value;
@@ -178,7 +186,7 @@ export function readContracts(source: string): Contract[] {
       else if (p.key === "keep-raw") c.keepRaw = list();
       else if (p.key === "absorb") c.absorb = p.value !== "no";
       else if (p.key === "lands") c.lands = p.value;
-      if (!["kind", "origin", "prefix", "reads", "writes", "stores", "ignore", "keep-raw", "absorb", "lands", "gives", "who", "when", "from", "mode", "undo", "ref", "stream"].includes(p.key)) c.parts[p.key] = p.value;
+      if (!["kind", "origin", "prefix", "reads", "writes", "stores", "ignore", "keep-raw", "absorb", "lands", "gives", "who", "when", "from", "mode", "undo", "ref", "stream", "terms"].includes(p.key)) c.parts[p.key] = p.value;
     }
     if (!c.origin) c.origin = c.kind === "form" ? "declared" : "reported";
     if (c.keepRaw.length && !c.prefix) throw new CrubalError(`${c.name} keeps raw fields, so it needs a prefix`, c.line);

@@ -1,0 +1,3 @@
+{ "id": "P-4", "kind": "item", "level": "product", "owner": "test.example",
+  "values": { "title": "Xmas Vacation", "crubal:observes": { "$link": "distributor.example/D-100" } },
+  "sources": { "*": { "origin": "declared", "via": "L-1" }, "crubal:observes": { "origin": "reported", "via": "L-R1", "owner": "distributor.example" } } }

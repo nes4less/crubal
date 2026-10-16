@@ -12,6 +12,7 @@ import { Host } from "../src/host.ts";
 import { serve } from "../src/server.ts";
 
 const url = process.env.CRUBAL_PG_URL;
+const isObj = (v: unknown): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);
 let pool: Pool;
 let drop: () => Promise<void>;
 let base = "";
@@ -30,7 +31,12 @@ before(async () => {
     hostKey: "hk",
     now: () => "2026-10-15T22:00:00Z",
     fresh: "write",
-    resolveKeys: async (domain) => (domain === "pub.example" ? { "pub.example": { alg: "Ed25519", public: key.x } } : ({} as { [o: string]: { alg: string; public: string } })),
+    resolveKeys: async (domain) => {
+      if (domain === "pub.example") return { "pub.example": { alg: "Ed25519", public: key.x } };
+      const own = (await host.owners()).find((o) => o.owner === domain);
+      return own ? { [domain]: { alg: "Ed25519", public: own.public } } : {};
+    },
+    hostOf: () => base,
     adapters: { label: async (_c, payload, run) => { acted.push({ payload, run }); return { acted: true, body: '{"itemId":"L-77"}' }; } },
   });
   await host.migrate();
@@ -195,4 +201,123 @@ test("install through the host, then a form run, a send with an adapter and an a
   // The loops, with the host key.
   assert.equal((await call("POST", "/project", undefined, {}, { "x-host-key": "hk" })).status, 200);
   assert.equal((await call("POST", "/tick", undefined, {}, { "x-host-key": "hk" })).status, 200);
+});
+
+test("offer and take between two owners on one host, a link offer, and a stream pushed to the other's inbox", { skip: !url }, async () => {
+  // The presenter: a distributor with an offer to the public, one by link, one private, and a stream pushed to the shop.
+  await host.createOwner("dist.example");
+  const distKey = await host.issueKey("dist.example", "dist.example", "owner");
+  const key = (globalThis as { pubKey?: { d: string; x: string } }).pubKey as { d: string; x: string };
+  const DIST = `package: dist /2026-10-01
+  owner: pub.example
+  crubal: 2
+
+kind: item
+  levels: product
+  base: Item
+title$
+format{DVD|Blu-ray}
+cost#USD
+class: Item
+  for: item
+  facets:
+    !title
+    format
+
+contract: catalogOffer
+  kind: offer
+  gives: title, format
+  to: public
+  mode: gathered
+contract: tradeOffer
+  kind: offer
+  gives: title, cost
+  to: link
+  mode: controlled
+  terms:
+    reshare: no
+contract: secretOffer
+  kind: offer
+  gives: cost
+  to: private
+  mode: dump
+contract: toShop
+  kind: send
+  stream: discs
+  to: shop.example
+  when: entry
+
+shape: card
+  slots:
+    !title -> heading
+view: discs
+  select:
+    level: product
+  order: title
+  shape: card
+`;
+  const inst = await call("POST", "/o/dist.example/install", distKey, { bundle: publish(DIST, { date: "2026-10-01", key }).bundle });
+  assert.equal(inst.status, 200, JSON.stringify(inst.body));
+  const dist = await host.storeFor("dist.example");
+  const written = await dist.commit({ person: "dist.example" }, (d) => {
+    d.records.set("D-1", { id: "D-1", kind: "item", level: "product", owner: "dist.example", values: { title: "Gremlins", format: "DVD", cost: { $money: "3.10", currency: "USD" } }, sources: { "*": { origin: "declared", via: "L-2" } } });
+  }, "2026-10-15T22:01:00Z");
+  assert.equal(written?.log, "L-2", "the sources name the entry the values were written in");
+  // The offers a stranger sees: the public one only; the private one is refused; the link one needs its token.
+  const anon = await call("GET", "/o/dist.example/offer");
+  assert.deepEqual((anon.body.offers as JsonObject[]).map((o) => o.contract), ["catalogOffer"]);
+  assert.equal((await call("GET", "/o/dist.example/offer/secretOffer")).status, 401);
+  assert.equal((await call("GET", "/o/dist.example/offer/tradeOffer")).status, 401);
+  const link = await call("POST", "/o/dist.example/offer/tradeOffer/link", distKey);
+  assert.equal(link.status, 200);
+  const token = String(link.body.link);
+  const byLink = await call("GET", `/o/dist.example/offer/tradeOffer?link=${token}`);
+  assert.equal(byLink.status, 200);
+  assert.deepEqual((byLink.body.records as JsonObject[]).map((r) => Object.keys(r.values as JsonObject)), [["title", "cost"]]);
+  assert.deepEqual(byLink.body.terms, { reshare: "no" });
+  assert.equal((await call("POST", "/o/dist.example/offer/tradeOffer/unpublish", distKey)).status, 200);
+  assert.equal((await call("GET", `/o/dist.example/offer/tradeOffer?link=${token}`)).status, 401, "unpublished: the token stops working");
+  assert.equal(String((await call("POST", "/o/dist.example/offer/tradeOffer/link", distKey)).body.link), token, "republished: the same token");
+  // The public offer is a border wrapper: the records with their sources and the signed entries they came from.
+  const offer = await call("GET", "/o/dist.example/offer/catalogOffer");
+  assert.equal(offer.status, 200);
+  assert.deepEqual((offer.body.records as JsonObject[])[0]?.values, { title: "Gremlins", format: "DVD" }, "only what the offer gives");
+  assert.equal((offer.body.log as JsonObject[]).length, 1);
+  // The consumer takes: a new version of the shop package carries the take contract.
+  const SHOP2 = `${PACKAGE.replace("shop /2026-10-01", "shop /2026-10-02")}
+contract: distTake
+  kind: take
+  from: dist.example
+  offer: catalogOffer
+  reads:
+    title -> title
+    format -> format
+  mode: gathered
+`;
+  const ownerKey = await host.issueKey("shop.example", "shop.example", "owner2");
+  const up = await call("POST", "/o/shop.example/install", ownerKey, { bundle: publish(SHOP2, { date: "2026-10-02", key }).bundle });
+  assert.equal(up.status, 200, JSON.stringify(up.body));
+  const took = await call("POST", "/o/shop.example/take/distTake", ownerKey);
+  assert.equal(took.status, 200, JSON.stringify(took.body));
+  const taken = took.body.taken as JsonObject[];
+  assert.equal(taken.length, 1, JSON.stringify(took.body));
+  assert.equal(taken[0]?.presenter, "D-1");
+  assert.deepEqual(taken[0]?.flows, ["title", "format"]);
+  const mine = await call("GET", `/o/shop.example/records/${taken[0]?.record}?full=1`, ownerKey);
+  assert.equal((mine.body.values as JsonObject).title, "Gremlins");
+  assert.equal(((mine.body.sources as JsonObject).title as JsonObject).owner, "dist.example", "the value keeps the presenter as its owner");
+  const shop = await host.storeFor("shop.example");
+  const entry = (await shop.entries()).find((e) => isObj(e.by) && e.by.take === "distTake" && e.writes.some((w) => w.address === "title"));
+  assert.equal((entry?.by as JsonObject).from, "dist.example/L-2", "the consumer's entry names the presenter's (8.5.1)");
+  // Taking again: the same record, bound by the presenter's id; nothing new flows.
+  const again = await call("POST", "/o/shop.example/take/distTake", ownerKey);
+  assert.equal((again.body.taken as JsonObject[])[0]?.record, taken[0]?.record);
+  assert.deepEqual((again.body.taken as JsonObject[])[0]?.flows, []);
+  // The stream pushed: the loop POSTs the distributor's entries to the shop's inbox, signed; the cursor moves.
+  const pushed = await call("POST", "/push", undefined, { owner: "dist.example" }, { "x-host-key": "hk" });
+  assert.equal(pushed.status, 200, JSON.stringify(pushed.body));
+  assert.deepEqual(pushed.body, [{ owner: "dist.example", contract: "toShop", acted: true, cursor: { discs: 1 } }]);
+  const rows = (await pool.query("select record, row from index_rows where owner = $1 and view = 'discs'", ["dist.example"])).rows as { record: string; row: JsonObject }[];
+  assert.deepEqual(rows.map((r) => [r.record, r.row.heading]), [["D-1", "Gremlins"]], "the inbox put the presenter's rows in the index under its name");
+  assert.deepEqual((await call("POST", "/push", undefined, { owner: "dist.example" }, { "x-host-key": "hk" })).body, [], "nothing new since the acknowledged cursor");
 });

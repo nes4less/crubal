@@ -74,8 +74,9 @@ Lifecycle cases (`ops.crubal`) also take `adopt: ID -> address`, `give-back: ID 
 decision's fields indented below it (9.5, 11.9, 14.7, 10.4: `facet:<key>`, `contract:<name>`,
 `unit:<spelling>`, `suggestion`, `held`), `split: A -> B` with `children:`, `values:` and `bindings:` below it (1.12; a `bindings.json` beside the
 case seeds the bindings and `expected.json` may check them), and the scaffolding `suggest: ID` and `hold: ID` (address, value,
-origin, via; address, rule) that leave a record as a gated run or a changed verdict would. An exchange
-`run.crubal` takes `decide-run: L-Rn` with `decision: retry|drop` (runs.md).
+origin, via; address, rule) that leave a record as a gated run or a changed verdict would. A take run names its `offer:` and may name a `presenter: <file>.json` beside the default
+`presenter.json`; `give: <offer>` runs the owner's own offer; `expire: <moment>` sweeps taken values past
+their terms (7.8). An exchange `run.crubal` takes `decide-run: L-Rn` with `decision: retry|drop` (runs.md).
 
 A views case with `expected-jsonld.json` projects the core `crubal:jsonld` shape (12.5).
 

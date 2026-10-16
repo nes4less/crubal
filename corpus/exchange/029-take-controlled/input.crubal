@@ -1,0 +1,32 @@
+// controlled (7.8): copied under the presenter's terms. The presenter's title overrides the consumer's own;
+// the sources carry the terms; when the presenter stops holding the title, the next take withdraws it; a
+// value taken under reshare: no never flows into the consumer's own offer.
+contract: catalogOffer
+  kind: offer
+  gives: title, format, runtime
+  to: public
+  mode: controlled
+  terms:
+    reshare: no
+    expires: 2027-01-01
+    revocable: yes
+contract: catalogTake
+  kind: take
+  from: distributor.example
+  reads:
+    title -> title
+    runtime -> runtime
+  mode: controlled
+
+contract: ourOffer
+  kind: offer
+  gives: title, runtime
+  to: public
+  mode: gathered
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-4 [origin: declared, via: L-1]
+  title: Xmas Vacation

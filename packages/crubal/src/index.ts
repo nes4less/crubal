@@ -12,7 +12,7 @@ export { evaluate, parseCondition, type Truth } from "./conditions.ts";
 export { checkRules, Engine, readRules, shortcutRules, type Result, type Rule, type Strength } from "./rules.ts";
 export { entryHash, fieldPath, land, matchParts, proposeSplit, readContracts, receive, sha256, validate, verifyChain, writeHash, type Contract, type IntakeRecord, type Observation } from "./store.ts";
 export { checkRecipe, dryRun, readRecipes, restamp, type Recipe, type ReviewItem, type Step, type StepStats } from "./migrate.ts";
-export { checkContracts, Exchange, readRoles, verifyBorder, type Role, type RunResult } from "./exchange.ts";
+export { checkContracts, Exchange, readRoles, verifyBorder, type Role, type RunResult, type Offer } from "./exchange.ts";
 export { checkPackages, readPackages, type PackageInfo } from "./packages.ts";
 export { AUDIENCES, checkViews, partitionOf, readViews, Views, type Projection, type ProjectOptions, type StreamEntry, type View, type ViewSet } from "./views.ts";
 export { applyEntry, emptyState, rebuild, redactable, redactableWrite, redactWrite, stateJson, type Entry, type State } from "./log.ts";
