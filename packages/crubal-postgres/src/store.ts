@@ -33,6 +33,8 @@ export type StoreOptions = {
   signer?: (hash: string) => string;
   /** Publish every view right after each write commits (`fresh: write`); else the host calls `project`. */
   fresh?: "write" | "asked";
+  /** The signer for a person this owner hosts (14.1), made on their first write; the host holds the key. */
+  hostedSigner?: (owner: string) => Promise<((hash: string) => string) | undefined>;
 };
 
 export class PgStore {
@@ -282,19 +284,48 @@ export class PgStore {
   }
 
   /** Link an entry to the chain's head, insert it, and move the head. The entry gets its `prev`. */
-  private async link(client: Client, entry: Entry, head: { seq: number; hash: string | null }): Promise<Entry> {
+  private async link(client: Client, entry: Entry, head: { seq: number; hash: string | null }, owner = this.owner, signer = this.options.signer): Promise<Entry> {
     const linked: Entry = { ...entry };
     if (head.hash) linked.prev = `sha256:${head.hash}`;
     else delete linked.prev;
     const hash = entryHash(linked);
-    if (this.options.signer) linked.sig = this.options.signer(hash);
+    if (signer) linked.sig = signer(hash);
     const seq = head.seq + 1;
     await client.query(
       "insert into log (owner, chain, seq, log_id, prev, hash, at, witnessed, entry) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-      [this.owner, this.chain, seq, String(linked.log), linked.prev ?? null, hash, typeof linked.at === "string" ? linked.at : null, linked.witnessed === true, linked],
+      [owner, this.chain, seq, String(linked.log), linked.prev ?? null, hash, typeof linked.at === "string" ? linked.at : null, linked.witnessed === true, linked],
     );
-    await client.query("update chains set head_seq = $3, head_hash = $4 where owner = $1 and chain = $2", [this.owner, this.chain, seq, hash]);
+    await client.query("update chains set head_seq = $3, head_hash = $4 where owner = $1 and chain = $2", [owner, this.chain, seq, hash]);
     return linked;
+  }
+
+  /**
+   * A hosted person's records live in their own chain (14.1): the writes to records owned `<owner>:<id>`
+   * leave the owner's entry and become one entry per person, linked and signed in the same transaction.
+   * The chains lock in a fixed order (the owner's first, then the persons' by name).
+   */
+  private async linkSplit(client: Client, entry: Entry, head: { seq: number; hash: string | null }, after: State): Promise<{ entry: Entry | null; hosted: Entry[] }> {
+    const prefix = `${this.owner}:`;
+    const byOwner = new Map<string, JsonObject[]>();
+    const own: JsonObject[] = [];
+    for (const w of (Array.isArray(entry.writes) ? entry.writes : []) as JsonObject[]) {
+      const rec = typeof w.record === "string" ? after.records.get(w.record) : undefined;
+      const o = rec?.owner;
+      if (o && o.startsWith(prefix)) byOwner.set(o, [...(byOwner.get(o) ?? []), w]);
+      else own.push(w);
+    }
+    const hosted: Entry[] = [];
+    for (const person of [...byOwner.keys()].sort()) {
+      await client.query("insert into chains (owner, chain) values ($1, $2) on conflict do nothing", [person, this.chain]);
+      const { rows } = await client.query("select head_seq, head_hash from chains where owner = $1 and chain = $2 for update", [person, this.chain]);
+      const h = rows[0] as { head_seq: number | string; head_hash: string | null };
+      const ph = { seq: Number(h.head_seq), hash: h.head_hash };
+      const signer = this.options.hostedSigner ? await this.options.hostedSigner(person) : undefined;
+      const e: Entry = { ...entry, log: `L-${ph.seq + 1}`, owner: person, writes: byOwner.get(person) as JsonObject[] };
+      hosted.push(await this.link(client, e, ph, person, signer));
+    }
+    if (!own.length) return { entry: null, hosted };
+    return { entry: await this.link(client, { ...entry, writes: own }, head), hosted };
   }
 
   /**
@@ -363,12 +394,12 @@ export class PgStore {
         after = (await settle(client, this.owner, before, (s) => applyEntry(s, e))).state;
         if (needs.needs.loaded.size === had) break;
       }
-      const linked = await this.link(client, entry, head);
+      const { entry: linked, hosted } = await this.linkSplit(client, entry, head, after);
       const problem = differs(after, draft);
       if (problem) throw new Error(`the log doesn't describe the change: ${problem}`);
       await persist(client, this.owner, before, after);
-      await this.afterPersist(client, before, after, head.seq + 1);
-      return { entry: linked, out: result.out };
+      await this.afterPersist(client, before, after, head.seq + (linked ? 1 : 0));
+      return { entry: linked ?? (hosted[0] as Entry), out: result.out };
     }).then(async (r) => {
       if (r.entry) await this.freshen();
       return r;
@@ -384,8 +415,8 @@ export class PgStore {
     let redacted = 0;
     await transaction(this.pool, async (client) => {
       await this.lockChain(client);
-      const { rows } = await client.query("select log_id, entry from log where owner = $1 and chain = $2 and not (entry ? 'redacted') order by seq for update", [this.owner, this.chain]);
-      for (const row of rows as { log_id: string; entry: Entry }[]) {
+      const { rows } = await client.query("select owner, log_id, entry from log where (owner = $1 or owner like $1 || ':%') and chain = $2 and not (entry ? 'redacted') order by ord for update", [this.owner, this.chain]);
+      for (const row of rows as { owner: string; log_id: string; entry: Entry }[]) {
         const writes = Array.isArray(row.entry.writes) ? row.entry.writes : [];
         const hits = writes.map((w, i) => (isObj(w) && ((w.record === recordId && typeof w.address === "string") || (isObj(w.observation) && w.observation.on === recordId)) ? i : -1)).filter((i) => i >= 0);
         if (!hits.length) continue;
@@ -395,7 +426,7 @@ export class PgStore {
         }
         const next = [...writes];
         for (const i of hits) next[i] = { redacted: `sha256:${writeHash(writes[i] as JsonObject)}` };
-        await client.query("update log set entry = $3 where owner = $1 and log_id = $2", [this.owner, row.log_id, { ...row.entry, writes: next }]);
+        await client.query("update log set entry = $3 where owner = $1 and log_id = $2", [row.owner, row.log_id, { ...row.entry, writes: next }]);
         redacted += hits.length;
       }
     });
@@ -415,7 +446,8 @@ export class PgStore {
     return transaction(this.pool, async (client) => {
       await this.lockChain(client);
       await wipeState(client, this.owner);
-      const { rows } = await client.query("select entry from log where owner = $1 and chain = $2 order by seq", [this.owner, this.chain]);
+      // The owner's chain and the chains of the people it hosts (14.1), in the order they were written.
+      const { rows } = await client.query("select entry from log where (owner = $1 or owner like $1 || ':%') and chain = $2 order by ord", [this.owner, this.chain]);
       for (const row of rows as { entry: Entry }[]) {
         const base = await this.base(client);
         const { state } = await settle(client, this.owner, base, (s) => applyEntry(s, row.entry));

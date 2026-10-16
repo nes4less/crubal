@@ -75,7 +75,11 @@ export function serve(host: Host): Server {
     // A signed request from another owner (RFC 9421) names its signer; a bearer token names a caller.
     const target = `${(req.headers["x-forwarded-proto"] as string | undefined) ?? "http"}://${req.headers.host ?? "host"}${req.url ?? "/"}`;
     const who: Caller | null = req.headers.signature ? await host.whoSigned(owner, { method, url: target, body: raw, headers: req.headers }) : await host.whoIs(req.headers.authorization);
-    const callerId = who && who.owner === owner ? who.caller : undefined;
+    // A hosted person (14.1) is the owner `domain:id`: the person signed in to the domain as that caller.
+    const hostedAt = owner.indexOf(":");
+    const domain = hostedAt > 0 ? owner.slice(0, hostedAt) : owner;
+    const hostedId = hostedAt > 0 ? owner.slice(hostedAt + 1) : undefined;
+    const callerId = who && who.owner === owner ? who.caller : who && hostedId && who.owner === domain && who.caller === hostedId ? owner : undefined;
     const isOwner = callerId === owner;
     const store = await host.storeFor(owner);
     const at = host.now();
@@ -280,7 +284,18 @@ export function serve(host: Host): Server {
     }
     if (what === "erase" && name && method === "POST") {
       if (!isOwner) throw new HttpError(403, "the owner erases");
+      if (hostedId) {
+        // A person erases their own records: the writes in their chain, and the domain's state follows.
+        const domainStore = await host.storeFor(domain);
+        const r = (await domainStore.state()).records.get(name);
+        if (!r || r.owner !== owner) throw new HttpError(403, `${name} isn't ${owner}'s`);
+        return json(res, 200, (await domainStore.erase(name)) as unknown as Json);
+      }
       return json(res, 200, (await store.erase(name)) as unknown as Json);
+    }
+    if (what === "rotate" && method === "POST") {
+      if (!isOwner) throw new HttpError(403, "the owner rotates its key");
+      return json(res, 200, (await host.rotateKey(owner, at)) as unknown as Json);
     }
     throw new HttpError(404, "not found");
   };

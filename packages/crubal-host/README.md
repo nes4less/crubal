@@ -82,6 +82,8 @@ POST /o/<owner>/offer/<contract>/unpublish  the token stops working, nothing is 
 POST /o/<owner>/take/<contract>             the owner takes: a signed fetch of the presenter's offer, the wrapper verified against its keys, each record taken into ours (bound by the presenter's id)
 POST /o/<owner>/inbox/<contract>            a presenter's pushed stream entries, signed; they land in the index under the presenter's name
 POST /push · POST /expire                    loops behind the host key: push `when: entry` streams and acknowledge; sweep taken values past their terms
+GET  /o/<domain>:<id>/export · POST /o/<domain>:<id>/erase/<record>   a hosted person (14.1), signed in to the domain as that caller: their own chain, their own records only
+POST /o/<owner>/rotate                      a new key signs from now; the well-known file lists the old with until and the new with from (11.7)
 GET  /o/<owner>/review (open items by key)   ·   POST /o/<owner>/review { key, decision, … }
 POST /o/<owner>/install { bundle }       owner only
 GET  /o/<owner>/export                   owner only: the log and the intake

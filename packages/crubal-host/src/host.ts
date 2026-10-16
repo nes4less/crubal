@@ -7,7 +7,7 @@ import { type Offer, verifyBorder } from "../../crubal/src/exchange.ts";
 import type { StreamEntry } from "../../crubal/src/views.ts";
 import { readFileSync } from "node:fs";
 import type { Json, JsonObject } from "../../crubal/src/model.ts";
-import type { Contract, Keys } from "../../crubal/src/store.ts";
+import { type Contract, type Keys, keyFor } from "../../crubal/src/store.ts";
 import { type Adapter, PgBorder, borderOptions } from "../../crubal-postgres/src/border.ts";
 import { type Client, migrate as migrateStore, type Pool, transaction } from "../../crubal-postgres/src/db.ts";
 import { PgStore } from "../../crubal-postgres/src/store.ts";
@@ -82,7 +82,32 @@ export class Host {
     const pub = publicKey.export({ format: "jwk" }).x as string;
     const priv = privateKey.export({ format: "jwk" }).d as string;
     await this.pool.query("insert into host_owners (owner, public, private, created) values ($1, $2, $3, $4) on conflict (owner) do nothing", [owner, pub, priv, this.now()]);
-    return { owner, public: pub };
+    const { rows } = await this.pool.query("select public from host_owners where owner = $1", [owner]);
+    return { owner, public: String((rows[0] as { public: string }).public) };
+  }
+
+  /**
+   * Rotate an owner's key (8.5, 11.7): a new key signs from now; the well-known file lists the old with
+   * `until` and the new with `from`, so the chain verifies across the rotation.
+   */
+  async rotateKey(owner: string, now = this.now()): Promise<{ owner: string; public: string; retired: string }> {
+    const old = await this.keyOf(owner);
+    if (!old) throw new Error(`${owner} has no key to rotate`);
+    const { rows } = await this.pool.query("select created from host_owners where owner = $1", [owner]);
+    const since = (await this.pool.query("select max(until) as until from host_keys where owner = $1", [owner])).rows[0] as { until: string | null };
+    await this.pool.query("insert into host_keys (owner, public, \"from\", until) values ($1, $2, $3, $4) on conflict do nothing", [owner, old.public, since.until ?? String((rows[0] as { created: string }).created), now]);
+    const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+    const pub = publicKey.export({ format: "jwk" }).x as string;
+    const priv = privateKey.export({ format: "jwk" }).d as string;
+    await this.pool.query("update host_owners set public = $2, private = $3, created = $4 where owner = $1", [owner, pub, priv, now]);
+    return { owner, public: pub, retired: old.public };
+  }
+
+  /** The signer for a hosted person (14.1): their key, made on first use. */
+  private async hostedSigner(owner: string): Promise<((hash: string) => string) | undefined> {
+    await this.createOwner(owner);
+    const key = await this.keyOf(owner);
+    return key ? (hash: string) => edSign(null, Buffer.from(hash, "hex"), createPrivateKey({ key: { kty: "OKP", crv: "Ed25519", x: key.public, d: key.private }, format: "jwk" })).toString("base64url") : undefined;
   }
 
   async owners(): Promise<{ owner: string; public: string }[]> {
@@ -121,7 +146,7 @@ export class Host {
    * domain, as a caller of the owner addressed. The signer's key comes from its well-known file.
    */
   async whoSigned(owner: string, req: { method: string; url: string; body?: string; headers: { [h: string]: string | string[] | undefined } }): Promise<Caller | null> {
-    const v = await verifyRequest({ ...req, publicX: async (keyid) => (await this.resolveKeys(keyid))[keyid]?.public, now: Math.floor(Date.parse(this.now()) / 1000) });
+    const v = await verifyRequest({ ...req, publicX: async (keyid) => keyFor(await this.resolveKeys(keyid), keyid, this.now())?.public, now: Math.floor(Date.parse(this.now()) / 1000) });
     // The signing owner acts as the caller `domain:owner`: a caller of that domain (14.1), never a bare ID here.
     return v ? { owner, caller: `${v.keyid}:owner` } : null;
   }
@@ -155,7 +180,7 @@ export class Host {
   async storeFor(owner: string): Promise<PgStore> {
     const key = await this.keyOf(owner);
     const signer = key ? (hash: string) => edSign(null, Buffer.from(hash, "hex"), createPrivateKey({ key: { kty: "OKP", crv: "Ed25519", x: key.public, d: key.private }, format: "jwk" })).toString("base64url") : undefined;
-    return new PgStore(this.pool, owner, { ...(signer ? { signer } : {}), ...(this.o.fresh ? { fresh: this.o.fresh } : {}), ...(this.o.allowUnsigned ? { allowUnsigned: true } : {}) });
+    return new PgStore(this.pool, owner, { ...(signer ? { signer } : {}), hostedSigner: (o) => this.hostedSigner(o), ...(this.o.fresh ? { fresh: this.o.fresh } : {}), ...(this.o.allowUnsigned ? { allowUnsigned: true } : {}) });
   }
 
   /**
@@ -354,7 +379,12 @@ export class Host {
 
   async wellKnown(): Promise<JsonObject> {
     const keys: JsonObject = {};
-    for (const o of await this.owners()) keys[o.owner] = { alg: "Ed25519", public: o.public };
+    const retired = (await this.pool.query("select owner, public, \"from\", until from host_keys order by until")).rows as { owner: string; public: string; from: string | null; until: string }[];
+    for (const o of await this.owners()) {
+      const old = retired.filter((k) => k.owner === o.owner).map((k): JsonObject => ({ alg: "Ed25519", public: k.public, ...(k.from ? { from: k.from } : {}), until: k.until }));
+      if (!old.length) keys[o.owner] = { alg: "Ed25519", public: o.public };
+      else keys[o.owner] = [...old, { alg: "Ed25519", public: o.public, from: (old.at(-1) as JsonObject).until as Json }];
+    }
     return { crubal: "2", owner: this.o.domain, keys, packages: [], ...(this.o.emergency ? { emergency: this.o.emergency as unknown as JsonObject } : {}) };
   }
 

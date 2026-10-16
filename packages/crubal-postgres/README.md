@@ -104,6 +104,13 @@ observations supporting the record and its parent, and the open split items on t
 at the package's `split` threshold the border opens `split:<record>`, and the decision `split` mints the
 version and moves the instances.
 
+## Hosted persons (14.1)
+
+A record owned `<owner>:<id>` is a hosted person's: the writes to it leave the owner's entry and become
+one entry per person in that person's chain, linked and signed (with the `hostedSigner` the host hands
+the store) in the same transaction; the chains lock in a fixed order. A rebuild applies the owner's chain
+and the hosted chains in the order they were written (`log.ord`); erase redacts in every chain.
+
 ## Not yet here
 
 The host: authentication, secrets, named adapters, signing, the loops and the HTTP surface

@@ -553,7 +553,11 @@ export class Exchange {
     const c = this.contracts.get(name);
     if (!c) throw new Error(`no contract ${name}`);
     const log = this.nextLog();
-    const owner = this.access?.owner ?? this.journal?.owner ?? this.records.all()[0]?.owner ?? "";
+    const domain = this.access?.owner ?? this.journal?.owner ?? this.records.all()[0]?.owner ?? "";
+    // A person owns what the package lets a person own (14.1): the record is theirs, written as `domain:id`.
+    const kind = this.dict.levels.get(level) ?? level;
+    const person = callerId && !callerId.includes(":") && (this.access?.perms.ownership.get("person") ?? []).includes(kind);
+    const owner = person ? `${domain}:${callerId}` : domain;
     // A refusal by the rules puts everything back: the arrival never happened.
     const prevRecords = new Map(this.records);
     const prevBindings = new Map(this.bindings);

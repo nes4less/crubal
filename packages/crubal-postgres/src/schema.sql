@@ -247,3 +247,6 @@ drop trigger if exists log_only_redaction on log;
 create trigger log_only_redaction before update or delete on log for each row execute function log_only_redaction();
 
 insert into schema_version (version) values ('2026-10-15') on conflict do nothing;
+
+-- One order across an owner's chain and the chains of the people it hosts (14.1), for a rebuild.
+alter table log add column if not exists ord bigint generated always as identity;

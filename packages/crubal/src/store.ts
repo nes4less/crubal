@@ -38,11 +38,25 @@ export function entryHash(entry: JsonObject): string {
 }
 
 /** Published keys by owner domain: `{ "test.example": { "alg": "Ed25519", "public": "<base64url>" } }`. */
-export type Keys = { [owner: string]: { alg: string; public: string } };
+/** A published signing key (11.7): with `from` and `until` when it was rotated, so it still verifies what it signed. */
+export type Key = { alg: string; public: string; from?: string; until?: string };
+export type Keys = { [owner: string]: Key | Key[] };
+
+/** The owner's key in force at a moment: the one whose span holds `at`, else an undated one, else the latest. */
+export function keyFor(keys: Keys, owner: string, at?: string): Key | undefined {
+  const k = keys[owner];
+  if (!k) return undefined;
+  const list = Array.isArray(k) ? k : [k];
+  if (at) {
+    const spans = list.filter((x) => (!x.from || x.from <= at) && (!x.until || at < x.until));
+    if (spans.length) return spans.at(-1);
+  }
+  return list.find((x) => !x.from && !x.until) ?? list.at(-1);
+}
 
 /** Does `sig` (base64url) verify over the entry's hash bytes with the owner's Ed25519 key? */
 export function verifySig(entry: JsonObject, owner: string, keys: Keys): boolean {
-  const k = keys[owner];
+  const k = keyFor(keys, owner, typeof entry.at === "string" ? entry.at : undefined);
   if (!k || k.alg !== "Ed25519" || typeof entry.sig !== "string") return false;
   const key = createPublicKey({ key: { kty: "OKP", crv: "Ed25519", x: k.public }, format: "jwk" });
   return verify(null, Buffer.from(entryHash(entry), "hex"), key, Buffer.from(entry.sig, "base64url"));

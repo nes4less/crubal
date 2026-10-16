@@ -17,6 +17,7 @@ let pool: Pool;
 let drop: () => Promise<void>;
 let base = "";
 let host: Host;
+let clock = "2026-10-15T22:00:00Z";
 let server: ReturnType<typeof serve>;
 const acted: JsonObject[] = [];
 
@@ -29,7 +30,7 @@ before(async () => {
   host = new Host(pool, {
     domain: "host.example",
     hostKey: "hk",
-    now: () => "2026-10-15T22:00:00Z",
+    now: () => clock,
     fresh: "write",
     resolveKeys: async (domain) => {
       if (domain === "pub.example") return { "pub.example": { alg: "Ed25519", public: key.x } };
@@ -92,6 +93,20 @@ contract: label
   reads:
     itemId -> itemId
   host:url: https://printer.example/labels
+kind: collection
+  levels: collection
+  base: Collection
+class: Collection
+  for: collection
+  facets:
+    !title
+contract: newCollection
+  kind: form
+  origin: declared
+  needs:
+    !title
+ownership:
+  person: collection
 
 shape: card
   slots:
@@ -307,7 +322,7 @@ contract: distTake
   assert.equal((mine.body.values as JsonObject).title, "Gremlins");
   assert.equal(((mine.body.sources as JsonObject).title as JsonObject).owner, "dist.example", "the value keeps the presenter as its owner");
   const shop = await host.storeFor("shop.example");
-  const entry = (await shop.entries()).find((e) => isObj(e.by) && e.by.take === "distTake" && e.writes.some((w) => w.address === "title"));
+  const entry = (await shop.entries()).find((e) => isObj(e.by) && e.by.take === "distTake" && (e.writes as JsonObject[]).some((w) => w.address === "title"));
   assert.equal((entry?.by as JsonObject).from, "dist.example/L-2", "the consumer's entry names the presenter's (8.5.1)");
   // Taking again: the same record, bound by the presenter's id; nothing new flows.
   const again = await call("POST", "/o/shop.example/take/distTake", ownerKey);
@@ -320,4 +335,52 @@ contract: distTake
   const rows = (await pool.query("select record, row from index_rows where owner = $1 and view = 'discs'", ["dist.example"])).rows as { record: string; row: JsonObject }[];
   assert.deepEqual(rows.map((r) => [r.record, r.row.heading]), [["D-1", "Gremlins"]], "the inbox put the presenter's rows in the index under its name");
   assert.deepEqual((await call("POST", "/push", undefined, { owner: "dist.example" }, { "x-host-key": "hk" })).body, [], "nothing new since the acknowledged cursor");
+});
+
+test("a hosted person owns their collection in their own chain, exports and erases it as its owner; the key rotates", { skip: !url }, async () => {
+  const staffKey = await host.issueKey("shop.example", "S-1", "staff2");
+  const ownerKey = await host.issueKey("shop.example", "shop.example", "owner3");
+  // The person's form run mints a collection: the package lets a person own one, so it is theirs.
+  const made = await call("POST", "/o/shop.example/run/newCollection", staffKey, { level: "collection", answers: { title: "My shelf" } });
+  assert.equal(made.status, 200, JSON.stringify(made.body));
+  const id = String((made.body.arrival as JsonObject)?.record ?? made.body.record);
+  const rec = await call("GET", `/o/shop.example/records/${id}`, staffKey);
+  assert.equal(rec.body.owner, "shop.example:S-1", JSON.stringify(rec.body));
+  assert.equal((rec.body.values as JsonObject).title, "My shelf");
+  // Their chain holds the write, signed with the key the host made for them; the shop's chain holds none of it.
+  const mine = await call("GET", "/o/shop.example:S-1/export", staffKey);
+  assert.equal(mine.status, 200, JSON.stringify(mine.body));
+  const myLog = mine.body.log as JsonObject[];
+  assert.equal(myLog.length, 1);
+  assert.equal(myLog[0]?.owner, "shop.example:S-1");
+  assert.ok((myLog[0]?.writes as JsonObject[]).some((w) => w.record === id && w.address === "title"));
+  const wk = await call("GET", "/.well-known/crubal.json");
+  assert.ok((wk.body.keys as JsonObject)["shop.example:S-1"], "the host lists the person's key by their id");
+  assert.deepEqual(verifyChain(myLog, wk.body.keys as never), { valid: true });
+  const shops = await call("GET", "/o/shop.example/export", ownerKey);
+  assert.ok(!(shops.body.log as JsonObject[]).some((e) => (e.writes as JsonObject[]).some((w) => w.record === id && w.address === "title")), "nothing of the collection's values in the shop's chain");
+  assert.equal((await call("GET", "/o/shop.example:S-1/export", ownerKey)).status, 403, "the shop isn't the person");
+  // The person erases their own record and no one else's; the shop's state follows.
+  assert.equal((await call("POST", "/o/shop.example:S-1/erase/P-2", staffKey)).status, 403);
+  const erased = await call("POST", `/o/shop.example:S-1/erase/${id}`, staffKey);
+  assert.equal(erased.status, 200, JSON.stringify(erased.body));
+  assert.equal(erased.body.redacted, 1);
+  assert.deepEqual(((await call("GET", `/o/shop.example/records/${id}`, staffKey)).body.values as JsonObject), {});
+  // Rotation: the old key keeps its span, the new one signs from now, and the chain verifies across it.
+  clock = "2026-10-15T23:00:00Z";
+  const rotated = await call("POST", "/o/shop.example/rotate", ownerKey);
+  assert.equal(rotated.status, 200, JSON.stringify(rotated.body));
+  clock = "2026-10-15T23:01:00Z";
+  const store = await host.storeFor("shop.example");
+  await store.commit({ person: "shop.example" }, (d) => {
+    d.records.set("P-3", { id: "P-3", kind: "item", level: "product", owner: "shop.example", values: { title: "Elf", format: "DVD" }, sources: { "*": { origin: "declared", via: "L-9" } } });
+  }, clock);
+  const wk2 = await call("GET", "/.well-known/crubal.json");
+  const keys = (wk2.body.keys as JsonObject)["shop.example"] as JsonObject[];
+  assert.equal(keys.length, 2);
+  assert.equal(keys[0]?.until, "2026-10-15T23:00:00Z");
+  assert.equal(keys[1]?.from, "2026-10-15T23:00:00Z");
+  assert.equal(keys[1]?.public, rotated.body.public);
+  const exp = await call("GET", "/o/shop.example/export", ownerKey);
+  assert.deepEqual(verifyChain(exp.body.log as JsonObject[], wk2.body.keys as never), { valid: true }, "entries before and after the rotation verify");
 });

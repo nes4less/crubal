@@ -13,7 +13,7 @@ import { type Recipe, readRecipes, type Step } from "./migrate.ts";
 import type { Json, JsonObject } from "./model.ts";
 import { type PackageInfo, readPackages } from "./packages.ts";
 import { readRules, type Rule } from "./rules.ts";
-import { type Contract, type Keys, readContracts, sha256 } from "./store.ts";
+import { type Contract, type Keys, readContracts, sha256, keyFor } from "./store.ts";
 import { type Filter, readViews, type Shape, type View, type ViewSet } from "./views.ts";
 
 const isObj = (v: Json | undefined): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -535,7 +535,8 @@ export function verifyBundle(b: JsonObject, keys?: Keys): { valid: boolean; reas
   const hash = bundleHash(b);
   if (b.hash !== `sha256:${hash}`) return { valid: false, reason: "hash" };
   const owner = String(b.owner ?? "");
-  const k = keys?.[owner];
+  // The key in force when the version was published (11.7): a rotated key still verifies what it signed.
+  const k = keys ? keyFor(keys, owner, typeof b.version === "string" ? b.version : undefined) : undefined;
   if (!k) return keys ? { valid: false, reason: "no key" } : { valid: true };
   if (k.alg !== "Ed25519" || typeof b.sig !== "string") return { valid: false, reason: "signature" };
   const key = createPublicKey({ key: { kty: "OKP", crv: "Ed25519", x: k.public }, format: "jwk" });

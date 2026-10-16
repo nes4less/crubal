@@ -3,6 +3,7 @@
 // anywhere; the ones over the store skip without CRUBAL_PG_URL.
 
 import assert from "node:assert/strict";
+import { entryHash, keyFor, verifySig } from "../../crubal/src/store.ts";
 import { createHmac, createPrivateKey, createSign, generateKeyPairSync, sign as edSign } from "node:crypto";
 import { after, before, test } from "node:test";
 import type { JsonObject } from "../../crubal/src/model.ts";
@@ -176,4 +177,18 @@ test("credentials: connected, expired, refreshed through the provider; the retry
   assert.equal((await store.state()).edges.has("E-9001"), false);
   await assert.rejects(store.redact(String(made.entry)), /witnessed/, "a witnessed entry is never redacted");
   void createPrivateKey;
+});
+
+test("a rotated key verifies only inside its span: an entry signed with the retired key after until is refused", () => {
+  const pair = () => { const { privateKey, publicKey } = generateKeyPairSync("ed25519"); return { priv: privateKey, x: publicKey.export({ format: "jwk" }).x as string }; };
+  const a = pair();
+  const b = pair();
+  const keys = { "o.example": [{ alg: "Ed25519", public: a.x, until: "2026-06-01T00:00:00Z" }, { alg: "Ed25519", public: b.x, from: "2026-06-01T00:00:00Z" }] };
+  const signed = (at: string, k: typeof a) => { const e: { [k: string]: unknown } = { log: "L-1", owner: "o.example", at, by: { person: "x" }, writes: [] }; e.sig = edSign(null, Buffer.from(entryHash(e as never), "hex"), k.priv).toString("base64url"); return e; };
+  assert.equal(keyFor(keys, "o.example", "2026-01-01T00:00:00Z")?.public, a.x);
+  assert.equal(keyFor(keys, "o.example", "2026-07-01T00:00:00Z")?.public, b.x);
+  assert.equal(verifySig(signed("2026-01-01T00:00:00Z", a) as never, "o.example", keys), true, "the retired key, inside its span");
+  assert.equal(verifySig(signed("2026-07-01T00:00:00Z", a) as never, "o.example", keys), false, "the retired key, after until");
+  assert.equal(verifySig(signed("2026-07-01T00:00:00Z", b) as never, "o.example", keys), true, "the new key, from its start");
+  assert.equal(verifySig(signed("2026-01-01T00:00:00Z", b) as never, "o.example", keys), false, "the new key, before it existed");
 });

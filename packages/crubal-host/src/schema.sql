@@ -75,3 +75,12 @@ create table if not exists host_offer_links (
   revoked boolean not null default false,
   primary key (owner, contract)
 );
+
+-- Retired signing keys (11.7): each with the span it signed in, so a rotated key still verifies.
+create table if not exists host_keys (
+  owner text not null,
+  public text not null,
+  "from" text,
+  until text not null,
+  primary key (owner, public)
+);
