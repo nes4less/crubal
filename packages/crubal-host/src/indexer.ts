@@ -5,7 +5,7 @@
 
 import { Access } from "../../crubal/src/access.ts";
 import type { Json, JsonObject } from "../../crubal/src/model.ts";
-import { partitionOf, type View } from "../../crubal/src/views.ts";
+import { type Nested, partitionOf, type View } from "../../crubal/src/views.ts";
 import type { Pool } from "../../crubal-postgres/src/db.ts";
 import type { PgStore } from "../../crubal-postgres/src/store.ts";
 
@@ -24,8 +24,8 @@ function textOf(row: JsonObject): string {
   return out.join(" ");
 }
 
-export type Serve = { page?: number; picks?: { [filter: string]: string[] }; q?: string; caller?: string };
-export type Page = { view: string; version: string; audience: string; seq: number; page: number; pages: number; rows: JsonObject[]; counts: { [filter: string]: { [bucket: string]: number } }; indexable: boolean };
+export type Serve = { page?: number; picks?: { [filter: string]: string[] }; q?: string; caller?: string; /** A further shape the view names (12.1): its output serves in place of the row. */ shape?: string };
+export type Page = { view: string; version: string; audience: string; seq: number; page: number; pages: number; rows: JsonObject[]; counts: { [filter: string]: { [bucket: string]: number } }; nested?: Nested; indexable: boolean };
 
 export class Index {
   readonly pool: Pool;
@@ -112,9 +112,18 @@ export class Index {
     };
     const passes = (r: Row, except?: string) => Object.keys(picks).every((f) => f === except || inPick(r, f));
     const counts: Page["counts"] = {};
+    const nested: Nested = {};
+    const bucketsOf = (r: Row, f: string) => ((r.buckets as JsonObject)?.[f] as string[] | undefined) ?? [];
     for (const f of v.filters) {
       const pool = rows.filter((r) => passes(r, f));
-      counts[f] = Object.fromEntries(this.bucketNames(p, f).map((b) => [b, pool.filter((r) => (((r.buckets as JsonObject)?.[f] as string[] | undefined) ?? []).includes(b)).length]));
+      counts[f] = Object.fromEntries(this.bucketNames(p, f).map((b) => [b, pool.filter((r) => bucketsOf(r, f).includes(b)).length]));
+      // Dependent facets (12.3): their values counted inside each of this filter's buckets.
+      const deps = p.views.filters.get(f)?.dependent ?? [];
+      if (!deps.length) continue;
+      nested[f] = Object.fromEntries(this.bucketNames(p, f).map((b) => {
+        const inB = pool.filter((r) => bucketsOf(r, f).includes(b));
+        return [b, Object.fromEntries(deps.map((d) => { const tally: { [value: string]: number } = {}; for (const r of inB) for (const val of bucketsOf(r, d)) tally[val] = (tally[val] ?? 0) + 1; return [d, tally]; }))];
+      }));
     }
     const chosen = rows.filter((r) => passes(r));
     // The view's order, from what the store put on the row (12.7 sort and pin), then by record.
@@ -137,8 +146,13 @@ export class Index {
     const onPage = chosen.slice((page - 1) * v.page, page * v.page);
     const pickList = Object.entries(picks).filter(([, c]) => c.length);
     const indexable = !o.q && page === 1 && (pickList.length === 0 || (pickList.length === 1 && v.index.includes(pickList[0]?.[0] as string) && pickList[0]?.[1].length === 1));
+    if (o.shape && !v.shapes.includes(o.shape)) throw Object.assign(new Error(`${view} has no shape ${o.shape}`), { status: 404 });
     const out = onPage.map((r): JsonObject => {
-      const row = { ...(r.row as JsonObject) };
+      const stored = r.row as JsonObject;
+      // A further shape (12.1) serves what the store put under shapes; the first shape is the row itself.
+      if (o.shape && o.shape !== v.shapes[0]) return { record: stored.record as Json, ...(isObj(stored.shapes) && stored.shapes[o.shape] !== undefined ? { [o.shape === "crubal:jsonld" ? "jsonld" : o.shape === "crubal:portable" ? "values" : "row"]: stored.shapes[o.shape] as Json } : {}) };
+      const row = { ...stored };
+      delete row.shapes;
       const marks = isObj(row.marks) ? row.marks : undefined;
       if (marks) {
         for (const [slot, need] of Object.entries(marks)) {
@@ -150,6 +164,6 @@ export class Index {
       delete row.ancestors;
       return row;
     });
-    return { view, version, audience: v.show, seq: cur ? Number(cur.seq) : 0, page, pages, rows: out, counts, indexable };
+    return { view, version, audience: v.show, seq: cur ? Number(cur.seq) : 0, page, pages, rows: out, counts, ...(Object.keys(nested).length ? { nested } : {}), indexable };
   }
 }

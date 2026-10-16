@@ -131,8 +131,8 @@ export function serve(host: Host): Server {
       const index = new Index(host.pool);
       await index.apply(store, name);
       const picks: { [filter: string]: string[] } = {};
-      for (const [k, val] of url.searchParams) if (!["page", "q"].includes(k)) picks[k] = val.split(",").map((x) => x.trim()).filter(Boolean);
-      const page = await index.serve(store, name, { ...(q("page") ? { page: Number(q("page")) } : {}), ...(Object.keys(picks).length ? { picks } : {}), ...(q("q") ? { q: q("q") as string } : {}), ...(callerId ? { caller: callerId } : {}) });
+      for (const [k, val] of url.searchParams) if (!["page", "q", "shape"].includes(k)) picks[k] = val.split(",").map((x) => x.trim()).filter(Boolean);
+      const page = await index.serve(store, name, { ...(q("page") ? { page: Number(q("page")) } : {}), ...(Object.keys(picks).length ? { picks } : {}), ...(q("q") ? { q: q("q") as string } : {}), ...(q("shape") ? { shape: q("shape") as string } : {}), ...(callerId ? { caller: callerId } : {}) });
       const th = termsHeaders(readTerms((await store.definitions()).info.terms));
       const robots = [page.indexable ? "all" : "noindex", ...(th["x-robots-tag"] ? th["x-robots-tag"].split(", ") : [])].filter((t, i, a) => a.indexOf(t) === i && !(t === "all" && a.includes("noindex")));
       res.setHeader("x-robots-tag", robots.join(", "));

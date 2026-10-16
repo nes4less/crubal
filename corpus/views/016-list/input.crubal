@@ -1,0 +1,36 @@
+// A hand-made list (chapter 12.2): a record whose crubal:items holds ordered links. The view shows those
+// records in that order, whatever their levels; pin, hide and order don't apply. Archived items are left out.
+view: picks
+
+view: picks
+  select:
+    list: L-1
+  shape: card
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: DVD
+  releaseDate: 1989
+
+product: P-2 [origin: declared, via: L-1]
+  title: Home Alone
+  format: Blu-ray
+  releaseDate: 1990
+
+product: P-3 [origin: declared, via: L-1]
+  crubal:status: archived [reason: discontinued]
+  title: Die Hard
+  format: 4K
+  releaseDate: 1988
+
+unit: U-1 of P-1 [origin: observed, via: L-2]
+  condition: VG
+  price: 12.50USD
+
+product: L-1 [origin: declared, via: L-1]
+  title: Staff picks
+  crubal:items: &P-2, &U-1, &P-3, &P-1

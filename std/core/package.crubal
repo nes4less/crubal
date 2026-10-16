@@ -20,6 +20,13 @@ facet: count
   label: Count
   describe: How many identical things a fungible part holds (chapter 5.6).
 
+facet: items
+  type: link
+  pick: any
+  ordered: yes
+  label: Items
+  describe: The records a hand-made list holds, in its order (chapter 12.2). A view shows the list with select: list.
+
 facet: clonedFrom
   type: link
   label: Cloned from

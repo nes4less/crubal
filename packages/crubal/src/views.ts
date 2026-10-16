@@ -165,10 +165,20 @@ export function checkViews(set: ViewSet, dict: Dictionary): void {
     });
   }
   for (const s of set.shapes.values()) {
-    for (const sl of s.slots) for (const k of slotKeys(sl.from)) if (!sl.from.startsWith('"') || k) if (!defined(k) && k !== "id") throw new CrubalError(`the slot ${sl.to} reads ${k}, which isn't a facet`, sl.line);
+    for (const sl of s.slots) {
+      // A page shape's slot may hold another view (12.1), run with the page's record as its context.
+      if (sl.from.startsWith("view:")) {
+        if (!set.views.has(sl.from.slice(5))) throw new CrubalError(`the slot ${sl.to} holds the view ${sl.from.slice(5)}, which doesn't exist`, sl.line);
+        continue;
+      }
+      for (const k of slotKeys(sl.from)) if (!sl.from.startsWith('"') || k) if (!defined(k) && k !== "id") throw new CrubalError(`the slot ${sl.to} reads ${k}, which isn't a facet`, sl.line);
+    }
   }
+  for (const f of set.filters.values()) for (const d of f.dependent) if (!defined(d)) throw new CrubalError(`the filter ${f.name} depends on ${d}, which isn't a facet`, f.line);
   for (const v of set.views.values()) {
-    for (const s of v.shapes) if (s !== "crubal:portable" && !set.shapes.has(s)) throw new CrubalError(`${v.name} names the shape ${s}, which doesn't exist`, v.line);
+    for (const s of v.shapes) if (!CORE_SHAPES.includes(s) && !set.shapes.has(s)) throw new CrubalError(`${v.name} names the shape ${s}, which doesn't exist`, v.line);
+    // A list is the whole selection (12.2): a level, classes, a condition or curation would contradict it.
+    if (v.list && (v.level || v.wears.length || v.when || v.pin.length || v.hide.length || v.order.length)) throw new CrubalError(`${v.name} selects a list, so it takes no level, wears, when, pin, hide or order`, v.line);
     for (const f of v.filters) if (!set.filters.has(f)) throw new CrubalError(`${v.name} names the filter ${f}, which doesn't exist`, v.line);
     for (const i of v.index) if (!v.filters.includes(i)) throw new CrubalError(`${v.name} indexes ${i}, which isn't one of its filters`, v.indexLine);
     for (const c of v.wears) if (!dict.classes.has(c)) throw new CrubalError(`${v.name} selects by ${c}, which isn't a class`, v.line);
@@ -202,9 +212,15 @@ export type ProjectOptions = {
   /** Only these records: a projector rebuilding the rows a write made stale (12.6) asks for them alone. */
   only?: string[];
 };
-export type Projection = { rows: JsonObject[]; records: string[]; counts: { [filter: string]: { [bucket: string]: number } }; pages: number; indexable: boolean };
+export type Counts = { [filter: string]: { [bucket: string]: number } };
+/** Dependent counts (12.3): filter → bucket → dependent facet → value → count. */
+export type Nested = { [filter: string]: { [bucket: string]: { [dependent: string]: { [value: string]: number } } } };
+export type Projection = { rows: JsonObject[]; records: string[]; counts: Counts; nested?: Nested; pages: number; indexable: boolean };
 /** One entry of a view's projection stream (12.6, 12.7). */
 export type StreamEntry = { projection: string; audience: string; seq: number; record: string; row?: JsonObject; buckets?: JsonObject; sort?: string[]; pin?: number; removed?: true; reset?: true };
+
+/** The shapes the core defines (12.1, 12.5): the portable one, and structured data for the public. */
+export const CORE_SHAPES = ["crubal:portable", "crubal:jsonld"];
 
 /** A view's partition: what it declares, else `controlled` above member and `none` otherwise (12.2). */
 export function partitionOf(v: View): string {
@@ -339,8 +355,63 @@ export class Views {
       if (!f) continue;
       const names = this.bucketsOf(f).filter((b) => this.inBucket(r, f, b)).map((b) => b.name);
       if (names.length) out[fname] = names;
+      // A dependent facet (12.3): its values, one bucket each, so an index can count them inside this filter's.
+      for (const dep of f.dependent) {
+        const vals = this.valuesAt(r, dep).filter((x) => this.fit(dep, x, "public")).map(plainText);
+        if (vals.length) out[dep] = [...new Set(vals)];
+      }
     }
     return out;
+  }
+
+  /** Dependent counts (12.3) over records already narrowed by the other filters. */
+  nestedCounts(v: View, pool: (f: string) => Record[]): Nested {
+    const out: Nested = {};
+    for (const fname of v.filters) {
+      const f = this.set.filters.get(fname);
+      if (!f?.dependent.length) continue;
+      const rows = pool(fname);
+      const per: Nested[string] = {};
+      for (const b of this.bucketsOf(f)) {
+        const inB = rows.filter((r) => this.inBucket(r, f, b));
+        const byDep: Nested[string][string] = {};
+        for (const dep of f.dependent) {
+          const tally: { [value: string]: number } = {};
+          for (const r of inB) for (const val of new Set(this.valuesAt(r, dep).map(plainText))) tally[val] = (tally[val] ?? 0) + 1;
+          byDep[dep] = tally;
+        }
+        per[b.name] = byDep;
+      }
+      out[fname] = per;
+    }
+    return out;
+  }
+
+  /** Does a view select this record (its own tests, before curation and the shape's required slots)? */
+  private selects(v: View, r: Record, opts: ProjectOptions): boolean {
+    if (v.level && r.level !== v.level) return false;
+    // An archived record is left out unless the view selects on status explicitly (1.12).
+    if (r.status?.state === "archived" && !(v.when && /\bstatus\b/.test(v.when))) return false;
+    if (v.wears.some((w) => !this.wearsOf(r).includes(w))) return false;
+    if (v.hide.includes(r.id)) return false;
+    const vals = this.conditionValues(r);
+    if (v.when && evaluate(parseCondition(v.when), vals) !== true) return false;
+    if (v.of) {
+      const ctx = opts.context;
+      if (!ctx) return false;
+      const cvals: JsonObject = this.conditionValues(ctx);
+      const cond = v.of.replace(/context\.(\w+)/g, (_, k: string) => JSON.stringify(cvals[k] === undefined ? "" : plainText(cvals[k] as Json)));
+      if (evaluate(parseCondition(cond), vals) !== true) return false;
+    }
+    return true;
+  }
+
+  /** The records a list holds, in its order (12.2): the links in its `crubal:items`. */
+  private listed(v: View): Record[] {
+    const list = v.list ? this.records.get(v.list) : undefined;
+    const items = list?.values["crubal:items"];
+    const ids = (Array.isArray(items) ? items : items === undefined ? [] : [items]).map((x) => (isObj(x) && "$link" in x ? String(x.$link) : String(x)));
+    return ids.flatMap((id) => this.records.get(id) ?? []).filter((r) => r.status?.state !== "archived");
   }
 
   private inBucket(r: Record, f: Filter, b: Bucket): boolean {
@@ -361,27 +432,17 @@ export class Views {
   /** The records a view selects, curated and ordered, before filters and paging. */
   select(v: View, opts: ProjectOptions = {}): Record[] {
     const audience = opts.audience ?? v.show;
-    const pool = opts.only ? opts.only.flatMap((id) => this.records.get(id) ?? []) : v.level ? this.records.atLevel(v.level) : this.records.all();
-    let rows = pool.filter((r) => {
-      if (v.level && r.level !== v.level) return false;
-      // An archived record is left out unless the view selects on status explicitly (1.12).
-      if (r.status?.state === "archived" && !(v.when && /\bstatus\b/.test(v.when))) return false;
-      if (v.wears.some((w) => !this.wearsOf(r).includes(w))) return false;
-      if (v.hide.includes(r.id)) return false;
-      const vals = this.conditionValues(r);
-      if (v.when && evaluate(parseCondition(v.when), vals) !== true) return false;
-      if (v.of) {
-        const ctx = opts.context;
-        if (!ctx) return false;
-        const cvals: JsonObject = this.conditionValues(ctx);
-        const cond = v.of.replace(/context\.(\w+)/g, (_, k: string) => JSON.stringify(cvals[k] === undefined ? "" : plainText(cvals[k] as Json)));
-        if (evaluate(parseCondition(cond), vals) !== true) return false;
-      }
-      return true;
-    });
-    // A record whose required slot is empty is dropped from the view.
     const shape = this.set.shapes.get(v.shapes[0] ?? "");
-    rows = rows.filter((r) => (shape?.slots ?? []).every((s) => !s.required || this.slot(r, s, audience, opts.caller) !== undefined));
+    const fills = (r: Record) => (shape?.slots ?? []).every((s) => !s.required || this.slot(r, s, audience, opts.caller) !== undefined);
+    if (v.list) {
+      // A hand-made list (12.2): its records in its order, whatever their levels; no curation applies.
+      const listed = this.listed(v).filter(fills);
+      return opts.only ? listed.filter((r) => (opts.only as string[]).includes(r.id)) : listed;
+    }
+    const pool = opts.only ? opts.only.flatMap((id) => this.records.get(id) ?? []) : v.level ? this.records.atLevel(v.level) : this.records.all();
+    let rows = pool.filter((r) => this.selects(v, r, opts));
+    // A record whose required slot is empty is dropped from the view.
+    rows = rows.filter(fills);
     const cmp = (a: Record, b: Record) => {
       for (const o of v.order) {
         const x = plainText((this.effective(a)[o.key] ?? "") as Json);
@@ -426,29 +487,95 @@ export class Views {
       const pool = all.filter((r) => passes(r, fname));
       counts[fname] = Object.fromEntries(this.bucketsOf(f).map((b) => [b.name, pool.filter((r) => this.inBucket(r, f, b)).length]));
     }
+    const nested = this.nestedCounts(v, (fname) => all.filter((r) => passes(r, fname)));
     const chosen = all.filter((r) => passes(r));
     const pages = Math.max(1, Math.ceil(chosen.length / v.page));
     const page = opts.page ?? 1;
     const onPage = chosen.slice((page - 1) * v.page, page * v.page);
     const pickList = Object.entries(picks).filter(([, c]) => c.length);
     const indexable = page === 1 && (pickList.length === 0 || (pickList.length === 1 && v.index.includes(pickList[0]?.[0] as string) && pickList[0]?.[1].length === 1));
-    const shapeName = v.shapes[0] ?? "";
+    const [shapeName = "", ...more] = v.shapes;
     const rows = onPage.map((r): JsonObject => {
-      if (shapeName === "crubal:portable") return { record: r.id, values: this.portable(r, audience, opts.caller) };
-      const row: JsonObject = { record: r.id };
-      const marks: JsonObject = {};
-      for (const s of this.set.shapes.get(shapeName)?.slots ?? []) {
-        const val = this.slot(r, s, audience, opts.caller);
-        if (val !== undefined) row[s.to] = val;
-        const m = opts.caller ? [] : this.marksFor(s, audience);
-        if (val !== undefined && m.length) marks[s.to] = m.length === 1 ? (m[0] as string) : m;
+      const row = this.shaped(r, shapeName, audience, opts);
+      // Further shapes (12.1) share the selection: their output rides under `shapes`, served on request.
+      const shapes: JsonObject = {};
+      for (const s of more) {
+        const out = this.shaped(r, s, audience, opts);
+        delete out.record;
+        if (Object.keys(out).length) shapes[s] = s === "crubal:jsonld" ? (out.jsonld as Json) : s === "crubal:portable" ? (out.values as Json) : out;
       }
-      if (Object.keys(marks).length) row.marks = marks;
+      if (Object.keys(shapes).length) row.shapes = shapes;
       // A partitioned view's row carries its record's ancestors, so an index can match edges to it.
       if (partition !== "none" && opts.access) row.ancestors = opts.access.ancestors(r.id);
       return row;
     });
-    return { rows, records: onPage.map((r) => r.id), counts, pages, indexable };
+    return { rows, records: onPage.map((r) => r.id), counts, ...(Object.keys(nested).length ? { nested } : {}), pages, indexable };
+  }
+
+  /** One record in one shape: a core shape's object, or the shape's slots with their role marks. */
+  private shaped(r: Record, shapeName: string, audience: string, opts: ProjectOptions): JsonObject {
+    if (shapeName === "crubal:portable") return { record: r.id, values: this.portable(r, audience, opts.caller) };
+    if (shapeName === "crubal:jsonld") {
+      const ld = this.jsonld(r, audience);
+      return ld ? { record: r.id, jsonld: ld } : { record: r.id };
+    }
+    const row: JsonObject = { record: r.id };
+    const marks: JsonObject = {};
+    for (const s of this.set.shapes.get(shapeName)?.slots ?? []) {
+      // A slot holding a view (12.1): that view's rows, with this record as their context.
+      if (s.from.startsWith("view:")) {
+        const inner = this.nestedRows(s.from.slice(5), r, audience, opts);
+        if (inner.length) row[s.to] = inner;
+        continue;
+      }
+      const val = this.slot(r, s, audience, opts.caller);
+      if (val !== undefined) row[s.to] = val;
+      const m = opts.caller ? [] : this.marksFor(s, audience);
+      if (val !== undefined && m.length) marks[s.to] = m.length === 1 ? (m[0] as string) : m;
+    }
+    if (Object.keys(marks).length) row.marks = marks;
+    return row;
+  }
+
+  /** A nested view's rows for a page record (12.1, 12.2 `of`): every page, in the view's order. */
+  private nestedRows(name: string, context: Record, audience: string, opts: ProjectOptions): JsonObject[] {
+    const out: JsonObject[] = [];
+    for (let page = 1; ; page++) {
+      const p = this.project(name, { audience, context, page, ...(opts.caller ? { caller: opts.caller } : {}), ...(opts.access ? { access: opts.access } : {}) });
+      out.push(...p.rows);
+      if (page >= p.pages) break;
+    }
+    return out;
+  }
+
+  /**
+   * Structured data (12.5): schema.org JSON-LD for the public from the kind's type per level (11.2) and
+   * each facet's `same-as` in the schema prefix; nothing for any other audience.
+   */
+  jsonld(r: Record, audience = "public"): JsonObject | undefined {
+    if (audience !== "public") return undefined;
+    const out: JsonObject = { "@context": "https://schema.org/" };
+    const kind = this.dict.kinds.get(this.dict.levels.get(r.level) ?? "");
+    const type = typeof kind?.schema === "string" ? kind.schema : kind?.schema?.[r.level];
+    if (type) out["@type"] = type.replace(/^schema:/, "");
+    for (const [key, v] of Object.entries(this.effective(r))) {
+      if (!this.canSee(key, "public")) continue;
+      const f = this.dict.facets.get(key);
+      const same = f?.sameAs.find((s) => s.startsWith("schema:"));
+      if (!same) continue;
+      const vals = (Array.isArray(v) ? v : [v]).filter((x) => this.fit(key, x, "public") && !(isObj(x) && "$empty" in x));
+      if (!vals.length) continue;
+      const prop = same.slice(7);
+      const plain = vals.map((x): Json => {
+        if (isObj(x) && "$money" in x) return { price: String(x.$money), priceCurrency: String(x.currency) };
+        if (isObj(x) && "$qty" in x) return `${x.$qty} ${x.unit}`;
+        if (isObj(x) && "$link" in x) return { "@id": String(x.$link) };
+        if (isObj(x) && "$image" in x) return String(x.$image);
+        return plainText(x);
+      });
+      out[prop] = plain.length === 1 ? (plain[0] as Json) : plain;
+    }
+    return out;
   }
 
   private streams = new Map<string, { version: string; rows: Map<string, string>; seq: number; log: StreamEntry[]; published: boolean }>();
@@ -527,7 +654,12 @@ export class Views {
     if (v.when) keys.push(...parseConditionKeys(v.when));
     if (v.of) keys.push(...parseConditionKeys(v.of.replace(/context\.\w+/g, '""')));
     keys.push(...v.order.map((o) => o.key));
-    for (const s of v.shapes) for (const sl of this.set.shapes.get(s)?.slots ?? []) keys.push(...slotKeys(sl.from));
+    if (v.list) keys.push("crubal:items");
+    for (const s of v.shapes) for (const sl of this.set.shapes.get(s)?.slots ?? []) {
+      if (sl.from.startsWith("view:")) keys.push(...this.readSet(sl.from.slice(5)));
+      else keys.push(...slotKeys(sl.from));
+    }
+    for (const f of v.filters) keys.push(...(this.set.filters.get(f)?.dependent ?? []));
     for (const f of v.filters) keys.push(this.set.filters.get(f)?.facet ?? f);
     for (const k of [...keys]) if (this.set.shown.has(k)) keys.push(k);
     return new Set(keys.filter((k) => k !== "id"));
@@ -548,6 +680,25 @@ export class Views {
       if (reads.has(`${write.level}::${key}`) && write.of) out.add(write.of);
       if (reads.has(key) && v.level && write.level !== v.level) {
         for (const r of this.records.childrenOf(write.id, "of", v.level)) out.add(r.id);
+      }
+    }
+    // A write to the list's items (12.2) stales every row: those it holds now, and those it will hold.
+    if (v.list && write.id === v.list) {
+      for (const r of this.listed(v)) out.add(r.id);
+      const items = write.values["crubal:items"];
+      for (const x of Array.isArray(items) ? items : items === undefined ? [] : [items]) out.add(isObj(x) && "$link" in x ? String(x.$link) : String(x));
+      out.delete(write.id);
+    }
+    // A page whose nested view holds, or would hold, the written record is stale (12.1).
+    for (const s of v.shapes) for (const sl of this.set.shapes.get(s)?.slots ?? []) {
+      if (!sl.from.startsWith("view:")) continue;
+      const inner = this.set.views.get(sl.from.slice(5));
+      if (!inner) continue;
+      for (const page of this.select(v, { audience: v.show })) {
+        const o = { audience: v.show, context: page };
+        const is = was ? this.selects(inner, was, o) : false;
+        const will = this.selects(inner, write, o);
+        if (is || will) out.add(page.id);
       }
     }
     return [...out];

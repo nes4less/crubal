@@ -132,6 +132,13 @@ export function emptyDictionary(): Dictionary {
     ["value", blank("value", "text")],
   ]);
   d.facets.set("crubal:notables", notables);
+  // The core's list facet (12.2): a hand-made list holds ordered links to the records it shows.
+  const items = blank("crubal:items", "link");
+  items.many = true;
+  items.pick = "any";
+  items.ordered = true;
+  items.label = "Items";
+  d.facets.set("crubal:items", items);
   return d;
 }
 

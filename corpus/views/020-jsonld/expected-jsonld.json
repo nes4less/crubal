@@ -1,0 +1,3 @@
+[
+  { "record": "P-1", "jsonld": { "@context": "https://schema.org/", "@type": "Product", "name": "Christmas Vacation", "datePublished": "1989", "isBasedOn": { "@id": "W-1" } } }
+]

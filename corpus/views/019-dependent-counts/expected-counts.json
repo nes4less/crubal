@@ -1,0 +1,14 @@
+{
+  "records": ["P-1", "P-2", "P-4"],
+  "counts": {
+    "edition": { "Theatrical": 1, "Special": 2 },
+    "genres": { "Comedy": 3, "Holiday": 0, "Drama": 1 }
+  },
+  "nested": {
+    "edition": {
+      "Theatrical": { "label": { "Fox": 1 } },
+      "Special": { "label": { "Fox": 1, "Universal": 1 } }
+    }
+  },
+  "indexable": false
+}

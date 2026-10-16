@@ -1,0 +1,5 @@
+[
+  { "record": "P-2", "heading": "Home Alone", "line": "Blu-ray · 1990" },
+  { "record": "U-1", "heading": "Christmas Vacation", "line": "DVD · 1989", "price": { "$money": "12.50", "currency": "USD" } },
+  { "record": "P-1", "heading": "Christmas Vacation", "line": "DVD · 1989", "price": { "$money": "12.50", "currency": "USD" } }
+]

@@ -950,7 +950,8 @@ function runViewsCase(folder: string, caseDir: string, name: string, shared: Dic
       return same(got, json("expected-by.json"), "by audience");
     }
     const p = views.project(viewName, opts);
-    if (existsSync(file("expected-counts.json"))) return same({ records: p.records, counts: p.counts, indexable: p.indexable } as unknown as Json, json("expected-counts.json"), "counts");
+    if (existsSync(file("expected-counts.json"))) return same({ records: p.records, counts: p.counts, ...(p.nested ? { nested: p.nested } : {}), indexable: p.indexable } as unknown as Json, json("expected-counts.json"), "counts");
+    if (existsSync(file("expected-jsonld.json"))) return same(p.rows as unknown as Json, json("expected-jsonld.json"), "jsonld");
     if (existsSync(file("expected-pages.json"))) return same({ pages: p.pages, records: p.records, indexable: p.indexable } as unknown as Json, json("expected-pages.json"), "pages");
     const wantFile = existsSync(file("expected-portable.json")) ? "expected-portable.json" : "expected-projection.json";
     return same(p.rows as unknown as Json, json(wantFile), "projection");

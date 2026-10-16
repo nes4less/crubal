@@ -1,0 +1,23 @@
+// Structured data (chapter 12.5): the core shape crubal:jsonld gives schema.org JSON-LD from the kind's
+// type per level and each facet's same-as in the schema prefix; a facet without one is left out.
+view: machine
+
+name$ =schema:name
+released@any =schema:datePublished
+basedOn&Work =schema:isBasedOn
+
+view: machine
+  select:
+    level: product
+  shape: crubal:jsonld
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  name: Christmas Vacation
+  title: Christmas Vacation
+  released: 1989
+  basedOn: &W-1
+  format: DVD

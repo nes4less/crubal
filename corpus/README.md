@@ -54,7 +54,7 @@ recipe would do per step without doing it (10.4); review cases add `intakes.json
 signatures. Migration cases add a `recipe.crubal` and expect the restamped data plus its
 `review` queue; `store-errors/` holds recipes a publish must refuse. `package-errors/` holds packages a
 publish must refuse (chapter 11.5). `views/` cases project a view over `_records.crubal` and expect
-`expected-projection.json` or, with a `pick:`, `expected-counts.json`. `exchange/` cases add `run.crubal` (which contract runs on
+`expected-projection.json` or, with a `pick:`, `expected-counts.json` (with `nested` when a filter has dependents). `exchange/` cases add `run.crubal` (which contract runs on
 which record), an optional `answer.json` (what the other side sent back) and `expected-run.json`. A
 `run.crubal` may hold several runs in order, each `run:` with `on:`, and optionally `caller:` and `offer:`;
 `write: ID` with indented values changes a record between runs. The runner names each run's log entry
@@ -76,6 +76,8 @@ decision's fields indented below it (9.5, 11.9, 14.7, 10.4: `facet:<key>`, `cont
 case seeds the bindings and `expected.json` may check them), and the scaffolding `suggest: ID` and `hold: ID` (address, value,
 origin, via; address, rule) that leave a record as a gated run or a changed verdict would. An exchange
 `run.crubal` takes `decide-run: L-Rn` with `decision: retry|drop` (runs.md).
+
+A views case with `expected-jsonld.json` projects the core `crubal:jsonld` shape (12.5).
 
 ### Cases for the backbone chapters
 

@@ -1,0 +1,7 @@
+// A list is the whole selection (chapter 12.2): a view that selects a list takes no level, classes or
+// curation beside it.
+view: picks
+  select:
+    list: L-1
+    level: product
+  shape: card
