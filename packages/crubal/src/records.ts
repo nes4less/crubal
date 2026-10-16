@@ -21,18 +21,58 @@ export interface RecordSet extends Map<string, Record> {
   byKey(key: string, value: Json, level?: string): Record[];
 }
 
-/** The memory set: a map, with every question answered by a scan. */
+/**
+ * The memory set: a map, with every question answered from it. Children and levels are indexed on first
+ * use and dropped on any change, so a projection over a catalog never scans the whole map per record.
+ */
 export class MemoryRecords extends Map<string, Record> implements RecordSet {
+  private byOf?: Map<string, Record[]>;
+  private byWithin?: Map<string, Record[]>;
+  private byLevel?: Map<string, Record[]>;
+
+  override set(id: string, r: Record): this {
+    this.byOf = this.byWithin = this.byLevel = undefined;
+    return super.set(id, r);
+  }
+
+  override delete(id: string): boolean {
+    this.byOf = this.byWithin = this.byLevel = undefined;
+    return super.delete(id);
+  }
+
+  override clear(): void {
+    this.byOf = this.byWithin = this.byLevel = undefined;
+    super.clear();
+  }
+
+  private index(by: "of" | "within" | "level"): Map<string, Record[]> {
+    const have = by === "of" ? this.byOf : by === "within" ? this.byWithin : this.byLevel;
+    if (have) return have;
+    const m = new Map<string, Record[]>();
+    for (const r of this.values()) {
+      const k = r[by];
+      if (k === undefined) continue;
+      const list = m.get(k);
+      if (list) list.push(r);
+      else m.set(k, [r]);
+    }
+    if (by === "of") this.byOf = m;
+    else if (by === "within") this.byWithin = m;
+    else this.byLevel = m;
+    return m;
+  }
+
   all(): Record[] {
     return [...this.values()];
   }
 
   atLevel(level: string): Record[] {
-    return this.all().filter((r) => r.level === level);
+    return [...(this.index("level").get(level) ?? [])];
   }
 
   childrenOf(id: string, along: "of" | "within", level?: string): Record[] {
-    return this.all().filter((r) => r[along] === id && (level === undefined || r.level === level));
+    const list = this.index(along).get(id) ?? [];
+    return level === undefined ? [...list] : list.filter((r) => r.level === level);
   }
 
   forTarget(name: string): Record[] {

@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, statSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -44,7 +44,7 @@ test("the corpus's shared definitions round-trip, under one header", () => {
   const dir = join(root, "corpus");
   const shared = readdirSync(dir).flatMap((folder) => {
     const f = join(dir, folder);
-    return existsSync(f) && !folder.includes(".") ? readdirSync(f).filter((n) => n.startsWith("_") && n.endsWith(".crubal") && n !== "_records.crubal" && n !== "_keys.json").map((n) => join(folder, n)) : [];
+    return existsSync(f) && statSync(f).isDirectory() ? readdirSync(f).filter((n) => n.startsWith("_") && n.endsWith(".crubal") && n !== "_records.crubal" && n !== "_keys.json").map((n) => join(folder, n)) : [];
   });
   assert.ok(shared.length > 5);
   for (const rel of shared) {

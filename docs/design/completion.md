@@ -203,6 +203,12 @@ the last of its loads the base holds the whole catalog, so each pass clones 100,
 copy-on-write working set (share the loaded rows, clone a record only when the run writes it), which also
 takes the stale-row publish under its 752 ms.
 
+Done, 2026-10-16: loaded records are frozen once and shared between the working set's copies (the log and
+the lifecycle copy a record before changing it), and the memory record set indexes children and levels on
+first use, so a projection no longer scans the whole map per record. Same data: the full publish of the
+200-row view 1.3 s (was 56.6 s), the stale-row publish 20 ms (was 752 ms), commit 4.2 ms, page 1.7 ms,
+search 0.8 ms, a record by id 0.2 ms.
+
 ## Calls made here
 
 - A hand-made list is a record with the core facet `crubal:items` (G).

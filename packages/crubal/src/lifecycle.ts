@@ -240,7 +240,7 @@ export function clone(store: Store, fromId: string, newId: string, owner: string
 export function archive(store: Store, id: string, reason: string, dict: Dictionary, into?: string): void {
   const r = store.records.get(id) as Extra | undefined;
   if (!r) throw new Error(`no record ${id}`);
-  const snap = copyDown(store, r, dict);
+  const snap: Extra = { ...copyDown(store, r, dict) };
   snap.status = { state: "archived", reason, ...(into ? { into } : {}) };
   store.records.set(id, snap);
   const rule = dict.archive.get(r.kind) ?? "independent";

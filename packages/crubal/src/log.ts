@@ -88,6 +88,12 @@ function place(r: Extra, address: string, value: Json | undefined, source: Sourc
 function need(state: State, id: string, what: string): Extra {
   const r = state.records.get(id);
   if (!r) throw new CrubalError(`${what} names ${id}, a record the log hasn't created`);
+  // A record a working set shares between copies is frozen: the entry changes its own copy, set back.
+  if (Object.isFrozen(r)) {
+    const copy = structuredClone(r);
+    state.records.set(id, copy);
+    return copy as Extra;
+  }
   return r as Extra;
 }
 

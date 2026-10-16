@@ -131,11 +131,24 @@ export function workingState(needs: Needs): State {
   return s;
 }
 
-/** A copy of a working state to run an operation on, sharing the needs and the knowledge of what is loaded. */
+/** Freeze a loaded record through and through: a run reads it in place and replaces it to change it. */
+function deepFreeze<T>(v: T): T {
+  if (typeof v === "object" && v !== null && !Object.isFrozen(v)) {
+    Object.freeze(v);
+    for (const k of Object.keys(v as object)) deepFreeze((v as { [k: string]: unknown })[k]);
+  }
+  return v;
+}
+
+/**
+ * A copy of a working state to run an operation on, sharing the needs and the knowledge of what is loaded.
+ * Loaded records are shared, not cloned: they are frozen at load, and an operation changes a record only
+ * by setting a new one, so a copy costs the map, not the catalog (completion.md R).
+ */
 export function copyWorking(base: State): State {
   const needs = (base.records as WorkingRecords).needs;
   const s = workingState(needs);
-  for (const [id, r] of base.records.entries()) s.records.set(id, structuredClone(r));
+  for (const [id, r] of Map.prototype.entries.call(base.records) as Iterable<[string, Record]>) Map.prototype.set.call(s.records, id, r);
   for (const [k, v] of (base.bindings as WorkingMap<string>).entries()) s.bindings.set(k, v);
   for (const [k, v] of (base.runs as WorkingMap<JsonObject>).entries()) s.runs.set(k, structuredClone(v));
   for (const [k, v] of base.edges) s.edges.set(k, structuredClone(v));
@@ -168,8 +181,8 @@ export async function loadNeeds(client: Client, owner: string, needs: Needs, int
     for (const row of rows) {
       const r = recordOf(row);
       if (!needs.loaded.has(r.id)) {
-        // `set` on the base, not through the noting `get`.
-        MemoryRecords.prototype.set.call(records, r.id, r);
+        // `set` on the base, not through the noting `get`; frozen, because every copy shares it.
+        MemoryRecords.prototype.set.call(records, r.id, deepFreeze(r));
         needs.loaded.add(r.id);
       }
     }
