@@ -68,6 +68,47 @@ test("a utility round-trips through its bundle and is versioned in members", () 
   assert.equal((again.bundle.members as { [k: string]: string })["utility:orders"], "2026-10-17", "an unchanged utility keeps its version");
 });
 
+test("a label or describe holding a colon round-trips for classes, contracts and utilities", () => {
+  const source = `package: shop /2026-10-16
+  owner: shop.example
+  crubal: 2
+
+kind: order
+  levels: order
+state{placed|shipped}
+
+class: Order
+  label: Order
+  describe: An order: what was bought, by whom.
+  for: order
+  facets:
+    state
+
+contract: ship
+  kind: form
+  label: Ship
+  describe: The last step: hand it to the carrier.
+  needs:
+    state
+
+permissions: shop
+  menu:
+    ship: run ship
+  presets:
+    fulfiller: ship    audience: staff
+
+utility: orders /2026-10-16
+  label: Orders
+  describe: The desk: pick, pack, ship.
+  serves: fulfiller
+`;
+  const first = bundleOf(parsePackage(source));
+  const again = bundleOf(readBundle(first));
+  assert.equal(serialize(again), serialize(first));
+  assert.equal((first.classes as { describe: string }[])[0]?.describe, "An order: what was bought, by whom.");
+  assert.equal((first.utilities as { describe: string }[])[0]?.describe, "The desk: pick, pack, ship.");
+});
+
 const refuses = (utility: string, message: RegExp) => {
   assert.throws(() => checkPackages(shop(utility)), (e: unknown) => e instanceof CrubalError && message.test(e.message), `expected ${message}`);
 };

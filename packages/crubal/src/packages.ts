@@ -2,7 +2,7 @@
 // `package:` line. The checks here are 11.1's prefixes, 11.3's trust entries and 11.4's rule that an
 // extending package may add to what it extends but never change it.
 
-import { type Dictionary, emptyDictionary, type Facet, readDefinitions } from "./defs.ts";
+import { type Dictionary, emptyDictionary, type Facet, readDefinitions, unquote } from "./defs.ts";
 import { LANGUAGE } from "./read-text.ts";
 import { readContracts } from "./store.ts";
 import { readAccess } from "./access.ts";
@@ -75,8 +75,8 @@ function readUtility(node: Node): Utility {
   const u: Utility = { name, version, serves: [], needs: [], setup: [], line: node.line };
   for (const c of node.children) {
     if (!c.key) continue;
-    if (c.key === "label") u.label = c.value.trim();
-    else if (c.key === "describe") u.describe = c.value.trim();
+    if (c.key === "label") u.label = unquote(c.value.trim());
+    else if (c.key === "describe") u.describe = unquote(c.value.trim());
     else if (c.key === "serves") {
       for (const p of splitServes(c.value)) {
         const m = p.match(/^([A-Za-z][\w-]*)(?:\((.*)\))?$/);

@@ -4,7 +4,7 @@
 
 import { createHash, createPublicKey, verify } from "node:crypto";
 import { serialize } from "./canonical.ts";
-import { type ClassLine, type Dictionary, type Facet, readClassLine } from "./defs.ts";
+import { type ClassLine, type Dictionary, type Facet, readClassLine, unquote } from "./defs.ts";
 import { checkScalar, foldKey, foldValue } from "./dictionary.ts";
 import { splitTop } from "./lex.ts";
 import type { Json, JsonObject, Record, Source } from "./model.ts";
@@ -200,7 +200,8 @@ export function readContracts(source: string): Contract[] {
       else if (p.key === "keep-raw") c.keepRaw = list();
       else if (p.key === "absorb") c.absorb = p.value !== "no";
       else if (p.key === "lands") c.lands = p.value;
-      if (!["kind", "origin", "prefix", "reads", "writes", "stores", "ignore", "keep-raw", "absorb", "lands", "gives", "who", "when", "from", "mode", "undo", "ref", "stream", "terms"].includes(p.key)) c.parts[p.key] = p.value;
+      // Free text the printer may have quoted (2.5) reads back as text; every other part is kept as written.
+      if (!["kind", "origin", "prefix", "reads", "writes", "stores", "ignore", "keep-raw", "absorb", "lands", "gives", "who", "when", "from", "mode", "undo", "ref", "stream", "terms"].includes(p.key)) c.parts[p.key] = p.key === "label" || p.key === "describe" ? unquote(p.value) : p.value;
     }
     if (!c.origin) c.origin = c.kind === "form" ? "declared" : "reported";
     if (c.keepRaw.length && !c.prefix) throw new CrubalError(`${c.name} keeps raw fields, so it needs a prefix`, c.line);

@@ -201,7 +201,8 @@ function closing(s: string, start: number, open: string, close: string, line: nu
   throw new CrubalError(`"${open}" is not closed in ${s}`, line);
 }
 
-const unquote = (s: string) => (s.startsWith('"') ? (JSON.parse(s) as string) : s);
+/** A quoted value's text (2.5); an unquoted one as it is. */
+export const unquote = (s: string) => (s.startsWith('"') ? (JSON.parse(s) as string) : s);
 
 /** A choice list's inside: `DVD~"DVD Video"|Blu-ray~BD|...` */
 function readChoices(inner: string, line: number): { values: ChoiceValue[]; open: boolean } {
@@ -531,10 +532,10 @@ function readClass(node: Node): ClassDef {
         c.uses = readList(child.value, child.line).map((p) => p.text);
         break;
       case "label":
-        c.label = child.value;
+        c.label = unquote(child.value);
         break;
       case "describe":
-        c.describe = child.value;
+        c.describe = unquote(child.value);
         break;
       case "version":
         c.version = child.value;
