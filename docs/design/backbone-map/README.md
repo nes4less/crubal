@@ -16,3 +16,5 @@ Named tools and parties on the boards (a bench app, a marketplace, a platform te
 examples, as they are in the spec (README, Conventions). The core defines none of them. The boards follow
 the spec chapters they draw: 1.12, 7, 8.5, 9.2a, 10.7, 12.6 and 14; when a board and a chapter disagree,
 the chapter is right and the board is behind.
+
+- `System.dc.html` — the whole system (2026-10-15): the language, the engine, the store, the host and the outside as five lanes, with the seams between them as arrows; what is built and what is parked.
