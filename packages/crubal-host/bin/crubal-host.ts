@@ -14,7 +14,13 @@ const [cmd, a, b, c] = process.argv.slice(2);
 const flag = (name: string) => { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : undefined; };
 
 const pool = connect();
-const host = new Host(pool, { domain: process.env.CRUBAL_HOST_DOMAIN ?? "localhost", ...(process.env.CRUBAL_HOST_KEY ? { hostKey: process.env.CRUBAL_HOST_KEY } : {}), fresh: "write" });
+const host = new Host(pool, {
+  domain: process.env.CRUBAL_HOST_DOMAIN ?? "localhost",
+  ...(process.env.CRUBAL_HOST_KEY ? { hostKey: process.env.CRUBAL_HOST_KEY } : {}),
+  ...(process.env.CRUBAL_HOST_CORS ? { cors: process.env.CRUBAL_HOST_CORS.split(",").map((s) => s.trim()) } : {}),
+  ...(process.env.CRUBAL_HOST_BODY_LIMIT ? { bodyLimit: Number(process.env.CRUBAL_HOST_BODY_LIMIT) } : {}),
+  fresh: "write",
+});
 
 try {
   if (cmd === "migrate") {

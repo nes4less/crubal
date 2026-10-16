@@ -84,3 +84,11 @@ create table if not exists host_keys (
   until text not null,
   primary key (owner, public)
 );
+
+-- When each view with a delay (12.6 fresh: 5m) was last published by the loop.
+create table if not exists host_publish (
+  owner text not null,
+  view text not null,
+  at text not null,
+  primary key (owner, view)
+);

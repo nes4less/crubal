@@ -27,24 +27,49 @@ const json = (res: Res, status: number, body: Json) => {
   res.end(`${JSON.stringify(body)}\n`);
 };
 
-async function body(req: Req): Promise<string> {
+async function body(req: Req, limit: number): Promise<string> {
   const chunks: Buffer[] = [];
-  for await (const c of req) chunks.push(c as Buffer);
+  let size = 0;
+  for await (const c of req) {
+    size += (c as Buffer).length;
+    if (size > limit) throw new HttpError(413, `the body is over ${limit} bytes`);
+    chunks.push(c as Buffer);
+  }
   return Buffer.concat(chunks).toString("utf8");
 }
 
 const isObj = (v: Json | undefined): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);
 
 export function serve(host: Host): Server {
-  const handle = async (req: Req, res: Res) => {
+  /** What a request's log line and CORS need, set as the request is understood. */
+  type Seen = { owner?: string; caller?: string; route?: string };
+  const handle = async (req: Req, res: Res, seen: Seen) => {
     const url = new URL(req.url ?? "/", "http://host");
+    const method = req.method ?? "GET";
+    // Browsers: the allowlisted origin gets its headers; a preflight is answered here.
+    const origin = req.headers.origin;
+    if (typeof origin === "string" && host.o.cors?.includes(origin)) {
+      res.setHeader("access-control-allow-origin", origin);
+      res.setHeader("access-control-allow-headers", "authorization, content-type, signature, signature-input, content-digest, date, x-host-key");
+      res.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
+      res.setHeader("vary", "origin");
+    }
+    if (method === "OPTIONS") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
     // The body is read once, up front: a signed request's digest covers it.
-    const raw = await body(req);
+    const raw = await body(req, host.o.bodyLimit ?? 1_048_576);
     const bodyOf = () => raw;
     const parts = url.pathname.split("/").filter(Boolean);
     const q = (k: string) => url.searchParams.get(k) ?? undefined;
-    const method = req.method ?? "GET";
+    seen.route = parts.slice(0, 3).join("/");
 
+    if (url.pathname === "/health" && method === "GET") {
+      const h = await host.health();
+      return json(res, h.ok ? 200 : 503, h);
+    }
     if (url.pathname === "/.well-known/crubal.json") return json(res, 200, await host.wellKnown());
     // OAuth's return leg: the code becomes the connection the state names.
     if (url.pathname === "/oauth/callback" && method === "GET") {
@@ -57,13 +82,14 @@ export function serve(host: Host): Server {
 
     // The loops, for a scheduler, behind the host key.
     const hostKeyOk = !host.o.hostKey || req.headers["x-host-key"] === host.o.hostKey;
-    if (parts[0] === "project" || parts[0] === "tick" || parts[0] === "retry" || parts[0] === "push" || parts[0] === "expire") {
+    if (parts[0] === "project" || parts[0] === "tick" || parts[0] === "retry" || parts[0] === "push" || parts[0] === "expire" || parts[0] === "drain") {
       if (method !== "POST") throw new HttpError(405, "POST");
       if (!hostKeyOk) throw new HttpError(403, "the host key");
       const o = JSON.parse(bodyOf() || "{}") as JsonObject;
       const owner = typeof o.owner === "string" ? o.owner : undefined;
       const now = typeof o.now === "string" ? o.now : undefined;
-      if (parts[0] === "project") return json(res, 200, await host.project(owner));
+      if (parts[0] === "project") return json(res, 200, await host.project(owner, now));
+      if (parts[0] === "drain") return json(res, 200, await host.drain(typeof o.rate === "number" ? o.rate : 100, owner, now));
       if (parts[0] === "retry") return json(res, 200, await host.retry(now, owner));
       if (parts[0] === "push") return json(res, 200, await host.push(now, owner));
       if (parts[0] === "expire") return json(res, 200, await host.expire(now, owner));
@@ -81,6 +107,8 @@ export function serve(host: Host): Server {
     const hostedId = hostedAt > 0 ? owner.slice(hostedAt + 1) : undefined;
     const callerId = who && who.owner === owner ? who.caller : who && hostedId && who.owner === domain && who.caller === hostedId ? owner : undefined;
     const isOwner = callerId === owner;
+    seen.owner = owner;
+    seen.caller = callerId;
     const store = await host.storeFor(owner);
     const at = host.now();
     const [, , what, name, ...rest] = parts;
@@ -301,7 +329,16 @@ export function serve(host: Host): Server {
   };
 
   return createServer((req, res) => {
-    handle(req, res).catch((e: unknown) => {
+    const started = Date.now();
+    const seen: Seen = {};
+    // One structured line per request, when it has been answered.
+    res.on("finish", () => {
+      if (host.o.log === false) return;
+      const line: JsonObject = { at: host.now(), method: req.method ?? "", route: seen.route ?? req.url ?? "", status: res.statusCode, ms: Date.now() - started, ...(seen.owner ? { owner: seen.owner } : {}), ...(seen.caller ? { caller: seen.caller } : {}) };
+      if (host.o.log) host.o.log(line);
+      else console.log(JSON.stringify(line));
+    });
+    handle(req, res, seen).catch((e: unknown) => {
       const status = e instanceof HttpError ? e.status : typeof (e as { status?: number }).status === "number" ? ((e as { status: number }).status) : 400;
       json(res, status, { error: e instanceof Error ? e.message : String(e) });
     });

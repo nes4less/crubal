@@ -120,6 +120,12 @@ view: discs
   shape: card
   filters: format
   index: format
+view: slow
+  select:
+    level: product
+  order: title
+  shape: card
+  fresh: 5m
 
 permissions: shop
   menu:
@@ -383,4 +389,61 @@ test("a hosted person owns their collection in their own chain, exports and eras
   assert.equal(keys[1]?.public, rotated.body.public);
   const exp = await call("GET", "/o/shop.example/export", ownerKey);
   assert.deepEqual(verifyChain(exp.body.log as JsonObject[], wk2.body.keys as never), { valid: true }, "entries before and after the rotation verify");
+});
+
+test("operations: health, the body limit, CORS for an allowlisted origin, a log line per request, a delayed view published by the loop, and drain", { skip: !url }, async () => {
+  const ownerKey = await host.issueKey("shop.example", "shop.example", "owner4");
+  const health = await call("GET", "/health");
+  assert.equal(health.status, 200);
+  assert.equal(health.body.ok, true);
+  assert.ok(Number((health.body.chains as JsonObject)["shop.example"]) > 0, JSON.stringify(health.body));
+  assert.ok((health.body.chains as JsonObject)["shop.example:S-1"], "a hosted person's chain is a chain");
+  // Bodies over the limit are refused before anything reads them.
+  host.o.bodyLimit = 64;
+  assert.equal((await call("POST", "/o/shop.example/run/bench", ownerKey, { record: "U-1", answers: { condition: "x".repeat(200) } })).status, 413);
+  host.o.bodyLimit = undefined;
+  // CORS: an allowlisted origin gets the headers and its preflight; another gets nothing.
+  host.o.cors = ["https://app.example"];
+  const pre = await fetch(`${base}/o/shop.example/v/discs`, { method: "OPTIONS", headers: { origin: "https://app.example" } });
+  assert.equal(pre.status, 204);
+  assert.equal(pre.headers.get("access-control-allow-origin"), "https://app.example");
+  const other = await fetch(`${base}/o/shop.example/v/discs`, { headers: { origin: "https://evil.example" } });
+  assert.equal(other.headers.get("access-control-allow-origin"), null);
+  host.o.cors = undefined;
+  // One structured line per request.
+  const lines: JsonObject[] = [];
+  host.o.log = (l) => lines.push(l);
+  await call("GET", "/o/shop.example/records/P-1", ownerKey);
+  host.o.log = undefined;
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0]?.route, "o/shop.example/records");
+  assert.equal(lines[0]?.status, 200);
+  assert.equal(lines[0]?.owner, "shop.example");
+  assert.equal(lines[0]?.caller, "shop.example");
+  assert.equal(typeof lines[0]?.ms, "number");
+  // A view with fresh: 5m isn't published at the write; the loop publishes it when the delay has passed.
+  clock = "2026-10-16T10:00:00Z";
+  await call("POST", "/project", undefined, { owner: "shop.example", now: clock }, { "x-host-key": "hk" });
+  const store = await host.storeFor("shop.example");
+  clock = "2026-10-16T10:01:00Z";
+  await store.commit({ person: "shop.example" }, (d) => {
+    d.records.set("P-9", { id: "P-9", kind: "item", level: "product", owner: "shop.example", values: { title: "Scrooged", format: "DVD" }, sources: { "*": { origin: "declared", via: "L-9" } } });
+  }, clock);
+  const slowRows = async () => ((await pool.query("select record from projections where owner = $1 and view = 'slow'", ["shop.example"])).rows as { record: string }[]).map((r) => r.record);
+  const discRows = async () => ((await pool.query("select record from projections where owner = $1 and view = 'discs'", ["shop.example"])).rows as { record: string }[]).map((r) => r.record);
+  assert.ok((await discRows()).includes("P-9"), "fresh: write published at the write");
+  assert.ok(!(await slowRows()).includes("P-9"), "fresh: 5m waits for the loop");
+  await call("POST", "/project", undefined, { owner: "shop.example", now: "2026-10-16T10:02:00Z" }, { "x-host-key": "hk" });
+  assert.ok(!(await slowRows()).includes("P-9"), "two minutes in, still waiting");
+  await call("POST", "/project", undefined, { owner: "shop.example", now: "2026-10-16T10:06:00Z" }, { "x-host-key": "hk" });
+  assert.ok((await slowRows()).includes("P-9"), "after the delay, published");
+  // Drain through the loop.
+  await store.commit({ person: "shop.example" }, (d) => {
+    d.instructions.set("kind:item/2026-10-16", [{ issuer: "kind:item/2026-10-16", n: 1, op: "+", key: "itemId", map: [] }]);
+  }, "2026-10-16T10:07:00Z");
+  const drained = await call("POST", "/drain", undefined, { owner: "shop.example", rate: 2 }, { "x-host-key": "hk" });
+  assert.equal(drained.status, 200, JSON.stringify(drained.body));
+  const d0 = (drained.body as unknown as JsonObject[])[0] as JsonObject;
+  assert.equal((d0.applied as string[]).length, 2);
+  assert.ok(Number(d0.remaining) >= 1);
 });

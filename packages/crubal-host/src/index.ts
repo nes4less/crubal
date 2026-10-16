@@ -6,3 +6,4 @@ export { contentDigest, signRequest, verifyRequest } from "./signatures.ts";
 export { Credentials, type Connection, type OAuthProvider } from "./credentials.ts";
 export { readTerms, robotsTxt, termsHeaders, termsJson, TRAINING_BOTS, type Terms } from "./terms.ts";
 export { checkEmergency, edgeHash, endEmergencyEdge, logEmergencyRead, makeEmergencyEdge, type EmergencyRequest, type EmergencyTerms } from "./emergency.ts";
+export { ChainedSecrets, EnvSecrets, FunctionSecrets, type SecretStore } from "./secrets.ts";

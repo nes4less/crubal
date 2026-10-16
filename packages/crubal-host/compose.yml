@@ -1,0 +1,31 @@
+# The first deployment shape (docs/design/completion.md O): Postgres and the host, migrated on start.
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: crubal
+      POSTGRES_PASSWORD: crubal
+      POSTGRES_DB: crubal
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crubal"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  host:
+    build:
+      context: ..
+      dockerfile: crubal-host/Dockerfile
+    environment:
+      CRUBAL_PG_URL: postgres://crubal:crubal@db:5432/crubal
+      CRUBAL_HOST_DOMAIN: ${CRUBAL_HOST_DOMAIN:-localhost}
+      CRUBAL_HOST_KEY: ${CRUBAL_HOST_KEY:-change-me}
+    command: ["sh", "-c", "node bin/crubal-host.ts migrate && node bin/crubal-host.ts serve --port 8787"]
+    ports:
+      - "8787:8787"
+    depends_on:
+      db:
+        condition: service_healthy
+volumes:
+  db:

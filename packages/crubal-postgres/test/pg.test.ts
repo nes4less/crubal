@@ -572,3 +572,38 @@ contract: discRead
   assert.equal((await store.review()).filter((it) => it.key === "split:P-1").length, 0);
   assert.deepEqual(await store.verify(), { valid: true });
 });
+
+test("drain applies pending instructions at a rate, each record one entry", { skip: !url }, async () => {
+  const owner = "drain.example";
+  const store = new PgStore(pool, owner, { allowUnsigned: true });
+  const text = `package: shop /2026-10-01
+  owner: drain.example
+  crubal: 2
+
+kind: item
+  levels: product
+  base: Item
+title$
+notes$
+class: Item
+  for: item
+  facets:
+    title
+    notes
+`;
+  await store.install(publish(text, { date: "2026-10-01" }).bundle, undefined, "2026-10-18T09:00:00Z");
+  await store.commit({ person: owner }, (d) => {
+    for (const id of ["P-1", "P-2", "P-3"]) d.records.set(id, { id, kind: "item", level: "product", owner, values: { title: id }, sources: { "*": { origin: "declared", via: "L-1" } } });
+    d.instructions.set("kind:item/2026-10-18", [{ issuer: "kind:item/2026-10-18", n: 1, op: "+", key: "notes", map: [] }]);
+  }, "2026-10-18T09:00:01Z");
+  const first = await store.drain(2, "2026-10-18T09:01:00Z");
+  assert.deepEqual(first, { applied: ["P-1", "P-2"], remaining: 1 });
+  const second = await store.drain(2, "2026-10-18T09:02:00Z");
+  assert.deepEqual(second, { applied: ["P-3"], remaining: 0 });
+  assert.deepEqual(await store.drain(2, "2026-10-18T09:03:00Z"), { applied: [], remaining: 0 });
+  const s = await store.state();
+  assert.deepEqual(s.records.get("P-2")?.values.notes, { $empty: "unknown" });
+  assert.equal(s.records.get("P-2")?.applied?.["kind:item/2026-10-18"], 1);
+  assert.equal((await store.entries()).filter((e) => (e.by as JsonObject).migration === "drain").length, 3, "one entry per record drained");
+  assert.deepEqual(await store.verify(), { valid: true });
+});

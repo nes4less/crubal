@@ -111,6 +111,9 @@ one entry per person in that person's chain, linked and signed (with the `hosted
 the store) in the same transaction; the chains lock in a fixed order. A rebuild applies the owner's chain
 and the hosted chains in the order they were written (`log.ord`); erase redacts in every chain.
 
+`store.drain(rate)` and `crubal-pg drain <owner> [--rate N]` apply pending instructions to at most that
+many records per call, each its own entry `by: migration: drain`.
+
 ## Not yet here
 
 The host: authentication, secrets, named adapters, signing, the loops and the HTTP surface

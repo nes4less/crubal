@@ -7,6 +7,18 @@ views and runs schedules, and serves one small HTTP surface. It owns no model: e
 `PgStore` and `PgBorder`, and what it keeps of its own (owners' keys, API keys, identity links) lives in
 its own tables.
 
+## Operations
+
+Request bodies over `bodyLimit` (1 MiB) are refused with 413 before anything reads them; `cors` lists the
+browser origins that get the headers and their preflight; one structured log line per request (owner,
+caller, route, status, ms) goes to `log` or the console. Credentials' secrets beyond the connected table come
+from a `SecretStore` (the environment, a function, a chain; a vault is one more implementation). Views with
+`fresh: write` publish at the commit; a view with a delay (`fresh: 5m`) is published by the `/project` loop
+once that much has passed since its last publish. The container is the first deployment shape:
+`Dockerfile`, `compose.yml` (Postgres and the host, migrated on start) and `smoke.sh`, which brings it up,
+checks `/health`, makes an owner and runs this suite against it. Environment: `CRUBAL_PG_URL`,
+`CRUBAL_HOST_DOMAIN`, `CRUBAL_HOST_KEY`, `CRUBAL_HOST_CORS`, `CRUBAL_HOST_BODY_LIMIT`.
+
 ## What it does
 
 - **Identity.** An API key, or a token an identity provider issued: `oidcVerifier({issuer, audience, jwks |
@@ -84,6 +96,8 @@ POST /o/<owner>/inbox/<contract>            a presenter's pushed stream entries,
 POST /push · POST /expire                    loops behind the host key: push `when: entry` streams and acknowledge; sweep taken values past their terms
 GET  /o/<domain>:<id>/export · POST /o/<domain>:<id>/erase/<record>   a hosted person (14.1), signed in to the domain as that caller: their own chain, their own records only
 POST /o/<owner>/rotate                      a new key signs from now; the well-known file lists the old with until and the new with from (11.7)
+GET  /health                                the database reachable and every chain's head (503 when not)
+POST /drain                                 a loop behind the host key: pending instructions applied at a rate ({ owner?, rate? })
 GET  /o/<owner>/review (open items by key)   ·   POST /o/<owner>/review { key, decision, … }
 POST /o/<owner>/install { bundle }       owner only
 GET  /o/<owner>/export                   owner only: the log and the intake

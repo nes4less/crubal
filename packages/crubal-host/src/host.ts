@@ -3,6 +3,7 @@
 // install, the loops. It owns no model: everything goes through PgStore and PgBorder.
 
 import { createHash, createPrivateKey, generateKeyPairSync, randomBytes, sign as edSign } from "node:crypto";
+import { ChainedSecrets, EnvSecrets, FunctionSecrets, type SecretStore } from "./secrets.ts";
 import { type Offer, verifyBorder } from "../../crubal/src/exchange.ts";
 import type { StreamEntry } from "../../crubal/src/views.ts";
 import { readFileSync } from "node:fs";
@@ -28,6 +29,14 @@ export type HostOptions = {
   verifiers?: ((token: string) => Promise<Caller | null> | Caller | null)[];
   /** Secrets by (owner, name); the environment (`CRUBAL_SECRET_<OWNER>_<NAME>`) otherwise. */
   secrets?: (owner: string, name: string) => string | undefined;
+  /** Where credentials' secrets live beyond the connected table: a vault, a file; the environment otherwise. */
+  secretStore?: SecretStore;
+  /** Request bodies larger than this are refused with 413 (default 1 MiB). */
+  bodyLimit?: number;
+  /** Origins allowed to call from a browser; none otherwise. */
+  cors?: string[];
+  /** One structured line per request; the console as JSON otherwise, nothing when `false`. */
+  log?: ((line: JsonObject) => void) | false;
   /** Adapters by contract name, beyond the built-in `http` one. */
   adapters?: { [contract: string]: Adapter };
   /** A publisher's keys from its well-known file; `fetch` of `https://<domain>/.well-known/crubal.json` otherwise. */
@@ -48,7 +57,6 @@ export type HostOptions = {
   hostOf?: (domain: string) => string;
 };
 
-const envName = (s: string) => s.replace(/[^A-Za-z0-9]/g, "_").toUpperCase();
 export const hashKey = (key: string) => createHash("sha256").update(key).digest("hex");
 
 export class Host {
@@ -171,7 +179,22 @@ export class Host {
   /** A credential's secret: connected under the name (refreshed when OAuth and expired), a configured source, or the environment. */
   async secret(owner: string, name: string): Promise<string | undefined> {
     const connected = await this.credentials.secret(owner, name, this.o.oauth?.[name]);
-    return connected ?? this.o.secrets?.(owner, name) ?? process.env[`CRUBAL_SECRET_${envName(owner)}_${envName(name)}`];
+    if (connected !== undefined) return connected;
+    const store = this.o.secretStore ?? new ChainedSecrets([...(this.o.secrets ? [new FunctionSecrets(this.o.secrets)] : []), new EnvSecrets()]);
+    return store.get(owner, name);
+  }
+
+  /** Health (docs/design/completion.md O): the database reachable, and every owner's chain head. */
+  async health(): Promise<JsonObject> {
+    try {
+      await this.pool.query("select 1");
+    } catch (e) {
+      return { ok: false, database: e instanceof Error ? e.message : String(e) };
+    }
+    const chains = (await this.pool.query("select owner, chain, head_seq from chains order by owner, chain")).rows as { owner: string; chain: string; head_seq: number | string }[];
+    const heads: JsonObject = {};
+    for (const c of chains) heads[c.chain === "main" ? c.owner : `${c.owner}/${c.chain}`] = Number(c.head_seq);
+    return { ok: true, domain: this.o.domain, now: this.now(), chains: heads };
   }
 
   // ─── Stores and borders ────────────────────────────────────────────────────
@@ -396,12 +419,33 @@ export class Host {
   // ─── The loops ─────────────────────────────────────────────────────────────
 
   /** Publish every owner's stale rows. */
-  async project(owner?: string): Promise<{ [owner: string]: number }> {
+  async project(owner?: string, now = this.now()): Promise<{ [owner: string]: number }> {
     const out: { [owner: string]: number } = {};
     for (const o of owner ? [{ owner }] : await this.owners()) {
       const store = await this.storeFor(o.owner);
       const p = await store.projecting();
-      out[o.owner] = p?.views.views.size ? (await store.project()).length : 0;
+      if (!p?.views.views.size) { out[o.owner] = 0; continue; }
+      // A view with a delay (12.6 `fresh: 5m`) publishes when that much has passed since its last publish.
+      const last = new Map(((await this.pool.query("select view, at from host_publish where owner = $1", [o.owner])).rows as { view: string; at: string }[]).map((r) => [r.view, r.at]));
+      let n = 0;
+      for (const v of p.views.views.values()) {
+        const delay = v.fresh === "write" ? 0 : durationMs(v.fresh);
+        const was = last.get(v.name);
+        if (delay && was && Date.parse(was) + delay > Date.parse(now)) continue;
+        n += (await store.project(v.name)).length;
+        if (delay) await this.pool.query("insert into host_publish (owner, view, at) values ($1, $2, $3) on conflict (owner, view) do update set at = excluded.at", [o.owner, v.name, now]);
+      }
+      out[o.owner] = n;
+    }
+    return out;
+  }
+
+  /** Drain pending instructions (completion.md P) for every owner or one, at a rate per owner. */
+  async drain(rate = 100, owner?: string, now = this.now()): Promise<JsonObject[]> {
+    const out: JsonObject[] = [];
+    for (const o of owner ? [{ owner }] : await this.owners()) {
+      const r = await (await this.storeFor(o.owner)).drain(rate, now);
+      if (r.applied.length || r.remaining) out.push({ owner: o.owner, applied: r.applied, remaining: r.remaining });
     }
     return out;
   }
@@ -446,4 +490,11 @@ export class Host {
     }
     return out;
   }
+}
+
+/** A delay such as `5m`, `2h`, `1d` or `30s` in milliseconds; 0 when it isn't one. */
+function durationMs(s: string): number {
+  const m = s.trim().match(/^(\d+)\s*(s|m|h|d)$/);
+  if (!m) return 0;
+  return Number(m[1]) * ({ s: 1_000, m: 60_000, h: 3_600_000, d: 86_400_000 }[m[2] as "s" | "m" | "h" | "d"] as number);
 }

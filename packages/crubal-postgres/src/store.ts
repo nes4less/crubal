@@ -3,6 +3,8 @@
 // The log is the truth; `rebuild` gives every other table back from it.
 
 import { applyEntry, diffWrites, differs, type Draft, type Entry, type State } from "../../crubal/src/log.ts";
+import type { View } from "../../crubal/src/views.ts";
+import { apply, pending, type Store as LifecycleStore } from "../../crubal/src/lifecycle.ts";
 import type { Json, JsonObject } from "../../crubal/src/model.ts";
 import { entryHash, verifyChain, writeHash, type Keys } from "../../crubal/src/store.ts";
 import { type Client, type Pool, transaction } from "./db.ts";
@@ -54,10 +56,10 @@ export class PgStore {
    * Publish the views whose rows a write made stale (12.6): every view, or the named one, for its own
    * audience or the one given. Runs outside any write transaction. Returns the stream entries published.
    */
-  async project(view?: string, audience?: string): Promise<StreamEntry[]> {
+  async project(view?: string, audience?: string, only?: (v: View) => boolean): Promise<StreamEntry[]> {
     const p = await this.projecting();
     if (!p) throw new Error("the store has no views to project");
-    const names = view ? [view] : [...p.views.views.keys()];
+    const names = view ? [view] : [...p.views.views.values()].filter((v) => !only || only(v)).map((v) => v.name);
     const out: StreamEntry[] = [];
     for (const name of names) out.push(...(await transaction(this.pool, (client) => publish(client, this.owner, p, name, audience))));
     return out;
@@ -82,7 +84,8 @@ export class PgStore {
   }
 
   private async freshen(): Promise<void> {
-    if (this.options.fresh === "write" && (await this.projecting())?.views.views.size) await this.project();
+    // Views with `fresh: write` publish now (12.6); a view with a delay waits for the loop.
+    if (this.options.fresh === "write" && (await this.projecting())?.views.views.size) await this.project(undefined, undefined, (v) => v.fresh === "write");
   }
 
   // ─── Definitions from the store (docs/design/publishing.md) ────────────────
@@ -237,6 +240,24 @@ export class PgStore {
       out.push(row.intake);
     }
     return out;
+  }
+
+  /**
+   * Drain (docs/design/store.md, completion.md P): apply pending instructions to the records that have
+   * them, at most `rate` records per call, each its own entry `by: migration: drain`; the ids done and
+   * how many still wait.
+   */
+  async drain(rate = 100, at?: string): Promise<{ applied: string[]; remaining: number }> {
+    const dict = (await this.definitions()).dict;
+    const s = await this.state();
+    const store = { records: s.records, bindings: s.bindings, instructions: s.instructions, review: s.reviews, edges: s.edges } as unknown as LifecycleStore;
+    const waiting = s.records.all().filter((r) => r.status?.state !== "archived" && pending(store, r).length > 0).map((r) => r.id);
+    const applied: string[] = [];
+    for (const id of waiting.slice(0, rate)) {
+      const entry = await this.commit({ migration: "drain" }, (d) => { apply(d as unknown as LifecycleStore, id, dict); }, at);
+      if (entry) applied.push(id);
+    }
+    return { applied, remaining: Math.max(0, waiting.length - applied.length) };
   }
 
   /** What installing a version would restamp (10.4): per recipe and step, how many values change and how many go to review. */

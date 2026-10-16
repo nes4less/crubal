@@ -49,7 +49,8 @@ the internals later behind the same API.
   shapes under `shapes` and the core `crubal:jsonld` structured data for the public (`views.ts`); offer and take by the offer's mode: dump copies once, observed stores a link and no value, gathered takes
   the presenter's updates over its own earlier values and never over the consumer's, controlled copies under
   the presenter's terms (expires, reshare, revocable) and withdraws what the presenter stops giving; an
-  offer builder and an expiry sweep (`exchange.ts`); a form as data from a contract's needs, the record's answers and states and the caller's edges
+  offer builder and an expiry sweep (`exchange.ts`); a person's arrival owned `domain:id` when the package lets a person
+  own that kind (14.1); dated keys, `keyFor` picking the key whose span holds an entry's moment (11.7); a form as data from a contract's needs, the record's answers and states and the caller's edges
   (`forms.ts`, docs/design/index-and-forms.md); and a border that
   consults access, journals every run, and grants a consumer's edge (`exchange.ts`).
 
