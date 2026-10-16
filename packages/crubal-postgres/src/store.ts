@@ -268,7 +268,7 @@ export class PgStore {
    * The same, for an operation that decides its own cause and extra writes as it runs (a border run): it
    * returns `by`, `extra` and an outcome, and the outcome comes back beside the entry.
    */
-  async commitFrom<T>(run: (draft: Draft) => { by: JsonObject; extra?: JsonObject[]; out: T }, at?: string): Promise<{ entry: Entry | null; out: T }> {
+  async commitFrom<T>(run: (draft: Draft) => { by: JsonObject; extra?: JsonObject[]; out: T }, at?: string, mark: { witnessed?: true } = {}): Promise<{ entry: Entry | null; out: T }> {
     return transaction(this.pool, async (client) => {
       const head = await this.lockChain(client);
       const before = await this.base(client);
@@ -285,7 +285,7 @@ export class PgStore {
         ({ draft, result } = (await settle(client, this.owner, before, (s) => { const d = draftOf(s); const r = run(d); return { draft: d, result: r }; })).out);
         const writes = [...diffWrites(before, draft), ...(result.extra ?? [])];
         if (!writes.length) return { entry: null, out: result.out };
-        entry = { log: `L-${head.seq + 1}`, owner: this.owner, at: at ?? new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), by: result.by, writes };
+        entry = { log: `L-${head.seq + 1}`, owner: this.owner, at: at ?? new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), by: result.by, writes, ...(mark.witnessed ? { witnessed: true } : {}) };
         const e = entry;
         after = (await settle(client, this.owner, before, (s) => applyEntry(s, e))).state;
         if (needs.needs.loaded.size === had) break;

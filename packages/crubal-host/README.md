@@ -9,13 +9,25 @@ its own tables.
 
 ## What it does
 
+- **Identity.** An API key, or a token an identity provider issued: `oidcVerifier({issuer, audience, jwks |
+  secret, provider, identity})` checks a JWT against the issuer's JWKS (or a shared secret for HS256), its
+  issuer, audience and expiry, and maps its subject through the host's identity links
+  (`linkIdentity(provider, subject, owner, caller)`) to a caller. Supabase Auth is one such issuer. A
+  request signed by another owner (RFC 9421 message signatures over the method, target, body digest and
+  date, with the domain's Ed25519 key) resolves to that domain as a caller, its key fetched from its
+  well-known file.
 - **Owners and keys.** `createOwner(domain)` makes an owner with an Ed25519 key; every entry the owner's
   store writes is signed with it, and the public half is in the host's well-known file, so an export
   verifies anywhere. `issueKey(owner, caller)` issues an API key for a caller record (printed once, kept
   hashed); `whoIs(authorization)` resolves an API key, or any bearer token a configured verifier knows (an
   OIDC-shaped adapter goes here), to `{owner, caller}`. The store sees only the caller ID.
-- **Secrets.** `secret(owner, name)` from a configured source or the environment
-  (`CRUBAL_SECRET_<OWNER>_<NAME>`); never from a package, never into the log.
+- **Credentials.** `secret(owner, name)` resolves a contract's credential name: a connection made in the
+  host (`host.credentials`: a pasted key or password, or an OAuth grant through
+  `GET /o/<owner>/connect/<name>` → the provider → `/oauth/callback`), refreshed through the provider when
+  expired and marked `expired` when it can't be; else a configured source or the environment
+  (`CRUBAL_SECRET_<OWNER>_<NAME>`). The fact of a connection (scheme, scopes, status, when) is readable at
+  `GET /o/<owner>/connections`; the material never leaves the host's table, never enters a package or the
+  log. A platform puts a vault behind the same interface.
 - **Adapters.** A send's act is an adapter's: the built-in `http` adapter POSTs the payload to the
   contract's `host:url` with the credential the contract names, sent as its `auth` scheme says
   (`apikey`/`oauth2` as a bearer, `basic`), and brings the answer back as intake; a named adapter per
@@ -23,8 +35,20 @@ its own tables.
 - **Packages.** `install(owner, bundle)` fetches the publisher's keys from its well-known file and hands
   the store a verified bundle.
 - **The loops.** `project()` publishes every owner's stale rows (or `fresh: "write"` does it after each
-  commit); `tick(now)` runs every scheduled contract's due ticks. Both are behind `POST /project` and
-  `POST /tick` for a scheduler, guarded by the host key.
+  commit); `tick(now)` runs every scheduled contract's due ticks; `retry(now)` tries failed runs again
+  once their contract's `retry` interval has passed, from the kept payload, and notices the owner of a run
+  dead after its last attempt. All three are behind `POST /project`, `POST /tick` and `POST /retry` for a
+  scheduler, guarded by the host key.
+- **Terms.** A package's `terms` (12.5.1) become `GET /o/<owner>/robots.txt` (the training bots disallowed
+  under `train no`, everything under `search no`), `GET /o/<owner>/terms.json`, and `X-Robots-Tag` /
+  `X-Crubal-Terms` headers on every view page.
+- **Emergency access** (14.13). With `emergency` terms configured (approvers, longest, the approvers'
+  dedicated keys) and published in the well-known file, `POST /o/<owner>/emergency` behind the host key
+  makes an edge only when the approvals are enough, each a signature over the edge with an approver's key,
+  none the requester's, the mode view or control, no grant, and `until` within the longest; it is written
+  witnessed into the owner's log and the owner is noticed. Every record read under it is a witnessed `read`
+  write. `POST /o/<owner>/emergency/<edge>/end` ends it for the owner, except a legal order's, whose attempt
+  is recorded. A witnessed entry is never redacted.
 
 ## The reference index
 
@@ -42,6 +66,9 @@ dropped and rebuilt from it.
 ```
 GET  /.well-known/crubal.json
 GET  /o/<owner>/v/<view>?page=&<filter>=&q=   a view's page, counts and indexability, from the index
+GET  /o/<owner>/robots.txt  ·  GET /o/<owner>/terms.json
+GET  /o/<owner>/connections  ·  GET|POST|DELETE /o/<owner>/connect/<name>  ·  GET /oauth/callback   owner only
+POST /o/<owner>/emergency (platform)  ·  POST /o/<owner>/emergency/<edge>/end (owner or platform)
 POST /o/<owner>/run/<contract>           { record, answers? }   a form run lands the answers; a send acts
 POST /o/<owner>/receive/<contract>?record=&run=   an answer (or an arrival with ?level=&of=)
 GET  /o/<owner>/records/<id>[?full=1]    the values the caller may see
@@ -51,7 +78,7 @@ GET  /o/<owner>/review   ·   POST /o/<owner>/review/<item> { decision }
 POST /o/<owner>/install { bundle }       owner only
 GET  /o/<owner>/export                   owner only: the log and the intake
 POST /o/<owner>/erase/<record>           owner only
-POST /project  ·  POST /tick             the loops; X-Host-Key
+POST /project  ·  POST /tick  ·  POST /retry   the loops; X-Host-Key
 ```
 
 A route with no caller is `public`; what a caller may run, edit or see is the store's access (chapter 14),
@@ -68,6 +95,5 @@ erases as the owner, and drives the loops with the host key.
 
 ## Not yet here
 
-An OIDC verifier for a real identity provider, the OAuth connect flow and the `system` record a connection writes
-(docs/design/host.md, "Identity and credentials"), the retry loop for failed runs, terms as robots rules
-and headers, signed requests between owners, and the emergency-access mechanics.
+The `system` record a connection writes into the owner's data (it needs the party package's kinds, which
+wait with the vocabularies), and a deployment: the host runs and is tested locally only.

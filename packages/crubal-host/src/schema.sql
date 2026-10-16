@@ -46,6 +46,19 @@ create table if not exists index_cursors (
   primary key (owner, view, version, audience)
 );
 
+-- Credentials behind a contract's name (docs/design/host.md, "Outbound"). The reference host keeps the
+-- material here; a platform keeps it in a vault behind the same interface and leaves `material` empty.
+create table if not exists host_credentials (
+  owner text not null,
+  name text not null,
+  scheme text not null,
+  material jsonb not null,
+  scopes text[] not null default '{}',
+  expires text,
+  connected text not null,
+  primary key (owner, name)
+);
+
 create table if not exists host_identities (
   provider text not null,
   subject text not null,

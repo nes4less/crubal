@@ -2,8 +2,9 @@
 
 **Status:** design, 2026-10-15; the reference host's first version is in `packages/crubal-host` (owners and
 keys, API-key identity with a verifier hook, secrets, the `http` adapter, signing, install through the
-host, the loops, the HTTP surface); the index, an OIDC verifier, the OAuth connect flow and signed
-requests between owners are next. Not part of the specification. The spec names "the host" wherever it hands
+host, the loops, the HTTP surface); with the reference index, the OIDC verifier, credentials with the OAuth connect flow, signed requests
+between owners, terms as robots rules and headers, the retry loop and the emergency mechanics. Left: the
+`system` record a connection writes (needs the party package), and a deployment. Not part of the specification. The spec names "the host" wherever it hands
 something off (authentication, secrets, acting, the clock, signing, terms); this document says what that
 is, draws the line between a reference host anyone can run and what a platform adds, and lists the
 decisions. Cashierfu is the platform in the examples; every call here holds for any host.

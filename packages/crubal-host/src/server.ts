@@ -7,7 +7,9 @@ import { Access } from "../../crubal/src/access.ts";
 import { formOf } from "../../crubal/src/forms.ts";
 import type { Json, JsonObject } from "../../crubal/src/model.ts";
 import type { Caller, Host } from "./host.ts";
+import { endEmergencyEdge, type EmergencyRequest, logEmergencyRead, makeEmergencyEdge } from "./emergency.ts";
 import { Index } from "./indexer.ts";
+import { readTerms, robotsTxt, termsHeaders, termsJson } from "./terms.ts";
 
 type Req = IncomingMessage;
 type Res = ServerResponse;
@@ -36,30 +38,93 @@ const isObj = (v: Json | undefined): v is JsonObject => typeof v === "object" &&
 export function serve(host: Host): Server {
   const handle = async (req: Req, res: Res) => {
     const url = new URL(req.url ?? "/", "http://host");
+    // The body is read once, up front: a signed request's digest covers it.
+    const raw = await body(req);
+    const bodyOf = () => raw;
     const parts = url.pathname.split("/").filter(Boolean);
     const q = (k: string) => url.searchParams.get(k) ?? undefined;
     const method = req.method ?? "GET";
 
     if (url.pathname === "/.well-known/crubal.json") return json(res, 200, await host.wellKnown());
+    // OAuth's return leg: the code becomes the connection the state names.
+    if (url.pathname === "/oauth/callback" && method === "GET") {
+      const state = JSON.parse(Buffer.from(q("state") ?? "", "base64url").toString("utf8") || "{}") as { owner?: string; name?: string };
+      const provider = state.name ? host.o.oauth?.[state.name] : undefined;
+      if (!state.owner || !state.name || !provider || !q("code")) throw new HttpError(400, "state, name and code");
+      const c = await host.credentials.exchangeCode(state.owner, state.name, q("code") as string, provider, []);
+      return json(res, 200, c as unknown as Json);
+    }
 
     // The loops, for a scheduler, behind the host key.
-    if (parts[0] === "project" || parts[0] === "tick") {
+    const hostKeyOk = !host.o.hostKey || req.headers["x-host-key"] === host.o.hostKey;
+    if (parts[0] === "project" || parts[0] === "tick" || parts[0] === "retry") {
       if (method !== "POST") throw new HttpError(405, "POST");
-      if (host.o.hostKey && req.headers["x-host-key"] !== host.o.hostKey) throw new HttpError(403, "the host key");
-      const b = (await body(req)) || "{}";
-      const o = JSON.parse(b) as JsonObject;
-      if (parts[0] === "project") return json(res, 200, await host.project(typeof o.owner === "string" ? o.owner : undefined));
-      return json(res, 200, await host.tick(typeof o.now === "string" ? o.now : undefined, typeof o.owner === "string" ? o.owner : undefined));
+      if (!hostKeyOk) throw new HttpError(403, "the host key");
+      const o = JSON.parse(bodyOf() || "{}") as JsonObject;
+      const owner = typeof o.owner === "string" ? o.owner : undefined;
+      const now = typeof o.now === "string" ? o.now : undefined;
+      if (parts[0] === "project") return json(res, 200, await host.project(owner));
+      if (parts[0] === "retry") return json(res, 200, await host.retry(now, owner));
+      return json(res, 200, await host.tick(now, owner));
     }
 
     if (parts[0] !== "o" || !parts[1]) throw new HttpError(404, "not found");
     const owner = decodeURIComponent(parts[1]);
-    const who: Caller | null = await host.whoIs(req.headers.authorization);
+    // A signed request from another owner (RFC 9421) names its signer; a bearer token names a caller.
+    const target = `${(req.headers["x-forwarded-proto"] as string | undefined) ?? "http"}://${req.headers.host ?? "host"}${req.url ?? "/"}`;
+    const who: Caller | null = req.headers.signature ? await host.whoSigned(owner, { method, url: target, body: raw, headers: req.headers }) : await host.whoIs(req.headers.authorization);
     const callerId = who && who.owner === owner ? who.caller : undefined;
     const isOwner = callerId === owner;
     const store = await host.storeFor(owner);
     const at = host.now();
     const [, , what, name, ...rest] = parts;
+
+    // Terms (12.5.1): robots rules and the terms file, from the owner's package.
+    if (what === "robots.txt" && method === "GET") {
+      const terms = readTerms((await store.definitions()).info.terms);
+      res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
+      return res.end(robotsTxt(terms, `/o/${owner}/`));
+    }
+    if (what === "terms.json" && method === "GET") return json(res, 200, termsJson(owner, readTerms((await store.definitions()).info.terms)) as unknown as Json);
+
+    // Connections (docs/design/host.md, "Outbound"): the fact of a credential, never its material.
+    if (what === "connections" && method === "GET") {
+      if (!isOwner) throw new HttpError(403, "the owner's connections");
+      return json(res, 200, (await host.credentials.connections(owner)) as unknown as Json);
+    }
+    if (what === "connect" && name) {
+      if (!isOwner) throw new HttpError(403, "the owner connects");
+      const provider = host.o.oauth?.[name];
+      if (method === "GET") {
+        if (!provider) throw new HttpError(404, `no OAuth provider for ${name}`);
+        const scopes = (q("scope") ?? "").split(" ").filter(Boolean);
+        return json(res, 200, { url: host.credentials.authorizeUrl(owner, name, provider, scopes) });
+      }
+      if (method === "POST") {
+        const b = JSON.parse(bodyOf() || "{}") as { scheme?: string; material?: JsonObject; scopes?: string[]; expires?: string };
+        if (!b.scheme || !b.material) throw new HttpError(400, "scheme and material");
+        return json(res, 200, (await host.credentials.connect(owner, name, b.scheme, b.material, b.scopes ?? [], b.expires)) as unknown as Json);
+      }
+      if (method === "DELETE") {
+        await host.credentials.disconnect(owner, name);
+        return json(res, 200, { disconnected: name });
+      }
+    }
+
+    // Emergency access (14.13): made by the platform under its terms; ended by the owner unless legal.
+    if (what === "emergency" && method === "POST" && !name) {
+      if (!hostKeyOk) throw new HttpError(403, "the platform makes emergency edges");
+      const r = JSON.parse(bodyOf() || "{}") as EmergencyRequest;
+      const made = await makeEmergencyEdge(store, r, host.o.emergency, at);
+      await host.notice(owner, { emergency: r.edge, kind: r.kind, reference: r.reference, who: r.who, until: r.until });
+      return json(res, 200, made as unknown as Json);
+    }
+    if (what === "emergency" && name && rest[0] === "end" && method === "POST") {
+      if (!isOwner && !hostKeyOk) throw new HttpError(403, "the owner or the platform");
+      return json(res, 200, (await endEmergencyEdge(store, name, callerId ?? "platform", at, isOwner)) as unknown as Json);
+    }
+    // A read under an emergency edge is logged, record by record (14.13).
+    const underEmergency = callerId ? [...(await store.state()).edges.values()].find((e) => e.who === callerId && e.relation === "emergency" && (typeof e.until !== "string" || e.until > at)) : undefined;
 
     // A view's page from the reference index (12.6.1): applied from the stream first, then served.
     if (what === "v" && name && method === "GET") {
@@ -68,12 +133,15 @@ export function serve(host: Host): Server {
       const picks: { [filter: string]: string[] } = {};
       for (const [k, val] of url.searchParams) if (!["page", "q"].includes(k)) picks[k] = val.split(",").map((x) => x.trim()).filter(Boolean);
       const page = await index.serve(store, name, { ...(q("page") ? { page: Number(q("page")) } : {}), ...(Object.keys(picks).length ? { picks } : {}), ...(q("q") ? { q: q("q") as string } : {}), ...(callerId ? { caller: callerId } : {}) });
-      res.setHeader("x-robots-tag", page.indexable ? "all" : "noindex");
+      const th = termsHeaders(readTerms((await store.definitions()).info.terms));
+      const robots = [page.indexable ? "all" : "noindex", ...(th["x-robots-tag"] ? th["x-robots-tag"].split(", ") : [])].filter((t, i, a) => a.indexOf(t) === i && !(t === "all" && a.includes("noindex")));
+      res.setHeader("x-robots-tag", robots.join(", "));
+      res.setHeader("x-crubal-terms", th["x-crubal-terms"] as string);
       res.setHeader("x-crubal-seq", String(page.seq));
       return json(res, 200, page as unknown as Json);
     }
     if (what === "run" && name && method === "POST") {
-      const b = JSON.parse((await body(req)) || "{}") as JsonObject;
+      const b = JSON.parse(bodyOf() || "{}") as JsonObject;
       const border = await host.borderFor(owner, store);
       const c = border.contracts.get(name);
       if (!c) throw new HttpError(404, `no contract ${name}`);
@@ -93,7 +161,7 @@ export function serve(host: Host): Server {
     if (what === "receive" && name && method === "POST") {
       const border = await host.borderFor(owner, store);
       if (!border.contracts.has(name)) throw new HttpError(404, `no contract ${name}`);
-      const payload = await body(req);
+      const payload = bodyOf();
       const record = q("record");
       const run = q("run");
       if (record) return json(res, 200, await border.receive(name, record, payload, callerId, at, run));
@@ -104,6 +172,7 @@ export function serve(host: Host): Server {
       const state = await store.state();
       const r = state.records.get(name);
       if (!r) throw new HttpError(404, `no record ${name}`);
+      if (underEmergency && callerId) await logEmergencyRead(store, callerId, name, String(underEmergency.edge), at);
       const p = await store.definitions();
       // What the caller may see (14.6): with a permission menu declared, a facet needs the caller's `see` item.
       const access = p.perms.menu.size ? new Access(p.dict, p.perms, state.records, [...state.edges.values()] as never[], owner) : undefined;
@@ -129,7 +198,7 @@ export function serve(host: Host): Server {
         return json(res, 200, await border.streamRun(name, callerId, cursor, at));
       }
       if (rest[0] === "ack" && method === "POST") {
-        const b = JSON.parse((await body(req)) || "{}") as { cursor?: { [view: string]: number } };
+        const b = JSON.parse(bodyOf() || "{}") as { cursor?: { [view: string]: number } };
         return json(res, 200, await border.ack(name, b.cursor ?? {}));
       }
     }
@@ -150,13 +219,13 @@ export function serve(host: Host): Server {
       const items = (await store.state()).reviews;
       const it = items[Number(name)];
       if (!it) throw new HttpError(404, `no review item ${name}`);
-      const b = JSON.parse((await body(req)) || "{}") as JsonObject;
+      const b = JSON.parse(bodyOf() || "{}") as JsonObject;
       const entry = await store.commitFrom(() => ({ by: { person: callerId }, extra: [{ review: { ...it, decision: b.decision ?? b, by: callerId } }], out: null }), at);
       return json(res, 200, { decided: Number(name), entry: entry.entry ? String(entry.entry.log) : "" });
     }
     if (what === "install" && method === "POST") {
       if (!isOwner) throw new HttpError(403, "the owner installs");
-      const b = JSON.parse(await body(req)) as JsonObject;
+      const b = JSON.parse(bodyOf()) as JsonObject;
       return json(res, 200, await host.install(owner, isObj(b.bundle) ? b.bundle : b));
     }
     if (what === "export" && method === "GET") {

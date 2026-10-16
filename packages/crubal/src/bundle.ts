@@ -487,7 +487,7 @@ export function readBundleOnto(bundle: JsonObject, base: Parsed): Parsed {
   const text = printBundle(bundle);
   readDefinitions(text, base.dict);
   const [info] = readPackages(text);
-  if (info) base.info = { ...info, dict: base.dict };
+  if (info) base.info = { ...info, dict: base.dict, terms: Object.keys(info.terms).length ? info.terms : base.info.terms };
   const byName = <T extends { name: string }>(have: T[], next: T[]) => [...have.filter((h) => !next.some((n) => n.name === h.name)), ...next];
   base.rules = byName(base.rules, readRules(text));
   base.contracts = byName(base.contracts, readContracts(text));

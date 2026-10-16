@@ -327,6 +327,7 @@ export function diffWrites(before: State, after: Draft): JsonObject[] {
     for (const i of list.slice(have)) writes.push({ instruction: { issuer, ...i } });
   }
   for (const [id, e] of after.edges) if (!sameJson(before.edges.get(id), e)) writes.push({ edge: e });
+  for (const id of before.edges.keys()) if (!after.edges.has(id)) writes.push({ edge: id, removed: true });
   for (const item of after.review.slice(before.reviews.length)) writes.push({ review: item });
   return writes;
 }

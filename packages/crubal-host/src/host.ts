@@ -9,6 +9,9 @@ import type { Contract, Keys } from "../../crubal/src/store.ts";
 import { type Adapter, PgBorder, borderOptions } from "../../crubal-postgres/src/border.ts";
 import { type Client, migrate as migrateStore, type Pool, transaction } from "../../crubal-postgres/src/db.ts";
 import { PgStore } from "../../crubal-postgres/src/store.ts";
+import { Credentials, type OAuthProvider } from "./credentials.ts";
+import type { EmergencyTerms } from "./emergency.ts";
+import { verifyRequest } from "./signatures.ts";
 
 const SCHEMA_SQL = readFileSync(new URL("./schema.sql", import.meta.url), "utf8");
 
@@ -33,8 +36,12 @@ export type HostOptions = {
   fresh?: "write" | "asked";
   /** Install unsigned bundles (development only). */
   allowUnsigned?: boolean;
-  /** Emergency terms for the well-known file (14.13), when the platform has them. */
-  emergency?: JsonObject;
+  /** Emergency terms (14.13), published in the well-known file, when the platform has them. */
+  emergency?: EmergencyTerms;
+  /** OAuth providers by credential name, for the connect flow and refresh. */
+  oauth?: { [name: string]: OAuthProvider };
+  /** The owner's notice of an emergency edge or a dead run; the console otherwise. */
+  notify?: (owner: string, notice: JsonObject) => void | Promise<void>;
 };
 
 const envName = (s: string) => s.replace(/[^A-Za-z0-9]/g, "_").toUpperCase();
@@ -43,10 +50,12 @@ export const hashKey = (key: string) => createHash("sha256").update(key).digest(
 export class Host {
   readonly pool: Pool;
   readonly o: HostOptions;
+  readonly credentials: Credentials;
 
   constructor(pool: Pool, o: HostOptions) {
     this.pool = pool;
     this.o = o;
+    this.credentials = new Credentials(pool, () => this.now());
   }
 
   now(): string {
@@ -93,6 +102,25 @@ export class Host {
     await this.pool.query("delete from host_api_keys where key_hash = $1", [hashKey(raw)]);
   }
 
+  /** Link an identity provider's subject to a caller, for the OIDC verifier. */
+  async linkIdentity(provider: string, subject: string, owner: string, caller: string): Promise<void> {
+    await this.pool.query("insert into host_identities (provider, subject, owner, caller) values ($1, $2, $3, $4) on conflict (provider, subject) do update set owner = excluded.owner, caller = excluded.caller", [provider, subject, owner, caller]);
+  }
+
+  async identity(provider: string, subject: string): Promise<Caller | null> {
+    const { rows } = await this.pool.query("select owner, caller from host_identities where provider = $1 and subject = $2", [provider, subject]);
+    return (rows[0] as Caller | undefined) ?? null;
+  }
+
+  /**
+   * Who is calling when the request is signed by another owner (RFC 9421 with its domain key): the signer's
+   * domain, as a caller of the owner addressed. The signer's key comes from its well-known file.
+   */
+  async whoSigned(owner: string, req: { method: string; url: string; body?: string; headers: { [h: string]: string | string[] | undefined } }): Promise<Caller | null> {
+    const v = await verifyRequest({ ...req, publicX: async (keyid) => (await this.resolveKeys(keyid))[keyid]?.public, now: Math.floor(Date.parse(this.now()) / 1000) });
+    return v ? { owner, caller: v.keyid } : null;
+  }
+
   /** Who is calling: an API key, a token a verifier knows, or nobody. The store sees only the caller ID. */
   async whoIs(authorization: string | undefined): Promise<Caller | null> {
     if (!authorization) return null;
@@ -110,8 +138,10 @@ export class Host {
 
   // ─── Secrets ───────────────────────────────────────────────────────────────
 
-  secret(owner: string, name: string): string | undefined {
-    return this.o.secrets?.(owner, name) ?? process.env[`CRUBAL_SECRET_${envName(owner)}_${envName(name)}`];
+  /** A credential's secret: connected under the name (refreshed when OAuth and expired), a configured source, or the environment. */
+  async secret(owner: string, name: string): Promise<string | undefined> {
+    const connected = await this.credentials.secret(owner, name, this.o.oauth?.[name]);
+    return connected ?? this.o.secrets?.(owner, name) ?? process.env[`CRUBAL_SECRET_${envName(owner)}_${envName(name)}`];
   }
 
   // ─── Stores and borders ────────────────────────────────────────────────────
@@ -132,7 +162,7 @@ export class Host {
       const url = c.parts["host:url"];
       if (!url) return { acted: true };
       const headers: { [k: string]: string } = { "content-type": "application/json" };
-      const credential = c.parts.credential ? this.secret(owner, c.parts.credential) : undefined;
+      const credential = c.parts.credential ? await this.secret(owner, c.parts.credential) : undefined;
       if (c.parts.credential && credential === undefined) return { failed: `credential: no secret for ${c.parts.credential}` };
       if (credential && (c.parts.auth === "apikey" || c.parts.auth === "oauth2")) headers.authorization = `Bearer ${credential}`;
       if (credential && c.parts.auth === "basic") headers.authorization = `Basic ${Buffer.from(credential).toString("base64")}`;
@@ -177,7 +207,12 @@ export class Host {
   async wellKnown(): Promise<JsonObject> {
     const keys: JsonObject = {};
     for (const o of await this.owners()) keys[o.owner] = { alg: "Ed25519", public: o.public };
-    return { crubal: "2", owner: this.o.domain, keys, packages: [], ...(this.o.emergency ? { emergency: this.o.emergency } : {}) };
+    return { crubal: "2", owner: this.o.domain, keys, packages: [], ...(this.o.emergency ? { emergency: this.o.emergency as unknown as JsonObject } : {}) };
+  }
+
+  async notice(owner: string, notice: JsonObject): Promise<void> {
+    if (this.o.notify) await this.o.notify(owner, notice);
+    else console.warn(`[notice ${owner}] ${JSON.stringify(notice)}`);
   }
 
   // ─── The loops ─────────────────────────────────────────────────────────────
@@ -189,6 +224,33 @@ export class Host {
       const store = await this.storeFor(o.owner);
       const p = await store.projecting();
       out[o.owner] = p?.views.views.size ? (await store.project()).length : 0;
+    }
+    return out;
+  }
+
+  /**
+   * Try failed runs again when their contract's retry interval has passed (7.5): a run still open after a
+   * failure, whose last attempt is `every` behind `now`. A run dead after its last attempt is noticed.
+   */
+  async retry(now = this.now(), owner?: string): Promise<JsonObject[]> {
+    const out: JsonObject[] = [];
+    for (const o of owner ? [{ owner }] : await this.owners()) {
+      const store = await this.storeFor(o.owner);
+      const border = await this.borderFor(o.owner, store);
+      const { rows } = await this.pool.query("select run, json from runs where owner = $1 and json->>'state' = 'failed'", [o.owner]);
+      for (const r of rows as { run: string; json: JsonObject }[]) {
+        const c = border.contracts.get(String(r.json.contract));
+        const m = (c?.parts.retry ?? "").match(/^(\d+)\s+every\s+(\d+)(m|h|d)$/);
+        if (!c || !m) continue;
+        const allowed = 1 + Number(m[1]);
+        if (Number(r.json.attempt ?? 0) >= allowed) continue;
+        const every = Number(m[2]) * (m[3] === "m" ? 60_000 : m[3] === "h" ? 3_600_000 : 86_400_000);
+        const last = (await this.pool.query("select max(at) as at from log where owner = $1 and entry->'writes' @> $2::jsonb", [o.owner, JSON.stringify([{ run: r.run, state: "failed" }])])).rows[0] as { at: string | null };
+        if (last.at && Date.parse(last.at) + every > Date.parse(now)) continue;
+        const result = await border.retry(r.run, undefined, now);
+        out.push({ owner: o.owner, run: r.run, ...result });
+        if (result.dead) await this.notice(o.owner, { dead: r.run, contract: c.name, review: String(result.review ?? "") });
+      }
     }
     return out;
   }
