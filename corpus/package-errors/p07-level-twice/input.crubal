@@ -1,0 +1,11 @@
+// Level names are unique across the kinds of one package (1.2): a level names its kind.
+package: mine /2026-10-14
+  owner: mine.example
+  crubal: 2
+
+kind: item
+  levels: group, product, unit
+  base: Item
+kind: bundle
+  levels: bundle, product
+  base: Bundle

@@ -86,8 +86,10 @@ export class Index {
     const version = v.version ?? "";
     const owner = store.owner;
     // The caller's audience decides whether this view is theirs to read (14.4): never a higher one.
-    const state = await store.state();
-    const access = p.perms.menu.size || p.perms.relations.size ? new Access(p.dict, p.perms, state.records, [...state.edges.values()] as never[], owner) : undefined;
+    // Access only when the package declares permissions or relations: loading the state costs with the catalog.
+    const needsAccess = p.perms.menu.size || p.perms.relations.size;
+    const state = needsAccess ? await store.state() : undefined;
+    const access = state ? new Access(p.dict, p.perms, state.records, [...state.edges.values()] as never[], owner) : undefined;
     const rank = (a: string) => ["public", "member", "staff", "owner"].indexOf(a);
     const audience = o.caller ? (access ? access.audienceOf(o.caller) : "member") : "public";
     if (o.caller === owner) {

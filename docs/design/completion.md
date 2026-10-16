@@ -9,7 +9,10 @@ tokens, the cross-host take with the wrapper verified, the four modes and terms,
 inbox), M and N built (hosted persons' chains split per entry in one transaction, the person's key made on
 first write, export and erase as the person; key rotation with dated keys), O and P built (health, body
 limit, CORS, log lines, SecretStore, the container with its smoke script; drain and the delayed-view loop),
-corpus 183, 14 store tests, 11 host tests. Left: Q, R, S. The units table is global per process: one owner's extension at a time until it
+corpus 188, 14 store tests, 11 host tests. Q built (`corpus/COVERAGE.md`: every MUST mapped, five
+cases and two refusals added, eleven small refusals listed open), S built (`crubal claim`, `corpus/VERSION`,
+the tag `corpus/2026-10-15`, `packages/crubal/CLAIM.md`). R: the benchmark `packages/crubal-host/bench/bench.ts`
+runs; see its section below for the numbers and what was fixed. The units table is global per process: one owner's extension at a time until it
 is made per dictionary. Everything the specification states that the engine, the store or the host
 doesn't do yet, and nothing that depends on a kind, a vocabulary or an adopter. Each item says what it is,
 how it works, what it writes, and what proves it. The coding round takes them in the order of the last
@@ -179,6 +182,17 @@ selecting by `all()` where `atLevel` serves, and projection publish loading more
 
 `crubal claim <corpus>` runs the levels and prints `CRUBAL 2 · <level> · corpus <tag>`; the corpus is
 tagged `corpus/<date>` in git at each dated revision; the claim is written to `packages/crubal/CLAIM.md`.
+
+## R: the first run
+
+100,200 records (200 products × 500 units), local Postgres 17, 2026-10-16. Before fixes: a receive on one
+product 8.5 ms; the publish of one view after one write 756 ms; an index page with two picks 365 ms; a
+search 354 ms; one record through the state 339 ms; the first full publish of the view 48.7 s. The page,
+the search and the record read were slow for one reason: the index and the records route loaded the whole
+state on every call to build access, whether or not the package declared permissions. Fixed: both load it
+only when there is a menu or a relation to check, and the records route reads one row. The full publish
+and the stale-row publish pay the working set's load-and-rerun loop per page; not a target, noted for the
+next round.
 
 ## Calls made here
 

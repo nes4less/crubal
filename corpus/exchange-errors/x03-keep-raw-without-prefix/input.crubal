@@ -1,0 +1,7 @@
+// A contract that keeps raw fields declares the prefix they are kept under (9.4).
+title$
+contract: catalog
+  kind: receive
+  reads:
+    Title -> title
+  keep-raw: Studio, Rating

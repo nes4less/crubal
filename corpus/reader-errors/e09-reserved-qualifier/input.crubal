@@ -1,0 +1,6 @@
+// Four names are reserved inside a value's detail (1.8): row, origin, via and owner are never qualifier keys.
+crubal: 2
+owner: test.example
+
+product: P-1
+  title: Christmas Vacation [owner: someone]

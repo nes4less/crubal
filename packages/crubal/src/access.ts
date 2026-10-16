@@ -202,7 +202,9 @@ export class Access {
       while (cur) {
         if (seen.has(cur)) throw new CrubalError(`${r.id} is within itself through ${cur}`, lineOf?.(r.id));
         seen.add(cur);
-        cur = this.records.get(cur)?.within;
+        const up = this.records.get(cur);
+        if (up && up.owner !== r.owner) throw new CrubalError(`${r.id} is within ${cur}, which belongs to ${up.owner}: within never crosses owners`, lineOf?.(r.id));
+        cur = up?.within;
       }
     }
   }

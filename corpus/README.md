@@ -1,5 +1,9 @@
 # The CRUBAL test corpus
 
+`VERSION` holds the corpus's dated version (13.4); the same date is a git tag `corpus/<date>`, and a new
+version is a new date. `COVERAGE.md` maps every MUST in chapters 1–14 to the case that tests it, and lists
+the few still open.
+
 A conformance claim (spec README, "Conformance levels") is proven by passing that level's folders here. The
 corpus is part of the spec: when a case and a chapter disagree, one of them is a bug and gets fixed.
 

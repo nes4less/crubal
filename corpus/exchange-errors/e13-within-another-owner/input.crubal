@@ -1,0 +1,23 @@
+// The within links never cross owners (14.2, 14.12): a team is within its own league, never another owner's.
+kind: league
+  levels: league
+kind: team
+  levels: team
+name$
+
+permissions: facility
+  menu:
+    rename: edit name
+  relations: operator
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+league: L-1 [origin: declared, via: L-1]
+  crubal:owner: other.example
+  name: Northern
+
+team: T-1 [origin: declared, via: L-1]
+  crubal:within: L-1
+  name: Bears

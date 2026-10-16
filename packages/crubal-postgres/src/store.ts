@@ -8,7 +8,7 @@ import { apply, pending, type Store as LifecycleStore } from "../../crubal/src/l
 import type { Json, JsonObject } from "../../crubal/src/model.ts";
 import { entryHash, verifyChain, writeHash, type Keys } from "../../crubal/src/store.ts";
 import { type Client, type Pool, transaction } from "./db.ts";
-import { isObj, loadState, persist, wipeState } from "./state.ts";
+import { isObj, loadState, persist, wipeState, recordOf } from "./state.ts";
 import { type Parsed, readBundleOnto, verifyBundle } from "../../crubal/src/bundle.ts";
 import { dryRun, restamp, type StepStats } from "../../crubal/src/migrate.ts";
 import { checkAll, definitionsOf, unitsExtensionOf, workingBundle } from "./definitions.ts";
@@ -180,6 +180,12 @@ export class PgStore {
     this.defsCache = undefined;
     if (previous) for (const table of ["projections", "projection_stream", "stale"]) await this.pool.query(`delete from ${table} where owner = $1`, [this.owner]);
     return result.entry;
+  }
+
+  /** One record by id, from its row alone (no whole state): undefined when there is none. */
+  async get(id: string): Promise<Record | undefined> {
+    const { rows } = await this.pool.query("select * from records where owner = $1 and id = $2", [this.owner, id]);
+    return rows[0] ? recordOf(rows[0] as { [column: string]: unknown }) : undefined;
   }
 
   /** The review items still open (9.5). */

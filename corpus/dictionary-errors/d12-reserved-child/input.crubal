@@ -1,0 +1,2 @@
+// A compound child may not take a reserved detail name (1.8): row, origin, via and owner belong to the value's detail.
+cast(person&Person, origin$)*

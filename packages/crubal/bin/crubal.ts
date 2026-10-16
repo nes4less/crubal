@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // crubal: read, print and test CRUBAL.
 //   crubal test <corpus> [--level reader]   run a level's corpus folders
+//   crubal claim <corpus> [--level views] [--out CLAIM.md]   run every level up to one and print the claim (13.3)
 //   crubal read <file> --defs <file>...      text to JSON
 //   crubal print <file.json> --defs <file>... JSON to text
 //   crubal publish <dir> [--previous <package.json>] [--date YYYY-MM-DD] [--key <file>] [--out <dir>]
@@ -26,6 +27,33 @@ if (cmd === "test" && target) {
   for (const r of results) console.log(`${r.pass ? "pass" : "FAIL"}  ${r.folder}/${r.name}${r.detail ? `  ${r.detail}` : ""}`);
   const failed = results.filter((r) => !r.pass).length;
   console.log(`\n${results.length - failed}/${results.length} passed (${level})`);
+  process.exit(failed ? 1 : 0);
+} else if (cmd === "claim" && target) {
+  // A claim names the language version, the level and the corpus version it passed (13.3), and links the run.
+  const LEVELS = ["reader", "dictionary", "rules", "store", "exchange", "views"];
+  const upTo = flag("--level")[0] ?? "views";
+  if (!LEVELS.includes(upTo)) {
+    console.log(`unknown level ${upTo}; one of ${LEVELS.join(", ")}`);
+    process.exit(2);
+  }
+  const version = existsSync(join(target, "VERSION")) ? readFileSync(join(target, "VERSION"), "utf8").trim() : "unversioned";
+  const lines: string[] = [];
+  let failed = 0;
+  for (const level of LEVELS.slice(0, LEVELS.indexOf(upTo) + 1)) {
+    const results = runCorpus(target, level);
+    const bad = results.filter((r) => !r.pass);
+    failed += bad.length;
+    const name = level.charAt(0).toUpperCase() + level.slice(1);
+    lines.push(`${bad.length ? "FAILED" : "CRUBAL 2"} · ${name} · corpus ${version}  (${results.length - bad.length}/${results.length})`);
+    for (const r of bad) lines.push(`  FAIL ${r.folder}/${r.name}${r.detail ? `  ${r.detail}` : ""}`);
+  }
+  for (const l of lines) console.log(l);
+  const out = flag("--out")[0];
+  if (out && !failed) {
+    const today = new Date().toISOString().slice(0, 10);
+    writeFileSync(out, `# Conformance claim\n\n${lines.map((l) => `- ${l}`).join("\n")}\n\nRun on ${today} with \`crubal claim\` from this package against the corpus tagged \`corpus/${version}\` (spec 13.3, 13.4).\n`);
+    console.log(`written ${out}`);
+  }
   process.exit(failed ? 1 : 0);
 } else if (cmd === "read" && target) {
   const dict = dictionary();
@@ -60,6 +88,6 @@ if (cmd === "test" && target) {
 } else if (cmd === "print" && target) {
   console.log(printText(JSON.parse(readFileSync(target, "utf8")) as Wrapper, dictionary(), rest.includes("--plain") ? "plain" : "full"));
 } else {
-  console.log("usage: crubal test <corpus> [--level reader] | crubal read <file> --defs <file> | crubal print <file.json> --defs <file> | crubal publish <dir> [--previous <package.json>] [--date YYYY-MM-DD] [--key <file>] [--out <dir>]");
+  console.log("usage: crubal test <corpus> [--level reader] | crubal claim <corpus> [--level views] [--out CLAIM.md] | crubal read <file> --defs <file> | crubal print <file.json> --defs <file> | crubal publish <dir> [--previous <package.json>] [--date YYYY-MM-DD] [--key <file>] [--out <dir>]");
   process.exit(2);
 }

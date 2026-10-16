@@ -602,7 +602,12 @@ export function readDefinitions(source: string, into: Dictionary = emptyDictiona
         const kind = node.value.trim();
         const levels = node.children.find((c) => c.key === "levels");
         const names = levels ? splitTop(levels.value, ",", levels.line) : [kind];
-        for (const level of names) into.levels.set(level, kind);
+        for (const level of names) {
+          // Level names are unique across the kinds of one package (1.2), so a level names its kind.
+          const had = into.levels.get(level);
+          if (had && had !== kind) throw new CrubalError(`${level} is already a level of ${had}`, levels?.line ?? node.line);
+          into.levels.set(level, kind);
+        }
         const def: KindDef = { name: kind, line: node.line, levels: names };
         const base = node.children.find((c) => c.key === "base");
         if (base) def.base = base.value.trim();

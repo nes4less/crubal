@@ -203,13 +203,13 @@ export function serve(host: Host): Server {
     }
     if (what === "records" && name && method === "GET") {
       if (!callerId) throw new HttpError(401, "sign in");
-      const state = await store.state();
-      const r = state.records.get(name);
+      const r = await store.get(name);
       if (!r) throw new HttpError(404, `no record ${name}`);
       if (underEmergency && callerId) await logEmergencyRead(store, callerId, name, String(underEmergency.edge), at);
       const p = await store.definitions();
       // What the caller may see (14.6): with a permission menu declared, a facet needs the caller's `see` item.
-      const access = p.perms.menu.size ? new Access(p.dict, p.perms, state.records, [...state.edges.values()] as never[], owner) : undefined;
+      const state = p.perms.menu.size ? await store.state() : undefined;
+      const access = state ? new Access(p.dict, p.perms, state.records, [...state.edges.values()] as never[], owner) : undefined;
       const values: JsonObject = {};
       for (const [k, v] of Object.entries(r.values)) if (!access || isOwner || access.may(callerId, "see", k, r.id)) values[k] = v;
       const { sources, ...plain } = r as unknown as JsonObject;
