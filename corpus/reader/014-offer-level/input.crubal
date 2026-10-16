@@ -1,0 +1,21 @@
+// A kind with four levels (1.2, 11.2): an offer is `of` a unit as a unit is `of` a product, and reads the
+// levels above it through. Two offers of one unit differ only in what varies at the offer step.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: DVD
+
+unit: U-1 of P-1 [origin: observed, via: L-2]
+  condition: VG
+  price: 8.00USD
+
+offer: F-1 of U-1 [origin: declared, via: L-3]
+  availability: available
+  channel: storefront
+
+offer: F-2 of U-1 [origin: declared, via: L-3]
+  availability: held
+  channel: ebay

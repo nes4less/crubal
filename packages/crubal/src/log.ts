@@ -35,7 +35,7 @@ export function emptyState(): State {
   return { records: new MemoryRecords(), edges: new Map(), bindings: new Map(), instructions: new Map(), observations: [], reviews: [], runs: new Map(), installed: [], reads: [], definitions: new Map() };
 }
 
-const MEMBERS = ["facet", "class", "rule", "contract", "kind", "view", "shape", "filter", "permissions", "ownership", "units"];
+const MEMBERS = ["facet", "class", "rule", "contract", "kind", "view", "shape", "filter", "permissions", "ownership", "units", "utility"];
 
 /** The key of a `define` write's member: which kind of member, and its name. */
 function memberKey(def: JsonObject): string | null {

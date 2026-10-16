@@ -38,9 +38,35 @@ package: me /2026-10-13
 | `terms` | how each audience may use what it's shown: `public: search yes, answer yes, train no` (chapter 12.5.1) |
 
 The rest of the package is its member files: `facet:`, `class:`, `rule:`, `contract:`, `kind:`, `view:`,
-`shape:`, `filter:`, `role:` (chapter 12), `migration:`, `permissions:` and `ownership:` (chapter 14)
-blocks, in any number of files. A package MAY also publish **reference records** (data files in
+`shape:`, `filter:`, `role:` (chapter 12), `migration:`, `permissions:` and `ownership:` (chapter 14) and
+`utility:` blocks, in any number of files. A package MAY also publish **reference records** (data files in
 the text form, chapter 2) that others read but don't own copies of: the units table is one.
+
+**Utilities.** A platform that mounts tools for the people of the owners it hosts declares each tool in the
+package that holds its vocabulary, so that what a tool needs and whom it serves is read from the package and
+nowhere else:
+
+```crubal
+utility: orders /2026-10-16
+  label: Orders
+  serves: controller, fulfiller(ship, returns), member(buyer)
+  needs: cashierfu.com/commerce, cashierfu.com/location, notifications
+  setup: connection stripe, connection shippo, setting shippingOrigin
+```
+
+| Setting | Holds |
+|---|---|
+| `utility` | its name (a lower-case word, its identity like a contract's) and dated version |
+| `label` · `describe` | what people see |
+| `serves` | whom it mounts for: presets, relations or audiences (chapter 14.6, 12.4), each optionally narrowed in parentheses to the presets, menu items or relations it shows screens for |
+| `needs` | the packages (`domain/name`, optionally with a version) and the other utilities it depends on |
+| `setup` | what a deployment provides before it runs: `connection <name>` (a credential the host holds, chapter 7.6) and `setting <facet>` (a value on the deployment's own record) |
+
+A utility is a member like any other: versioned, listed in `members`, carried in the bundle (11.6). It
+grants nothing: who may use it is still edges (chapter 14). A package MUST be refused at publish when a
+utility serves a name that isn't a preset, relation or audience, narrows to something that isn't a preset,
+menu item or relation, or needs a setting that isn't a facet. A reader that doesn't know the block carries
+it unchanged (chapter 13.5).
 
 **Prefixes are nicknames.** Identity is always the full `domain/name`; a prefix only abbreviates it inside a
 package or a wrapper, and readers compare after resolving (chapter 1.3). Two packages may use different
@@ -174,9 +200,15 @@ A published version MUST NOT change. A mistake is fixed by a new version.
   "units": { "package": "crubal.com/units", "version": "2026-10-15" },
   "trust": ["person", "me:unitizer", "observed", "declared", "reported"],
   "facet-trust": { "runtime": ["observed", "person"] },
-  "members": { "facet:videoCodec": "2026-10-13", "class:OpticalDisc": "2026-10-13" }
+  "members": { "facet:videoCodec": "2026-10-13", "class:OpticalDisc": "2026-10-13" },
+  "utilities": [ { "utility": "orders", "version": "2026-10-16", "serves": [ { "as": "controller" }, { "as": "fulfiller", "items": ["ship", "returns"] } ],
+                  "needs": [ { "name": "cashierfu.com/commerce" } ], "setup": [ { "connection": "stripe" }, { "setting": "shippingOrigin" } ] } ]
 }
 ```
+
+The member sections (`kinds`, `facets`, `classes`, `rules`, `contracts`, `views`, `shapes`, `filters`,
+`roles`, `permissions`, `ownership`, `recipes`, `utilities`) each hold their members' JSON forms as the
+chapters define them.
 
 ## 11.7 The home: crubal.com
 

@@ -8,6 +8,8 @@ runtime#min
 weight#lb
 price#USD
 sealed?
+availability{available|held|sold|withdrawn}
+channel{storefront|ebay|...}
 videoCodec{MPEG-2|H.264|VC-1|HEVC|AV1}
 hdrFormats{HDR10|Dolby Vision|...}*
 genres{Comedy|Holiday|Drama|...}*

@@ -9,7 +9,7 @@ a new MUST or a new case updates this file.
 | 1 | text and JSON express exactly one model, either converts to the other | reader/001–013 (each case reads text and checks the canonical JSON; 3.10) |
 | 1.2 | level names unique across a package's kinds | package-errors/p07-level-twice |
 | 1.2 | a record's level is one of its kind's | package-errors/p05-level-not-of-kind, reader/012-envelope |
-| 1.2 | `of` names a record of the same kind at the level directly above | reader-errors/e11-of-wrong-level (within a file), store/021-attach, store/022-attach-without-edit |
+| 1.2 | `of` names a record of the same kind at the level directly above | reader-errors/e11-of-wrong-level (within a file), reader/014-offer-level (four levels: an offer of a unit of a product), store/021-attach, store/022-attach-without-edit |
 | 1.3 | another package's key carries a prefix | reader/007-unknown-keys, package-errors/p03-reserved-prefix |
 | 1.3 | compare after resolving, never by nickname | dictionary/002-alias-fold |
 | 1.3 | keys case-sensitive, NFC; aliases folded | dictionary/002-alias-fold, dictionary-errors/d01-alias-collision |
@@ -75,6 +75,7 @@ a new MUST or a new case updates this file.
 | 10.5 | refused at publish | store-errors/s01-recipe-unknown-value |
 | 10.7 | a change that stops projecting a key carries its instruction | store/024-instructions, 029-instruction-order; open: the publish refusal |
 | 11.1 | `crubal` and the package's own name never remapped; no two prefixes for one identity | package-errors/p03-reserved-prefix |
+| 11.1 | a utility serves only presets, relations and audiences the package declares; narrows only to presets, items and relations; a setting is a facet | package-errors/p08-utility-unknown-preset; unit: utility.test (the narrowing and the setting refusals; the block round-trips through its bundle and is listed in `members`) |
 | 11.2 | `identify` keys are unique; an extension never removes a vary step | store/016-arrival (bound by identify), rules/010-unique-per-level; package-errors/p01-extends-widens |
 | 11.4 | extending never changes or widens | package-errors/p01-extends-widens |
 | 11.5 | publishing runs every check; a version never changes | *-errors/* (every folder), unit: publish.test |

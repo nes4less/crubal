@@ -5,7 +5,8 @@
 import { type Dictionary, emptyDictionary, type Facet, readDefinitions } from "./defs.ts";
 import { LANGUAGE } from "./read-text.ts";
 import { readContracts } from "./store.ts";
-import { CrubalError, readTree } from "./tree.ts";
+import { readAccess } from "./access.ts";
+import { CrubalError, type Node, readTree } from "./tree.ts";
 
 export type PackageInfo = {
   name: string;
@@ -23,9 +24,81 @@ export type PackageInfo = {
   /** The rest of the header (11.1), as written. */
   header: { [key: string]: string };
   terms: { [audience: string]: string };
+  /** The utilities the package declares (11.1, `utility:` blocks). */
+  utilities: Utility[];
+};
+
+/**
+ * A utility block (11.1): a named, versioned tool a platform mounts for the presets, relations or audiences
+ * it `serves`, the packages and utilities it `needs`, and the connections and settings a deployment must
+ * provide in `setup`. Read like any block; a reader that doesn't know it carries it unchanged (13.5).
+ */
+export type Utility = {
+  name: string;
+  version: string;
+  label?: string;
+  describe?: string;
+  /** `curator(ship, returns)` → `{ as: "curator", items: ["ship", "returns"] }`; `controller` → no items. */
+  serves: { as: string; items?: string[]; line: number }[];
+  /** Package identities (`domain/name`, optionally ` /version`) and bare utility names. */
+  needs: { name: string; version?: string; line: number }[];
+  setup: ({ connection: string; line: number } | { setting: string; line: number })[];
+  line: number;
 };
 
 const ORIGINS = new Set(["observed", "declared", "derived", "reported"]);
+const AUDIENCES = new Set(["public", "member", "staff", "owner"]);
+
+const splitList = (v: string) => v.split(",").map((s) => s.trim()).filter(Boolean);
+
+/** Split at commas outside parentheses: `controller, curator(ship, returns)` → two pieces. */
+function splitServes(value: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let cur = "";
+  for (const ch of value) {
+    if (ch === "(") depth++;
+    if (ch === ")") depth--;
+    if (ch === "," && depth === 0) {
+      parts.push(cur);
+      cur = "";
+    } else cur += ch;
+  }
+  parts.push(cur);
+  return parts.map((s) => s.trim()).filter(Boolean);
+}
+
+/** Read one `utility:` block. */
+function readUtility(node: Node): Utility {
+  const [name = "", version = ""] = node.value.split(/\s+\//).map((s) => s.trim());
+  if (!/^[a-z][\w-]*$/.test(name)) throw new CrubalError(`a utility is "utility: <name> /<version>", the name a lower-case word: ${node.value}`, node.line);
+  const u: Utility = { name, version, serves: [], needs: [], setup: [], line: node.line };
+  for (const c of node.children) {
+    if (!c.key) continue;
+    if (c.key === "label") u.label = c.value.trim();
+    else if (c.key === "describe") u.describe = c.value.trim();
+    else if (c.key === "serves") {
+      for (const p of splitServes(c.value)) {
+        const m = p.match(/^([A-Za-z][\w-]*)(?:\((.*)\))?$/);
+        if (!m) throw new CrubalError(`serves: ${p} is not a name, or a name with items in parentheses`, c.line);
+        u.serves.push({ as: m[1] as string, ...(m[2] !== undefined ? { items: splitList(m[2]) } : {}), line: c.line });
+      }
+    } else if (c.key === "needs") {
+      for (const n of splitList(c.value)) {
+        const [nm = "", ver] = n.split(/\s+\//).map((s) => s.trim());
+        if (!/^([a-z0-9.-]+\/[a-z][\w-]*|[a-z][\w-]*)$/.test(nm)) throw new CrubalError(`needs: ${nm} is not a package identity (domain/name) or a utility name`, c.line);
+        u.needs.push({ name: nm, ...(ver ? { version: ver } : {}), line: c.line });
+      }
+    } else if (c.key === "setup") {
+      for (const s of splitList(c.value)) {
+        const m = s.match(/^(connection|setting)\s+(\S+)$/);
+        if (!m) throw new CrubalError(`setup: ${s} is not "connection <name>" or "setting <facet>"`, c.line);
+        u.setup.push(m[1] === "connection" ? { connection: m[2] as string, line: c.line } : { setting: m[2] as string, line: c.line });
+      }
+    } else throw new CrubalError(`a utility has label, describe, serves, needs and setup, not ${c.key}`, c.line);
+  }
+  return u;
+}
 
 /** Split a file into its packages, keeping line numbers true. */
 export function readPackages(source: string): PackageInfo[] {
@@ -37,7 +110,7 @@ export function readPackages(source: string): PackageInfo[] {
     const [head, ...rest] = readTree(text);
     if (!head) throw new CrubalError("an empty package", start + 1);
     const [name = "", version = ""] = head.value.split(/\s+\//).map((s) => s.trim());
-    const info: PackageInfo = { name, version, owner: "", line: head.line, crubal: LANGUAGE, crubalLine: head.line, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {} };
+    const info: PackageInfo = { name, version, owner: "", line: head.line, crubal: LANGUAGE, crubalLine: head.line, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {}, utilities: [] };
     for (const c of head.children) {
       if (c.key === "owner") info.owner = c.value;
       if (c.key === "crubal") {
@@ -56,6 +129,11 @@ export function readPackages(source: string): PackageInfo[] {
     }
     for (const node of rest) {
       if (node.key === "trust") for (const t of node.children) info.trust.push({ entry: t.text.trim(), line: t.line });
+      if (node.key === "utility") {
+        const u = readUtility(node);
+        if (info.utilities.some((x) => x.name === u.name)) throw new CrubalError(`the utility ${u.name} twice in one package`, node.line);
+        info.utilities.push(u);
+      }
     }
     // Definitions are everything after the header block.
     const headerEnd = Math.max(start, ...head.children.flatMap(function deep(c): number[] { return [c.line - 1, ...c.children.flatMap(deep)]; }));
@@ -119,5 +197,29 @@ export function checkPackages(source: string): PackageInfo[] {
       if (changed) throw new CrubalError(`${p.name} changes ${f.key}'s ${changed}; an extending package may only add to it`, f.line);
     }
   }
+  checkUtilities(source, pkgs);
   return pkgs;
+}
+
+/**
+ * Utility blocks (11.1): what a utility `serves` is a preset, a relation or an audience the file declares,
+ * and the items in parentheses are presets, menu items or relations; a `setting` in `setup` is a facet the
+ * file defines. Packages the file doesn't hold are named by prefix and checked where they are resolved.
+ */
+function checkUtilities(source: string, pkgs: PackageInfo[]): void {
+  if (!pkgs.some((p) => p.utilities.length)) return;
+  const { perms } = readAccess(source);
+  const dict = readDefinitions(source);
+  const known = (n: string) => perms.presets.has(n) || perms.relations.has(n) || AUDIENCES.has(n);
+  const item = (n: string) => perms.presets.has(n) || perms.menu.has(n) || perms.relations.has(n);
+  for (const p of pkgs) {
+    for (const u of p.utilities) {
+      for (const s of u.serves) {
+        if (!known(s.as)) throw new CrubalError(`${u.name} serves ${s.as}, which isn't a preset, relation or audience here`, s.line);
+        for (const i of s.items ?? []) if (!item(i)) throw new CrubalError(`${u.name} serves ${s.as}(${i}): ${i} isn't a preset, menu item or relation here`, s.line);
+      }
+      for (const s of u.setup) if ("setting" in s && !s.setting.includes(":") && !dict.facets.has(s.setting)) throw new CrubalError(`${u.name} needs the setting ${s.setting}, which isn't a facet here`, s.line);
+      if (u.needs.some((n) => n.name === u.name)) throw new CrubalError(`${u.name} needs itself`, u.line);
+    }
+  }
 }

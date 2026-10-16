@@ -1,9 +1,17 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { checkPackage, checkPackages, checkRecord, checkRules, foldRecord, readDefinitions, readRules, readText } from "../src/index.ts";
+import { checkPackage, checkPackages, checkRecord, checkRules, foldRecord, readDefinitions, readRules, readText, STANDARD_PACKAGES, standardDefinitions } from "../src/index.ts";
 
 const std = (p: string) => readFileSync(new URL(`../../../std/${p}`, import.meta.url), "utf8");
+
+test("the embedded standard packages are the published ones", () => {
+  for (const name of ["core", "units", "party"] as const) assert.equal(STANDARD_PACKAGES[name], std(`${name}/package.crubal`), `run \`npm run embed\` in packages/crubal (${name})`);
+  const d = standardDefinitions();
+  assert.ok(d.facets.has("crubal:notables"));
+  assert.ok(d.levels.get("person") === "person" && d.levels.get("organization") === "organization");
+  assert.ok(d.classes.has("Person"));
+});
 
 // A package is checked with the packages it extends in the dictionary (11.4), as a publish does.
 const EXTENDS: { [name: string]: string[] } = {};

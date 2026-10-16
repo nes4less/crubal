@@ -1,0 +1,25 @@
+// A utility serves presets, relations and audiences the package declares (11.1); one it doesn't is refused.
+package: shop /2026-10-16
+  owner: shop.example
+  crubal: 2
+
+kind: order
+  levels: order, line
+state{placed|shipped}
+
+contract: ship
+  kind: form
+  needs:
+    state
+
+permissions: shop
+  menu:
+    ship: run ship
+  presets:
+    fulfiller: ship    audience: staff
+  relations: buyer
+
+utility: orders /2026-10-16
+  serves: fulfiller(ship), member(buyer), picker
+  needs: shop.example/shop
+  setup: connection stripe

@@ -4,11 +4,12 @@ package: test /2026-10-14
   crubal: 2
 
 kind: item
-  levels: group, product, unit
+  levels: group, product, unit, offer
   base: Item
   schema: schema:Product
   vary:
     unit: condition, price, sealed     // facets that vary at the step into this level
+    offer: availability, channel       // a unit may be offered several ways; each offer folds the unit's facts down
 
 kind: work
   levels: work

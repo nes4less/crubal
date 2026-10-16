@@ -11,7 +11,7 @@ import { type ClassDef, type ClassLine, type Dictionary, emptyDictionary, type F
 import { facetJson } from "./dictionary.ts";
 import { type Recipe, readRecipes, type Step } from "./migrate.ts";
 import type { Json, JsonObject } from "./model.ts";
-import { type PackageInfo, readPackages } from "./packages.ts";
+import { type PackageInfo, readPackages, type Utility } from "./packages.ts";
 import { readRules, type Rule } from "./rules.ts";
 import { type Contract, type Keys, readContracts, sha256, keyFor } from "./store.ts";
 import { type Filter, readViews, type Shape, type View, type ViewSet } from "./views.ts";
@@ -236,6 +236,17 @@ export function permissionsJson(perms: Permissions): JsonObject | undefined {
   return { permissions: perms.name ?? "", menu, presets, relations };
 }
 
+/** A utility block's JSON form (11.6). */
+export function utilityJson(u: Utility): JsonObject {
+  const o: JsonObject = { utility: u.name, version: u.version };
+  if (u.label) o.label = u.label;
+  if (u.describe) o.describe = u.describe;
+  if (u.serves.length) o.serves = u.serves.map((s) => ({ as: s.as, ...(s.items ? { items: [...s.items] } : {}) }));
+  if (u.needs.length) o.needs = u.needs.map((n) => ({ name: n.name, ...(n.version ? { version: n.version } : {}) }));
+  if (u.setup.length) o.setup = u.setup.map((s): JsonObject => ("connection" in s ? { connection: s.connection } : { setting: s.setting }));
+  return o;
+}
+
 /** The whole package as the JSON document, without `hash` and `sig`. */
 export function bundleOf(p: Parsed): JsonObject {
   const { info, dict } = p;
@@ -258,6 +269,7 @@ export function bundleOf(p: Parsed): JsonObject {
   for (const r of p.rules) if (r.version) members[`rule:${r.name}`] = r.version;
   for (const c of p.contracts) if (c.parts.version) members[`contract:${c.name}`] = c.parts.version;
   for (const v of p.views.views.values()) if (v.version) members[`view:${v.name}`] = v.version;
+  for (const u of info.utilities) if (u.version) members[`utility:${u.name}`] = u.version;
   o.members = members;
   if (dict.kinds.size) o.kinds = [...dict.kinds.values()].map((k) => kindJson(dict, k));
   if (facets.length) o.facets = facets.map(facetJson);
@@ -274,6 +286,7 @@ export function bundleOf(p: Parsed): JsonObject {
   if (p.perms.ownership.size) o.ownership = Object.fromEntries([...p.perms.ownership].map(([k, v]) => [k, [...v]]));
   if (p.perms.emergency) o.emergency = { approvers: String(p.perms.emergency.approvers), longest: p.perms.emergency.longest };
   if (p.recipes.length) o.recipes = p.recipes.map(recipeJson);
+  if (info.utilities.length) o.utilities = info.utilities.map(utilityJson);
   return o;
 }
 
@@ -469,7 +482,16 @@ export function printBundle(b: JsonObject): string {
   if (isObj(b.permissions)) out.push(...permissionsText(b.permissions), "");
   if (isObj(b.ownership)) out.push("ownership:", ...Object.entries(b.ownership).map(([k, v]) => `  ${k}: ${(v as string[]).join(", ")}`), "");
   if (isObj(b.emergency)) out.push("emergency:", `  approvers: ${b.emergency.approvers}`, `  longest: ${b.emergency.longest}`, "");
+  blocks("utilities", utilityText);
   return `${out.join("\n").trimEnd()}\n`;
+}
+
+function utilityText(u: JsonObject): string[] {
+  const out = [`utility: ${u.utility} /${u.version}`, ...kv("  ", "label", u.label), ...kv("  ", "describe", u.describe)];
+  if (Array.isArray(u.serves)) out.push(`  serves: ${(u.serves as JsonObject[]).map((s) => `${s.as}${Array.isArray(s.items) ? `(${(s.items as string[]).join(", ")})` : ""}`).join(", ")}`);
+  if (Array.isArray(u.needs)) out.push(`  needs: ${(u.needs as JsonObject[]).map((n) => `${n.name}${n.version ? ` /${n.version}` : ""}`).join(", ")}`);
+  if (Array.isArray(u.setup)) out.push(`  setup: ${(u.setup as JsonObject[]).map((s) => (typeof s.connection === "string" ? `connection ${s.connection}` : `setting ${s.setting}`)).join(", ")}`);
+  return out;
 }
 
 /** Read a bundle: print it to text and read the text, so there is one parser. */
@@ -486,7 +508,7 @@ export function readBundleInto(b: JsonObject, into: Dictionary = emptyDictionary
 /** An empty Parsed to read packages onto, in order. */
 export function emptyParsed(): Parsed {
   const { perms } = readAccess("");
-  return { info: { name: "", version: "", owner: "", line: 0, crubal: 2, crubalLine: 0, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {} }, dict: emptyDictionary(), rules: [], contracts: [], views: { shapes: new Map(), filters: new Map(), views: new Map(), roles: new Map(), shown: new Map() }, perms, edges: [], recipes: [] };
+  return { info: { name: "", version: "", owner: "", line: 0, crubal: 2, crubalLine: 0, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {}, utilities: [] }, dict: emptyDictionary(), rules: [], contracts: [], views: { shapes: new Map(), filters: new Map(), views: new Map(), roles: new Map(), shown: new Map() }, perms, edges: [], recipes: [] };
 }
 
 /**
@@ -497,7 +519,7 @@ export function readBundleOnto(bundle: JsonObject, base: Parsed): Parsed {
   const text = printBundle(bundle);
   readDefinitions(text, base.dict);
   const [info] = readPackages(text);
-  if (info) base.info = { ...info, dict: base.dict, terms: Object.keys(info.terms).length ? info.terms : base.info.terms };
+  if (info) base.info = { ...info, dict: base.dict, terms: Object.keys(info.terms).length ? info.terms : base.info.terms, utilities: [...base.info.utilities.filter((h) => !info.utilities.some((n) => n.name === h.name)), ...info.utilities] };
   const byName = <T extends { name: string }>(have: T[], next: T[]) => [...have.filter((h) => !next.some((n) => n.name === h.name)), ...next];
   base.rules = byName(base.rules, readRules(text));
   base.contracts = byName(base.contracts, readContracts(text));
