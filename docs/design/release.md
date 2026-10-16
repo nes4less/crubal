@@ -49,4 +49,7 @@ Steps 1–6 landed 2026-10-15.
 5. The reference host, minimal: identity adapter, secrets, the `http` adapter, signing, loops, the HTTP
    surface. (host.md)
 6. The reference index. (index-and-forms.md)
-7. Then the standard vocabularies and the first adopter package, and the gate.
+7. Everything the spec states that isn't app-contingent (completion.md, eight steps: review decisions and
+   replay, held release, adopt, the small gaps, split, views for pages, exchange between hosts, hosted
+   persons and key rotation, operations, the MUST audit, the benchmark, the claim).
+8. Then the standard vocabularies and the first adopter package, and the gate.
