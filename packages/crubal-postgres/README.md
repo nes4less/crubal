@@ -104,6 +104,13 @@ observations supporting the record and its parent, and the open split items on t
 at the package's `split` threshold the border opens `split:<record>`, and the decision `split` mints the
 version and moves the instances.
 
+## What a commit refuses
+
+Every entry is checked in the same run that applies it (so what the check reads loads too): a person
+owning what the package's `ownership` doesn't allow (14.1), a record wearing a class not for its kind or
+classes whose meet is empty (5.5), `within` forming a cycle or crossing owners (14.2), and every edge
+written (14.12). An emergency edge is the host's to check against its published terms (14.13).
+
 ## Hosted persons (14.1)
 
 A record owned `<owner>:<id>` is a hosted person's: the writes to it leave the owner's entry and become

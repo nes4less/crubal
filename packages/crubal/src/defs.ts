@@ -499,6 +499,9 @@ function readLongForm(node: Node): Facet {
 export function readClassLine(text: string, line: number, section?: string): ClassLine {
   const p = parseLine(text, line);
   const f = p.facet;
+  // A line narrows; it never sets what the facet means (5.3.1).
+  const meaning = ["label", "ask", "describe"].find((k) => (f as unknown as { [k: string]: unknown })[k] !== undefined) ?? (f.aliases.length ? "aliases" : f.sameAs.length ? "same-as" : f.values?.some((v) => v.aliases.length) ? "value aliases" : undefined);
+  if (meaning) throw new CrubalError(`the class line ${text.trim()} sets ${meaning}, which is the facet's meaning, not a narrowing`, line);
   const cl: ClassLine = { facet: f.key, line, text: text.trim() };
   if (p.required) cl.required = true;
   if (p.level) cl.level = p.level;

@@ -591,7 +591,10 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
             return i < 0 ? undefined : i + 1;
           };
           access.checkWithin(lineOf);
-          for (const r of recs) access.checkOwnership(r, lineOf(r.id));
+          for (const r of recs) {
+            access.checkOwnership(r, lineOf(r.id));
+            access.checkWears(r, lineOf(r.id));
+          }
           for (const e of edges) {
             access.checkEdge(e);
             access.edges.set(e.edge, e);

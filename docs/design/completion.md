@@ -9,8 +9,9 @@ tokens, the cross-host take with the wrapper verified, the four modes and terms,
 inbox), M and N built (hosted persons' chains split per entry in one transaction, the person's key made on
 first write, export and erase as the person; key rotation with dated keys), O and P built (health, body
 limit, CORS, log lines, SecretStore, the container with its smoke script; drain and the delayed-view loop),
-corpus 188, 14 store tests, 11 host tests. Q built (`corpus/COVERAGE.md`: every MUST mapped, five
-cases and two refusals added, eleven small refusals listed open), S built (`crubal claim`, `corpus/VERSION`,
+corpus 188, 14 store tests, 11 host tests. Q built (`corpus/COVERAGE.md`: every MUST mapped; after the
+refusals round of 2026-10-16, four remain open and are named there; the store now runs the access checks at
+the commit), S built (`crubal claim`, `corpus/VERSION`,
 the tag `corpus/2026-10-15`, `packages/crubal/CLAIM.md`). R: the benchmark `packages/crubal-host/bench/bench.ts`
 runs; see its section below for the numbers and what was fixed. The units table is global per process: one owner's extension at a time until it
 is made per dictionary. Everything the specification states that the engine, the store or the host

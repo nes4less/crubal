@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { checkWrapper } from "../src/model.ts";
 import { test } from "node:test";
 import { canonical, CrubalError, emptyDictionary, printText, readDefinitions, readText } from "../src/index.ts";
 import { needsQuotes, readList, readPiece } from "../src/lex.ts";
@@ -76,3 +77,11 @@ function emptyDictionaryWithProduct() {
   d.levels.set("product", "item");
   return d;
 }
+
+test("the JSON form refuses what the spec forbids (3, 3.2): null anywhere, an unknown record member, a missing required one", () => {
+  const ok = { crubal: "2", records: [{ id: "P-1", kind: "item", level: "product", owner: "test.example", values: { title: "x" } }] };
+  checkWrapper(ok as never);
+  assert.throws(() => checkWrapper({ ...ok, records: [{ ...ok.records[0], extra: 1 }] } as never), /unknown member extra/);
+  assert.throws(() => checkWrapper({ ...ok, records: [{ ...ok.records[0], values: { title: null } }] } as never), /null/);
+  assert.throws(() => checkWrapper({ ...ok, records: [{ id: "P-1", kind: "item", level: "product", values: {} }] } as never), /needs owner/);
+});

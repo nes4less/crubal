@@ -215,6 +215,7 @@ function readParts(node: Node, ctx: Ctx): Json[] {
 export function readText(source: string, dict: Dictionary): Wrapper {
   const nodes = readTree(source);
   const wrapper: Wrapper = { crubal: "2", records: [] };
+  const lines = new Map<string, number>();
   let owner: string | undefined;
   for (const node of nodes) {
     if (node.kind !== "pair" || !node.key) throw new CrubalError(`unexpected line: ${node.text}`, node.line);
@@ -234,7 +235,18 @@ export function readText(source: string, dict: Dictionary): Wrapper {
     }
     const kind = dict.levels.get(node.key);
     if (!kind) throw new CrubalError(`an unknown top-level key ${node.key}`, node.line);
-    wrapper.records.push(readRecord(node, kind, owner));
+    const rec = readRecord(node, kind, owner);
+    lines.set(rec.id, node.line);
+    wrapper.records.push(rec);
+  }
+  // `of` names a record of the same kind at the level directly above (1.2), when that record is in the file.
+  const byId = new Map(wrapper.records.map((r) => [r.id, r]));
+  for (const r of wrapper.records) {
+    const up = r.of ? byId.get(r.of) : undefined;
+    if (!up) continue;
+    if (up.kind !== r.kind) throw new CrubalError(`${r.id} is of ${up.id}, a ${up.kind}, not a ${r.kind}`, lines.get(r.id));
+    const levels = dict.kinds.get(r.kind)?.levels ?? [];
+    if (levels.indexOf(up.level) !== levels.indexOf(r.level) - 1) throw new CrubalError(`${r.id} is of ${up.id} at ${up.level}, not the level directly above ${r.level}`, lines.get(r.id));
   }
   return wrapper;
 

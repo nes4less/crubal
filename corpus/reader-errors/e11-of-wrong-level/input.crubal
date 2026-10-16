@@ -1,0 +1,9 @@
+// A record's of names a record of the same kind at the level directly above (1.2): a unit is of a product, never of a group.
+crubal: 2
+owner: test.example
+
+group: G-1
+  title: Vacation films
+
+unit: U-1 of G-1
+  condition: VG

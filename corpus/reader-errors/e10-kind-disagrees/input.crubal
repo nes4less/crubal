@@ -1,0 +1,7 @@
+// crubal:kind may be written, and must then agree with the level's kind (2.3).
+crubal: 2
+owner: test.example
+
+product: P-1
+  crubal:kind: work
+  title: Christmas Vacation

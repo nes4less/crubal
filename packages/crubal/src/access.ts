@@ -5,6 +5,7 @@
 // turn writes into suggestions; emergency edges are the one grant not made inside the owner.
 
 import { compareTime, evaluate, parseCondition } from "./conditions.ts";
+import { resolve } from "./dictionary.ts";
 import type { Dictionary } from "./defs.ts";
 import { splitTop } from "./lex.ts";
 import type { Json, JsonObject, Record } from "./model.ts";
@@ -413,6 +414,23 @@ export class Access {
     if (!e.until) throw new CrubalError(`${e.edge}: an emergency edge has an until`, e.line);
     const at = typeof em.at === "string" ? Date.parse(em.at) : Number.NaN;
     if (!Number.isNaN(at) && Date.parse(e.until) - at > durationMs(terms.longest)) throw new CrubalError(`${e.edge}: outlasts the terms' longest, ${terms.longest}`, e.line);
+  }
+
+  /** Refuse a write that makes a record wear a class not for its kind, or classes whose meet is empty (5.5). */
+  checkWears(r: Record, line?: number): void {
+    const worn = r.wears ?? [];
+    for (const w of worn) {
+      const c = this.dict.classes.get(w);
+      if (!c) throw new CrubalError(`${r.id} wears ${w}, which isn't a class`, line);
+      if (c.for.length && !c.for.includes(r.kind)) throw new CrubalError(`${r.id} wears ${w}, which is for ${c.for.join(", ")}, not ${r.kind}`, line);
+    }
+    if (worn.length > 1) {
+      try {
+        resolve(this.dict, worn);
+      } catch (e) {
+        throw new CrubalError(`${r.id} wears ${worn.join(", ")}: ${e instanceof Error ? e.message : String(e)}`, line);
+      }
+    }
   }
 
   /** Refuse a person owning a record the package doesn't let a person own (14.1, 14.12). */

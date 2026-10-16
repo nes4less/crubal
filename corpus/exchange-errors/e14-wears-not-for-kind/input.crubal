@@ -1,0 +1,22 @@
+// A write that makes a record wear a class whose for doesn't include its kind is refused (5.5).
+kind: league
+  levels: league
+name$
+
+class: Venue
+  for: league
+  facets:
+    name
+
+permissions: facility
+  menu:
+    rename: edit name
+  relations: operator
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  crubal:wears: Venue
+  title: Christmas Vacation

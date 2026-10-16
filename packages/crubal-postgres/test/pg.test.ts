@@ -607,3 +607,45 @@ class: Item
   assert.equal((await store.entries()).filter((e) => (e.by as JsonObject).migration === "drain").length, 3, "one entry per record drained");
   assert.deepEqual(await store.verify(), { valid: true });
 });
+
+test("the store refuses what access forbids at the commit (14.12, 5.5): a person owning a product, a class not for the kind, within across owners", { skip: !url }, async () => {
+  const owner = "refuse.example";
+  const store = new PgStore(pool, owner, { allowUnsigned: true });
+  const text = `package: shop /2026-10-01
+  owner: refuse.example
+  crubal: 2
+
+kind: item
+  levels: product
+  base: Item
+kind: collection
+  levels: collection
+  base: Collection
+kind: league
+  levels: league
+title$
+class: Item
+  for: item
+  facets:
+    title
+class: Collection
+  for: collection
+  facets:
+    title
+class: Venue
+  for: league
+  facets:
+    title
+
+ownership:
+  person: collection
+`;
+  await store.install(publish(text, { date: "2026-10-01" }).bundle, undefined, "2026-10-19T09:00:00Z");
+  const put = (r: Record) => store.commit({ person: owner }, (d) => { d.records.set(r.id, { ...r, sources: { "*": { origin: "declared", via: "L-1" } } }); }, "2026-10-19T09:00:01Z");
+  await assert.rejects(put({ id: "P-1", kind: "item", level: "product", owner: `${owner}:S-1`, values: { title: "x" } }), /a person may own collection, not a item/);
+  await assert.rejects(put({ id: "P-2", kind: "item", level: "product", owner, wears: ["Venue"], values: { title: "x" } }), /wears Venue, which is for league, not item/);
+  await put({ id: "L-1", kind: "league", level: "league", owner: "other.example", values: { title: "Northern" } });
+  await assert.rejects(put({ id: "P-3", kind: "item", level: "product", owner, within: "L-1", values: { title: "x" } }), /within never crosses owners/);
+  await put({ id: "C-1", kind: "collection", level: "collection", owner: `${owner}:S-1`, values: { title: "mine" } });
+  assert.equal((await store.state()).records.size, 2, "the refused writes left nothing behind");
+});

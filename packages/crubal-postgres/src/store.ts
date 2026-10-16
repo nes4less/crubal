@@ -3,6 +3,8 @@
 // The log is the truth; `rebuild` gives every other table back from it.
 
 import { applyEntry, diffWrites, differs, type Draft, type Entry, type State } from "../../crubal/src/log.ts";
+import { CrubalError } from "../../crubal/src/tree.ts";
+import { Access, type Edge } from "../../crubal/src/access.ts";
 import type { View } from "../../crubal/src/views.ts";
 import { apply, pending, type Store as LifecycleStore } from "../../crubal/src/lifecycle.ts";
 import type { Json, JsonObject, Record } from "../../crubal/src/model.ts";
@@ -180,6 +182,33 @@ export class PgStore {
     this.defsCache = undefined;
     if (previous) for (const table of ["projections", "projection_stream", "stale"]) await this.pool.query(`delete from ${table} where owner = $1`, [this.owner]);
     return result.entry;
+  }
+
+  /** Well-formed access (14.12) on what an entry changed: ownership, wearing, within, and every edge written. */
+  private checkWrites(p: Parsed, entry: Entry, after: State): void {
+    const writes = (Array.isArray(entry.writes) ? entry.writes : []) as JsonObject[];
+    const touched = new Set(writes.map((w) => (typeof w.record === "string" ? w.record : "")).filter(Boolean));
+    const edges = writes.filter((w) => isObj(w.edge)).map((w) => w.edge as unknown as Edge);
+    if (!touched.size && !edges.length) return;
+    const access = new Access(p.dict, p.perms, after.records, [...after.edges.values()] as unknown as Edge[], this.owner);
+    for (const id of touched) {
+      const r = after.records.get(id);
+      if (!r) continue;
+      access.checkOwnership(r);
+      access.checkWears(r);
+      // Within: the chain up from this record only, never a scan of the catalog.
+      const seen = new Set<string>([id]);
+      let cur = r.within;
+      while (cur) {
+        if (seen.has(cur)) throw new CrubalError(`${id} is within itself through ${cur}`);
+        seen.add(cur);
+        const up = after.records.get(cur);
+        if (up && up.owner !== r.owner) throw new CrubalError(`${id} is within ${cur}, which belongs to ${up.owner}: within never crosses owners`);
+        cur = up?.within;
+      }
+    }
+    // An emergency edge is checked by the host against the platform's published terms (14.13), not here.
+    for (const e of edges) if (e.relation !== "emergency") access.checkEdge(e);
   }
 
   /** One record by id, from its row alone (no whole state): undefined when there is none. */
@@ -411,6 +440,7 @@ export class PgStore {
       let after: State;
       let entry: Entry;
       let result: { by: JsonObject; extra?: JsonObject[]; out: T };
+      const p = await this.definitionsFrom(client, false);
       for (;;) {
         const had = needs.needs.loaded.size;
         ({ draft, result } = (await settle(client, this.owner, before, (s) => { const d = draftOf(s); const r = run(d); return { draft: d, result: r }; })).out);
@@ -418,7 +448,8 @@ export class PgStore {
         if (!writes.length) return { entry: null, out: result.out };
         entry = { log: `L-${head.seq + 1}`, owner: this.owner, at: at ?? new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), by: result.by, writes, ...(mark.witnessed ? { witnessed: true } : {}) };
         const e = entry;
-        after = (await settle(client, this.owner, before, (s) => applyEntry(s, e))).state;
+        // The entry applied, then checked in the same run (14.12, 5.5, 14.1), so what the check reads loads too.
+        after = (await settle(client, this.owner, before, (s) => { applyEntry(s, e); this.checkWrites(p, e, s); })).state;
         if (needs.needs.loaded.size === had) break;
       }
       const { entry: linked, hosted } = await this.linkSplit(client, entry, head, after);

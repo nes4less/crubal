@@ -1,0 +1,7 @@
+// A class line narrows a facet; it never sets its meaning (5.3.1): a label belongs to the facet.
+title$
+
+class: Card
+  for: item
+  facets:
+    title label: Heading

@@ -35,3 +35,13 @@ test("an extension adds units under a prefix and spellings to standard ones, nev
   resetUnits();
   assert.equal(unitOf("slabs"), null);
 });
+
+test("an extension never changes a standard unit (11.9): it may only add spellings", () => {
+  resetUnits();
+  const before = unitOf("kg");
+  extendUnits("measure: kg\n  dimension: mass\n  factor: 2\n  spellings: kilo\n");
+  assert.equal(unitOf("kilo"), "kg", "the spelling joined");
+  assert.equal(convert("1", "kg", "g"), "1000", "the factor didn't move");
+  assert.equal(before, "kg");
+  resetUnits();
+});
