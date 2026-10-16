@@ -1,0 +1,7 @@
+run: discRead
+on: U-1
+answer: a.json
+
+run: discRead
+on: U-2
+answer: b.json

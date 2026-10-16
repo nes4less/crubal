@@ -482,5 +482,28 @@ export function validate(r: Record, address: string, observations: Observation[]
   else out.state = "unobserved";
   out.alternatives = [...against.values()].map((g) => ({ value: g.value, origin: "observed" }));
   out["split-proposed"] = [...against.values()].some((g) => g.instances.size >= splitAt);
+  out.clusters = [...against.values()].map((g) => ({ value: g.value, instances: [...g.instances].sort() }));
+  return out;
+}
+
+/**
+ * Version splits proposed (9.7.3): for each value an address's observations contradict, a cluster of at
+ * least `splitAt` instances agreeing with each other is a review item `split:<record>`; nothing splits
+ * on its own.
+ */
+export function proposeSplit(records: Record[], observations: Observation[], splitAt = 3): JsonObject[] {
+  const out: JsonObject[] = [];
+  const seen = new Set<string>();
+  for (const o of observations) {
+    const key = `${o.supports}|${o.address}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const r = records.find((x) => x.id === o.supports);
+    if (!r) continue;
+    const v = validate(r, o.address, observations, 2, splitAt);
+    for (const c of (v.clusters as { value: Json; instances: string[] }[]) ?? []) {
+      if (c.instances.length >= splitAt) out.push({ key: `split:${r.id}`, record: r.id, address: o.address, value: c.value, instances: c.instances });
+    }
+  }
   return out;
 }

@@ -1,0 +1,6 @@
+split: P-1 -> P-2
+  children: U-2, U-3
+  values:
+    title: Christmas Vacation
+    edition: Theatrical
+  bindings: catalog|990000001

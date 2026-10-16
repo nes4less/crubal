@@ -1,0 +1,7 @@
+[
+  { "obs": "O-1", "on": "U-1", "address": "runtime", "value": { "$qty": "97", "unit": "min" }, "evidence-type": "disc-read", "reading": "I-1", "supports": "P-1" },
+  { "obs": "O-2", "on": "U-2", "address": "runtime", "value": { "$qty": "97", "unit": "min" }, "evidence-type": "disc-read", "reading": "I-2", "supports": "P-1" },
+  { "obs": "O-3", "on": "U-3", "address": "runtime", "value": { "$qty": "92", "unit": "min" }, "evidence-type": "disc-read", "reading": "I-3", "supports": "P-1" },
+  { "obs": "O-4", "on": "U-4", "address": "runtime", "value": { "$qty": "92", "unit": "min" }, "evidence-type": "disc-read", "reading": "I-4", "supports": "P-1" },
+  { "obs": "O-5", "on": "U-5", "address": "runtime", "value": { "$qty": "92", "unit": "min" }, "evidence-type": "disc-read", "reading": "I-5", "supports": "P-1" }
+]

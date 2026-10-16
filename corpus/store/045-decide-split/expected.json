@@ -1,0 +1,12 @@
+{
+  "crubal": "2",
+  "records": [
+    { "id": "P-1", "kind": "item", "level": "product", "owner": "test.example", "values": { "runtime": { "$qty": "97", "unit": "min" } }, "sources": { "*": { "origin": "reported", "via": "L-1" } } },
+    { "id": "U-1", "kind": "item", "level": "unit", "of": "P-1", "owner": "test.example", "values": {}, "sources": { "*": { "origin": "observed", "via": "L-2" } } },
+    { "id": "U-2", "kind": "item", "level": "unit", "of": "P-1", "owner": "test.example", "values": {}, "sources": { "*": { "origin": "observed", "via": "L-2" } } },
+    { "id": "U-3", "kind": "item", "level": "unit", "of": "P-2", "owner": "test.example", "values": {}, "sources": { "*": { "origin": "observed", "via": "L-2" } } },
+    { "id": "U-4", "kind": "item", "level": "unit", "of": "P-2", "owner": "test.example", "values": {}, "sources": { "*": { "origin": "observed", "via": "L-2" } } },
+    { "id": "U-5", "kind": "item", "level": "unit", "of": "P-2", "owner": "test.example", "values": {}, "sources": { "*": { "origin": "observed", "via": "L-2" } } },
+    { "id": "P-2", "kind": "item", "level": "product", "owner": "test.example", "values": { "runtime": { "$qty": "92", "unit": "min" } }, "sources": { "runtime": { "origin": "observed", "via": "I-3" } } }
+  ]
+}

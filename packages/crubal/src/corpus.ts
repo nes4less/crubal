@@ -6,7 +6,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { canonical } from "./canonical.ts";
 import { type Dictionary, emptyDictionary, readDefinitions, splitCaseInput } from "./defs.ts";
-import { type Keys, land, matchParts, rawOf, readContracts, receive, replay, reviewByKey, validate, verifyChain, type IntakeOutcome, type IntakeRecord, type Observation } from "./store.ts";
+import { type Keys, land, matchParts, proposeSplit, rawOf, readContracts, receive, replay, reviewByKey, validate, verifyChain, type IntakeOutcome, type IntakeRecord, type Observation } from "./store.ts";
 import { checkRecipe, dryRun, readRecipes, restamp } from "./migrate.ts";
 import { checkContracts, Exchange, readRoles, verifyBorder } from "./exchange.ts";
 import { checkPackages } from "./packages.ts";
@@ -16,7 +16,7 @@ import { Journal, rebuild, redactable, redactableWrite, stateJson } from "./log.
 import { decide as decideReview } from "./review.ts";
 import { resetUnits } from "./units.ts";
 import { arrive, decide, type Arrival, type ArrivalStore } from "./arrival.ts";
-import { adopt, apply as applyInstructions, archive, attach, clone, detach, emptyStore, giveBack, issue, merge, unarchive } from "./lifecycle.ts";
+import { adopt, apply as applyInstructions, archive, attach, clone, detach, emptyStore, giveBack, issue, merge, split, unarchive } from "./lifecycle.ts";
 import { Access, checkPermissions, readAccess } from "./access.ts";
 import { readPiece } from "./lex.ts";
 import { readUnder } from "./read-text.ts";
@@ -368,6 +368,7 @@ function runStoreCase(folder: string, caseDir: string, name: string, shared: Dic
       // is refused by the journal itself (8.5).
       const journal = new Journal("test.example", records, "2026-10-15T00:00:00Z");
       const store = journal.draft as unknown as ReturnType<typeof emptyStore>;
+      if (existsSync(file("bindings.json"))) journal.commit({ migration: "backfill" }, (d) => { for (const [k, v] of Object.entries(json("bindings.json") as JsonObject)) d.bindings.set(k, String(v)); }, "2026-10-15T00:00:01Z");
       const caseRules = readRules(defs);
       const decisionDefs = { dict, contracts: new Map(readContracts(defs).map((c) => [c.name, c])) };
       let adoptFlag: string | undefined;
@@ -391,6 +392,12 @@ function runStoreCase(folder: string, caseDir: string, name: string, shared: Dic
           else if (key === "adopt" && b) adoptFlag = adopt(store, a, b, caseRules).flagged ?? adoptFlag;
           else if (key === "give-back" && b) giveBack(store, a, b);
           else if (key === "clone" && b) clone(store, a, b, detail("owner") ?? "test.example");
+          else if (key === "split" && b) {
+            const list = (k: string) => (op.children.find((c) => c.key === k)?.value ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+            const vals: JsonObject = {};
+            for (const c of op.children.find((c) => c.key === "values")?.children ?? []) if (c.key) vals[c.key] = dict.facets.get(c.key) ? (readUnder(dict.facets.get(c.key) as Facet, c.value, dict) ?? c.value) : c.value;
+            split(store, a, b, { children: list("children"), values: vals, bindings: list("bindings") });
+          }
           else if (key === "suggest") {
             // Test scaffolding: a suggestion on a record, as a gated or lands: suggestion run would leave it.
             const r = store.records.get(a) as Rec & { suggestions?: { [x: string]: JsonObject[] } };
@@ -415,7 +422,12 @@ function runStoreCase(folder: string, caseDir: string, name: string, shared: Dic
           } else if (key === "decide") {
             // A review decision (9.5): the item's key on the line, the decision's fields below it.
             const d: JsonObject & { key: string; decision: string } = { key: piece.text, decision: "" };
-            for (const c of op.children) if (c.key) d[c.key] = c.key === "factor" || c.key === "offset" ? c.value : (dict.facets.get(c.key) ? (readUnder(dict.facets.get(c.key) as Facet, c.value, dict) ?? c.value) : c.value);
+            for (const c of op.children) {
+              if (!c.key) continue;
+              if (c.key === "instances" || c.key === "accepts") d[c.key] = c.value.split(",").map((x) => x.trim()).filter(Boolean);
+              else if (c.key === "value" && typeof d.address === "string" && dict.facets.get(d.address)) d.value = readUnder(dict.facets.get(d.address) as Facet, c.value, dict) ?? c.value;
+              else d[c.key] = c.key === "factor" || c.key === "offset" ? c.value : (dict.facets.get(c.key) ? (readUnder(dict.facets.get(c.key) as Facet, c.value, dict) ?? c.value) : c.value);
+            }
             extra.push(...decideReview(d, store, decisionDefs));
           }
           else if (key === "write") {
@@ -443,13 +455,14 @@ function runStoreCase(folder: string, caseDir: string, name: string, shared: Dic
         const wantE = json("expected-entries.json");
         if (serialize(got as Json) !== serialize(wantE)) return fail(`entries: ${firstDiff(serialize(got as Json), serialize(wantE))}`);
       }
-      const want = json("expected.json") as { records: Rec[]; review?: Json };
+      const want = json("expected.json") as { records: Rec[]; review?: Json; bindings?: JsonObject };
       for (const w of want.records) {
         const r = store.records.get(w.id);
         if (!r) return fail(`no record ${w.id}`);
         if (one(r) !== one(w)) return fail(`${w.id}: ${firstDiff(one(r), one(w))}`);
       }
       if (want.review !== undefined && serialize(store.review) !== serialize(want.review)) return fail(`review: got ${serialize(store.review)}`);
+      if (want.bindings !== undefined && serialize(Object.fromEntries(store.bindings)) !== serialize(want.bindings)) return fail(`bindings: got ${serialize(Object.fromEntries(store.bindings))}`);
       return pass;
     }
 
@@ -524,6 +537,10 @@ function runStoreCase(folder: string, caseDir: string, name: string, shared: Dic
       const got = matchParts(records[0] as Rec, answer.parts, dict);
       const want = json("expected.json");
       return serialize(got as unknown as Json) === serialize(want) ? pass : fail(`got ${serialize(got as unknown as Json)}`);
+    }
+    if (existsSync(file("observations.json")) && existsSync(file("expected-proposal.json"))) {
+      const got = proposeSplit(records, json("observations.json") as unknown as Observation[]);
+      return serialize(got) === serialize(json("expected-proposal.json")) ? pass : fail(`proposal: ${serialize(got)}`);
     }
     if (existsSync(file("observations.json"))) {
       const want = json("expected-validation.json") as { [k: string]: Json };

@@ -14,7 +14,7 @@ import type { Json, JsonObject, Record, Source } from "./model.ts";
 import { MemoryRecords, type RecordSet } from "./records.ts";
 import { Engine, type Result, type Rule } from "./rules.ts";
 import { isSchedule, readSchedule, ticksDue } from "./schedule.ts";
-import { type Contract, fieldPath, type IntakeOutcome, type Keys, land, receive, sha256, verifyChain } from "./store.ts";
+import { type Contract, fieldPath, type IntakeOutcome, type Keys, land, receive, sha256, verifyChain, proposeSplit, type Observation } from "./store.ts";
 import { CrubalError, readTree } from "./tree.ts";
 
 const isObj = (v: Json | undefined): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -175,6 +175,13 @@ export class Exchange {
   versions: JsonObject = {};
   /** The review queue the border writes to (a dead run, an answer naming no run); the journal's draft list. */
   review: JsonObject[] = [];
+  /** Observations this instance made (9.7); a store keeps every one in its state. */
+  observations: JsonObject[] = [];
+  private observed = 0;
+  /** The package's thresholds (11.1): instances to propose a version split, witnesses to confirm. */
+  thresholds: { confirm?: number; split?: number } = {};
+  /** Review items already open in the store, for a border that loads them apart from the draft's list. */
+  knownReview: JsonObject[] = [];
   /** Mapped-out payloads kept beside the log, by run (docs/design/runs.md): a store keeps them in outtake. */
   readonly outtake = new Map<string, JsonObject>();
   /** Runs the store knows beyond this instance's entries (a border over a store seeds them): run → contract and record. */
@@ -253,9 +260,9 @@ export class Exchange {
     this.review = journal.draft.review;
   }
 
-  /** Log a run's transaction: what it changed on the draft, and the run's own state (8.5). */
-  private commit(by: JsonObject, log: string, run: JsonObject) {
-    this.journal?.commit(by, () => {}, `2026-01-01T00:00:${String(this.runs).padStart(2, "0")}Z`, [{ run: log, ...run }]);
+  /** Log a run's transaction: what it changed on the draft, the run's own state, and any observations (8.5). */
+  private commit(by: JsonObject, log: string, run: JsonObject, more: JsonObject[] = []) {
+    this.journal?.commit(by, () => {}, `2026-01-01T00:00:${String(this.runs).padStart(2, "0")}Z`, [{ run: log, ...run }, ...more]);
   }
 
   /** Step 1 of a run (7.4): the menu is the permission (14.6); `who` only narrows. */
@@ -489,6 +496,40 @@ export class Exchange {
     const source: Source = { origin: c.origin, via: log };
     const gate = this.gate(recordId, callerId);
     let summary: JsonObject = {};
+    if (c.lands === "observation") {
+      // Evidence (9.7): each reading is an observation on this instance, supporting the record that stores
+      // the value; the first observation fills an empty value with origin observed.
+      const docs: JsonObject[] = [];
+      let filled: Record | undefined;
+      for (const o of outcomes) {
+        if (!o.to || o.value === undefined || !["absorbed", "conflict", "new"].includes(o.outcome)) continue;
+        const up = r.of ? this.records.get(r.of) : undefined;
+        const supports = up && r.values[o.to] === undefined && (up.values[o.to] !== undefined || !this.dict.vary.get(r.level)?.has(o.to)) ? up.id : r.id;
+        const doc: JsonObject = { obs: `O-${++this.observed}`, on: recordId, address: o.to, value: o.value, "evidence-type": c.parts.evidence ?? "reading", reading: intake.intake, supports };
+        docs.push(doc);
+        const target = filled ?? (supports === r.id ? r : (up as Record));
+        const cur = target.values[o.to];
+        if (cur === undefined || (isObj(cur) && "$empty" in cur)) {
+          filled = { ...target, values: { ...target.values, [o.to]: o.value }, sources: { ...(target.sources ?? {}), [o.to]: { origin: "observed", via: log } } };
+        }
+      }
+      this.observed = Math.max(this.observed, ...this.observations.map((o) => Number(String(o.obs).replace(/^O-/, "")) || 0));
+      for (const d of docs) d.obs = `O-${++this.observed}`;
+      this.observations.push(...docs);
+      if (filled) this.put(filled);
+      // The version split proposed (9.7.3): at the threshold, a review item names the instances that agree.
+      const proposed: JsonObject[] = [];
+      const supported = [...new Set(docs.map((d) => String(d.supports)))].flatMap((id) => { const rec = this.records.get(id); return rec ? [rec] : []; });
+      for (const item of proposeSplit(supported, this.observations as Observation[], this.thresholds.split ?? 3)) {
+        const same = (it: JsonObject) => it.key === item.key && it.address === item.address && serialize(it.value as Json) === serialize(item.value as Json) && it.decision === undefined;
+        if (!this.review.some(same) && !this.knownReview.some(same)) {
+          this.review.push(item);
+          proposed.push(item);
+        }
+      }
+      this.commit({ contract: name, run: log }, log, { contract: name, record: recordId, state: "closed" }, docs.map((d) => ({ observation: d })));
+      return { ...head, outcomes: outcomes as unknown as Json, log, landed: "observation", observations: docs, ...(filled ? { filled: filled.id } : {}), ...(proposed.length ? { proposed } : {}) };
+    }
     if (c.lands === "suggestion" || gate) this.put(suggest(r, outcomes, source));
     else {
       const landed = land(r, { outcomes, contract: name }, source, this.dict.trust, this.dict.facetTrust);

@@ -2,7 +2,8 @@
 
 **Status:** plan, 2026-10-15; A, B, C built (review decisions with replay, held release, adopt / give back /
 clone), E, F and P's retype and dry run built (store contracts, frame, retype, `dryRun` and
-`crubal-pg dry-run`), corpus 168. The units table is global per process: one owner's extension at a time until it
+`crubal-pg dry-run`), D built (split, observations landing at the border, the proposal at the threshold and its
+decision), corpus 172. The units table is global per process: one owner's extension at a time until it
 is made per dictionary. Everything the specification states that the engine, the store or the host
 doesn't do yet, and nothing that depends on a kind, a vocabulary or an adopter. Each item says what it is,
 how it works, what it writes, and what proves it. The coding round takes them in the order of the last

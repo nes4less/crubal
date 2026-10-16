@@ -1,0 +1,15 @@
+// Split (1.12): the reverse of a merge, naming what the merge brought: a new record beside the origin, the
+// named units moved under it, the named values on it with the origin's sources, the named bindings moved.
+title$
+edition$
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  edition: Special Edition
+
+unit: U-1 of P-1 [origin: observed, via: L-2]
+unit: U-2 of P-1 [origin: observed, via: L-3]
+unit: U-3 of P-1 [origin: observed, via: L-4]

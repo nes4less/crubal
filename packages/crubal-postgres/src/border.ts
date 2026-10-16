@@ -12,6 +12,7 @@ import type { Json, JsonObject } from "../../crubal/src/model.ts";
 import { MemoryRecords } from "../../crubal/src/records.ts";
 import type { Rule } from "../../crubal/src/rules.ts";
 import { isSchedule, readSchedule, ticksDue } from "../../crubal/src/schedule.ts";
+import { openItems } from "../../crubal/src/review.ts";
 import { type Contract, receive } from "../../crubal/src/store.ts";
 import type { StreamEntry } from "../../crubal/src/views.ts";
 import type { PgStore } from "./store.ts";
@@ -19,12 +20,14 @@ import type { PgStore } from "./store.ts";
 /** What performs a run's act (7.4 step 4): the host's code for a system; never a package's. */
 export type Adapter = (contract: Contract, payload: JsonObject, run: string) => Promise<{ acted: true; body?: string } | { failed: string }>;
 
-export type BorderOptions = { dict: Dictionary; contracts: Contract[]; roles?: Role[]; rules?: Rule[]; perms?: Permissions; adapters?: { [contract: string]: Adapter }; versions?: JsonObject };
+export type BorderOptions = { dict: Dictionary; contracts: Contract[]; roles?: Role[]; rules?: Rule[]; perms?: Permissions; adapters?: { [contract: string]: Adapter }; versions?: JsonObject; thresholds?: { confirm?: number; split?: number } };
 
 /** The border's options from the store's own definitions (docs/design/publishing.md). */
 export async function borderOptions(store: PgStore): Promise<BorderOptions> {
   const p = await store.definitions();
-  return { dict: p.dict, contracts: p.contracts, rules: p.rules, perms: p.perms, ...(p.info.version ? { versions: { package: `${p.info.name} /${p.info.version}` } } : {}) };
+  const thresholds: { confirm?: number; split?: number } = {};
+  for (const k of ["confirm", "split"] as const) if (p.info.header[k]) thresholds[k] = Number(p.info.header[k]);
+  return { dict: p.dict, contracts: p.contracts, rules: p.rules, perms: p.perms, thresholds, ...(p.info.version ? { versions: { package: `${p.info.name} /${p.info.version}` } } : {}) };
 }
 
 type Row = { [column: string]: unknown };
@@ -78,13 +81,18 @@ export class PgBorder {
    * keys; `fn` runs it; its changes and its run write become the entry. The function MUST be pure over the
    * draft (it may run more than once while the working set loads).
    */
-  async run<T extends RunResult>(fn: (ex: Exchange) => T, at?: string): Promise<T> {
+  async run<T extends RunResult>(fn: (ex: Exchange) => T, at?: string, seed: { observations?: JsonObject[]; review?: JsonObject[] } = {}): Promise<T> {
     const { runs, sent, known, open } = await this.past();
     const { out } = await this.store.commitFrom((draft: Draft) => {
       const ex = new Exchange(this.o.dict, this.o.contracts, this.o.roles ?? [], this.o.rules ?? []);
       ex.records = draft.records;
       ex.bindings = draft.bindings;
       ex.review = draft.review;
+      // The observations and open items this run reads, loaded apart from the draft: the entry's own
+      // observation and review writes are what the store keeps.
+      ex.observations = [...(seed.observations ?? [])];
+      ex.knownReview = seed.review ?? [];
+      if (this.o.thresholds) ex.thresholds = this.o.thresholds;
       if (this.o.versions) ex.versions = this.o.versions;
       ex.runs = runs;
       for (const k of sent) ex.sent.add(k);
@@ -120,7 +128,8 @@ export class PgBorder {
   async receive(name: string, recordId: string, body: string, callerId?: string, at?: string, forRun?: string): Promise<RunResult> {
     const c = this.contracts.get(name);
     if (!c) throw new Error(`no contract ${name}`);
-    const r = await this.run((ex) => ex.receiveRun(name, recordId, body, callerId, forRun), at);
+    const seed = c.lands === "observation" ? await this.evidenceFor(recordId) : {};
+    const r = await this.run((ex) => ex.receiveRun(name, recordId, body, callerId, forRun), at, seed);
     if (typeof r.log === "string") await this.keepIntake(c, body, recordId, r.log, at);
     return r;
   }
@@ -177,6 +186,16 @@ export class PgBorder {
     if (!row) throw new Error(`no payload kept for ${run}`);
     const payload = JSON.parse(Buffer.from(row.raw as Uint8Array).toString("utf8")) as JsonObject;
     return this.act(String(row.contract), run, String(row.record ?? ""), payload, callerId, at);
+  }
+
+  /** What an observation run reads (9.7.3): the observations supporting the record or its parent, and the open split items on them. */
+  private async evidenceFor(recordId: string): Promise<{ observations: JsonObject[]; review: JsonObject[] }> {
+    const q = async (sql: string, args: unknown[]) => (await this.store.pool.query(sql, args)).rows as Row[];
+    const parent = (await q('select "of" from records where owner = $1 and id = $2', [this.owner, recordId]))[0]?.of;
+    const ids = [recordId, ...(typeof parent === "string" ? [parent] : [])];
+    const observations = (await q("select json from observations where owner = $1 and json->>'supports' = any($2) order by ord", [this.owner, ids])).map((r) => r.json as JsonObject);
+    const items = (await q("select json from review where owner = $1 and json->>'key' = any($2) order by ord", [this.owner, ids.map((id) => `split:${id}`)])).map((r) => r.json as JsonObject);
+    return { observations, review: openItems(items) };
   }
 
   /** A decision on a dead run (runs.md): retry (a new run, the key released) or drop; then the act for a retry. */

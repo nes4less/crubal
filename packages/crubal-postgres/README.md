@@ -99,7 +99,10 @@ write with the define, value or release it causes), then replays every kept inta
 facet's new value, a contract's unknown field, a unit's spelling), each its own entry `by: migration:
 replay`, superseding what that intake landed before and leaving the rest to the trust order. A `units`
 define feeds the owner's extension into the units table in force (one owner per process for now). A dead
-run's `retry` releases its key, so a fresh border sends the payload again.
+run's `retry` releases its key, so a fresh border sends the payload again. An observation run loads the
+observations supporting the record and its parent, and the open split items on them, apart from the draft;
+at the package's `split` threshold the border opens `split:<record>`, and the decision `split` mints the
+version and moves the instances.
 
 ## Not yet here
 

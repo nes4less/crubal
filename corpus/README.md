@@ -47,7 +47,8 @@ break), or a record, an `intake.json` and the `expected.json` record after it la
 `contract.crubal`, an `answer.json` and `expected-intake.json`; evidence cases add `observations.json` and
 `expected-validation.json`. Signed-chain cases add a `keys.json` (the owner's published public key, from
 `store/_keys.json`); a chain case without one checks links only. Replay cases add `contract-v2.crubal` and
-`expected-replay.json`; a restamp case with `expected-dry-run.json` instead of `expected.json` checks what the
+`expected-replay.json`; an observations case with `expected-proposal.json` instead of `expected-validation.json`
+checks the version splits proposed at the package's threshold (9.7.3); a restamp case with `expected-dry-run.json` instead of `expected.json` checks what the
 recipe would do per step without doing it (10.4); review cases add `intakes.json` and `expected-review.json`; raw-byte cases add
 `answer.bin` and `expected-raw.json`. `tools/` holds the generators for cases that need real hashes or
 signatures. Migration cases add a `recipe.crubal` and expect the restamped data plus its
@@ -71,7 +72,8 @@ follows edges and gates, an optional `arrival.json` (a held arrival whose candid
 Lifecycle cases (`ops.crubal`) also take `adopt: ID -> address`, `give-back: ID -> address`, `clone: ID -> NEW
 [owner: …]` (8.2; `expected-flag.json` says which should rule flagged an adoption), `decide: <key>` with the
 decision's fields indented below it (9.5, 11.9, 14.7, 10.4: `facet:<key>`, `contract:<name>`,
-`unit:<spelling>`, `suggestion`, `held`), and the scaffolding `suggest: ID` and `hold: ID` (address, value,
+`unit:<spelling>`, `suggestion`, `held`), `split: A -> B` with `children:`, `values:` and `bindings:` below it (1.12; a `bindings.json` beside the
+case seeds the bindings and `expected.json` may check them), and the scaffolding `suggest: ID` and `hold: ID` (address, value,
 origin, via; address, rule) that leave a record as a gated run or a changed verdict would. An exchange
 `run.crubal` takes `decide-run: L-Rn` with `decision: retry|drop` (runs.md).
 

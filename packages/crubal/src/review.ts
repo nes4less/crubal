@@ -6,7 +6,7 @@
 import { contractJson } from "./bundle.ts";
 import type { Dictionary, Facet } from "./defs.ts";
 import { facetJson } from "./dictionary.ts";
-import type { Store } from "./lifecycle.ts";
+import { split, type Store } from "./lifecycle.ts";
 import type { Json, JsonObject, Record, Source } from "./model.ts";
 import type { Contract } from "./store.ts";
 import { CrubalError } from "./tree.ts";
@@ -142,6 +142,17 @@ export function decide(d: Decision, store: Store, defs: Definitions): JsonObject
       next.sources = { ...(r.sources ?? {}), [address]: (isObj(h.source) ? (h.source as unknown as Source) : { origin: "declared", via: "review" }) };
     } else if (d.decision !== "drop") throw new CrubalError(`held: ${d.decision} isn't a decision`);
     store.records.set(r.id, next);
+    return [{ review }];
+  }
+  if (key.startsWith("split:")) {
+    const record = key.slice(6);
+    // The decision closes the item it answers: the same record, address and value (openItems).
+    if (review.record === undefined) review.record = record;
+    if (d.decision === "not a version") return [{ review }];
+    if (d.decision !== "split") throw new CrubalError(`${key}: ${d.decision} isn't a decision`);
+    const instances = Array.isArray(d.instances) ? (d.instances as string[]) : [];
+    const values: JsonObject = typeof d.address === "string" && d.value !== undefined ? { [d.address]: d.value as Json } : {};
+    split(store, record, String(d.into), { children: instances, values }, { origin: "observed", via: String(d.via ?? "review") });
     return [{ review }];
   }
   throw new CrubalError(`${key}: not a review item kind a decision applies to here`);

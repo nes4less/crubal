@@ -1,0 +1,7 @@
+decide: split:P-1
+  decision: split
+  into: P-2
+  address: runtime
+  value: 92min
+  instances: U-3, U-4, U-5
+  via: I-3

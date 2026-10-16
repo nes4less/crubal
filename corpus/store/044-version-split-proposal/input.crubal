@@ -1,0 +1,14 @@
+// A version split is proposed, never made (9.7.3): three instances' observations agree with each other and
+// disagree with the value, so a review item names them; the two instances that read 97 propose nothing.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: reported, via: L-1]
+  runtime: 97min
+
+unit: U-1 of P-1 [origin: observed, via: L-2]
+unit: U-2 of P-1 [origin: observed, via: L-2]
+unit: U-3 of P-1 [origin: observed, via: L-2]
+unit: U-4 of P-1 [origin: observed, via: L-2]
+unit: U-5 of P-1 [origin: observed, via: L-2]

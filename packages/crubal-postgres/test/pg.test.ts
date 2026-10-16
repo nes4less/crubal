@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { emptyDictionary, readDefinitions } from "../../crubal/src/defs.ts";
 import { archive, attach, merge, type Store } from "../../crubal/src/lifecycle.ts";
 import { type Draft, Journal, rebuild, stateJson, type Entry } from "../../crubal/src/log.ts";
-import type { JsonObject, Record } from "../../crubal/src/model.ts";
+import type { Json, JsonObject, Record } from "../../crubal/src/model.ts";
 import { serialize } from "../../crubal/src/canonical.ts";
 import { readContracts, sha256, verifyChain } from "../../crubal/src/store.ts";
 import { foldRecord } from "../../crubal/src/dictionary.ts";
@@ -509,5 +509,66 @@ contract: label
   assert.equal(retried.retried, dead.log);
   assert.equal(retried.acted, true);
   assert.equal((await store.review()).filter((it) => it.key === "run:label").length, 0, "the item is decided");
+  assert.deepEqual(await store.verify(), { valid: true });
+});
+
+test("observations over the store: readings land as observations, the first fills the value, the third disagreeing instance proposes a version split, and the decision splits", { skip: !url }, async () => {
+  const owner = "evidence.example";
+  const store = new PgStore(pool, owner, { allowUnsigned: true });
+  const text = `package: shop /2026-10-01
+  owner: evidence.example
+  crubal: 2
+  split: 3
+
+kind: item
+  levels: product, unit
+  base: Item
+title$
+runtime#min
+class: Item
+  for: item
+  facets:
+    title
+    runtime
+
+contract: discRead
+  kind: receive
+  origin: observed
+  lands: observation
+  evidence: disc-read
+  reads:
+    minutes -> runtime
+`;
+  await store.install(publish(text, { date: "2026-10-01" }).bundle, undefined, "2026-10-17T09:00:00Z");
+  await store.commit({ person: owner }, (d) => {
+    d.records.set("P-1", { id: "P-1", kind: "item", level: "product", owner, values: { title: "Christmas Vacation" }, sources: { "*": { origin: "declared", via: "L-1" } } });
+    for (const u of ["U-1", "U-2", "U-3", "U-4"]) d.records.set(u, { id: u, kind: "item", level: "unit", of: "P-1", owner, values: {}, sources: { "*": { origin: "observed", via: "L-1" } } });
+  }, "2026-10-17T09:00:01Z");
+  const border = await PgBorder.over(store);
+  const first = await border.receive("discRead", "U-1", '{"minutes":"97min"}', undefined, "2026-10-17T09:01:00Z");
+  assert.equal(first.landed, "observation");
+  assert.equal(first.filled, "P-1", "the first observation fills the product's empty value");
+  assert.equal(((await store.state()).records.get("P-1")?.values.runtime as JsonObject).$qty, "97");
+  assert.equal((await store.state()).observations.length, 1, "the observation is kept in the state");
+  await border.receive("discRead", "U-2", '{"minutes":"92min"}', undefined, "2026-10-17T09:02:00Z");
+  const third = await border.receive("discRead", "U-3", '{"minutes":"92min"}', undefined, "2026-10-17T09:03:00Z");
+  assert.equal(third.proposed, undefined, "two instances are below the threshold");
+  const fourth = await border.receive("discRead", "U-4", '{"minutes":"92min"}', undefined, "2026-10-17T09:04:00Z");
+  assert.equal((fourth.proposed as JsonObject[])?.length, 1, "three instances agreeing against the value propose a split");
+  const open = (await store.review()).filter((it) => it.key === "split:P-1");
+  assert.equal(open.length, 1);
+  assert.deepEqual(open[0]?.instances, ["U-2", "U-3", "U-4"]);
+  assert.equal(((await store.state()).records.get("P-1")?.values.runtime as JsonObject).$qty, "97", "nothing split on its own");
+  // The same observation again proposes nothing new.
+  await border.receive("discRead", "U-4", '{"minutes":"92min"}', undefined, "2026-10-17T09:05:00Z");
+  assert.equal((await store.review()).filter((it) => it.key === "split:P-1").length, 1);
+  // The decision splits: P-2 minted with the observed value, the three instances moved under it.
+  const item = open[0] as JsonObject;
+  await store.decide({ key: "split:P-1", decision: "split", into: "P-2", address: String(item.address), value: item.value as Json, instances: item.instances as Json, via: "O-2" }, { person: owner }, "2026-10-17T09:06:00Z");
+  const s = await store.state();
+  assert.equal((s.records.get("P-2")?.values.runtime as JsonObject).$qty, "92");
+  assert.equal(s.records.get("U-3")?.of, "P-2");
+  assert.equal(s.records.get("U-1")?.of, "P-1");
+  assert.equal((await store.review()).filter((it) => it.key === "split:P-1").length, 0);
   assert.deepEqual(await store.verify(), { valid: true });
 });

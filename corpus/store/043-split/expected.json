@@ -1,0 +1,11 @@
+{
+  "crubal": "2",
+  "records": [
+    { "id": "P-1", "kind": "item", "level": "product", "owner": "test.example", "values": { "title": "Christmas Vacation", "edition": "Special Edition" }, "sources": { "*": { "origin": "declared", "via": "L-1" } } },
+    { "id": "U-1", "kind": "item", "level": "unit", "of": "P-1", "owner": "test.example", "values": {}, "sources": { "*": { "origin": "observed", "via": "L-2" } } },
+    { "id": "U-2", "kind": "item", "level": "unit", "of": "P-2", "owner": "test.example", "values": {}, "sources": { "*": { "origin": "observed", "via": "L-3" } } },
+    { "id": "U-3", "kind": "item", "level": "unit", "of": "P-2", "owner": "test.example", "values": {}, "sources": { "*": { "origin": "observed", "via": "L-4" } } },
+    { "id": "P-2", "kind": "item", "level": "product", "owner": "test.example", "values": { "title": "Christmas Vacation", "edition": "Theatrical" }, "sources": { "title": { "origin": "declared", "via": "L-1" }, "edition": { "origin": "declared", "via": "split" } } }
+  ],
+  "bindings": { "catalog|110245563": "P-1", "catalog|990000001": "P-2" }
+}

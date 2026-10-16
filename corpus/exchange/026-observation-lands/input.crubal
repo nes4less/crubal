@@ -1,0 +1,19 @@
+// A measurement contract lands observations, not writes (9.7): each reading is an observation on the unit
+// it was made on, supporting the product that stores the value. The first observation fills an empty value
+// with origin observed; a later one that disagrees is a witness against, never a change.
+contract: discRead
+  kind: receive
+  origin: observed
+  lands: observation
+  evidence: disc-read
+  reads:
+    minutes -> runtime
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+
+unit: U-1 of P-1 [origin: observed, via: L-2]
+unit: U-2 of P-1 [origin: observed, via: L-3]

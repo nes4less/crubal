@@ -1,0 +1,14 @@
+// The proposal decided (9.7.3): `split` mints the new version with the observed value and moves the
+// instances under it; the origin keeps its value and the instances that agreed with it.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: reported, via: L-1]
+  runtime: 97min
+
+unit: U-1 of P-1 [origin: observed, via: L-2]
+unit: U-2 of P-1 [origin: observed, via: L-2]
+unit: U-3 of P-1 [origin: observed, via: L-2]
+unit: U-4 of P-1 [origin: observed, via: L-2]
+unit: U-5 of P-1 [origin: observed, via: L-2]

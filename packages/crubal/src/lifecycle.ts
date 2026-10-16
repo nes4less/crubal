@@ -174,6 +174,40 @@ export function adopt(store: Store, id: string, address: string, rules: { produc
   return rule?.strength === "should" ? { flagged: rule.name } : {};
 }
 
+/**
+ * Split (1.12): a new record minted beside the origin, the named children moved under it (`of`), the
+ * named values written on it with the origin's sources where it has them, the named bindings moved. The
+ * reverse of a merge names what the merge brought; a version split names the instances that disagreed.
+ */
+export function split(store: Store, fromId: string, into: string, what: { children?: string[]; values?: JsonObject; bindings?: string[] }, source: Source = { origin: "declared", via: "split" }): Record {
+  const origin = store.records.get(fromId);
+  if (!origin) throw new CrubalError(`no record ${fromId}`);
+  if (store.records.has(into)) throw new CrubalError(`${into} exists`);
+  const values: JsonObject = {};
+  const sources: { [a: string]: Source } = {};
+  for (const [k, v] of Object.entries(what.values ?? {})) {
+    values[k] = v;
+    const own = origin.sources?.[k] ?? origin.sources?.["*"];
+    sources[k] = origin.values[k] !== undefined && serialize(origin.values[k] as Json) === serialize(v) && own ? { ...own } : { ...source };
+  }
+  const next: Record = { id: into, kind: origin.kind, level: origin.level, owner: origin.owner, values, sources };
+  if (origin.of) next.of = origin.of;
+  if (origin.within) next.within = origin.within;
+  if (origin.wears) next.wears = [...origin.wears];
+  store.records.set(into, next);
+  for (const id of what.children ?? []) {
+    const c = store.records.get(id);
+    if (!c) throw new CrubalError(`no record ${id}`);
+    if (c.of !== fromId) throw new CrubalError(`${id} isn't of ${fromId}`);
+    store.records.set(id, { ...c, of: into });
+  }
+  for (const key of what.bindings ?? []) {
+    if (store.bindings.get(key) !== fromId) throw new CrubalError(`${key} isn't bound to ${fromId}`);
+    store.bindings.set(key, into);
+  }
+  return next;
+}
+
 /** Give an adopted value back (8.2): the mark goes, and the next rule run or update replaces it. */
 export function giveBack(store: Store, id: string, address: string): void {
   const r = store.records.get(id);

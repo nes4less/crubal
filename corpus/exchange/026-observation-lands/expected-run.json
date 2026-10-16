@@ -1,0 +1,6 @@
+[
+  { "contract": "discRead", "record": "U-1", "landed": "observation", "log": "L-R1",
+    "observations": [ { "obs": "O-1", "on": "U-1", "address": "runtime", "value": { "$qty": "97", "unit": "min" }, "evidence-type": "disc-read", "reading": "I-R1", "supports": "P-1" } ] },
+  { "contract": "discRead", "record": "U-2", "landed": "observation", "log": "L-R2",
+    "observations": [ { "obs": "O-2", "on": "U-2", "address": "runtime", "value": { "$qty": "92", "unit": "min" }, "evidence-type": "disc-read", "reading": "I-R2", "supports": "P-1" } ] }
+]
