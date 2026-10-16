@@ -225,3 +225,14 @@ a staging deployment only when ME is wired (3); the send split (4); signed reque
 - **Signed requests between owners** (RFC 9421 with the domain key) as the protocol for offer, take and
   cross-owner edges; the alternative is bearer tokens issued per pair of owners, which would need a
   registration step the spec doesn't have.
+
+## Platform-hosted callers and acting for a person (spec 14.8, 14.9; added 2026-10-16)
+
+The identity link table maps a provider subject to a **hosted person** (`<domain>:<id>`, an owner of its own
+chain). A request from that person to any owner this host holds resolves the caller without a signature; the
+host vouches (14.8). Edges granted to the person by that owner name `person:<domain:id>`; the grantor chain is
+checked as for any caller. A request may carry `for`: a system (an agent with its own key) acting for a hosted
+person. The border then evaluates access as the person's, capped and narrowed as 14.9 says, writes `by` as the
+system and `for` as the person, and refuses the write when it exceeds the person's effective access, grants
+onward, or runs under an emergency edge (14.12 items 8 and 9). Callers hosted elsewhere keep the signed-request
+path of 7.8.

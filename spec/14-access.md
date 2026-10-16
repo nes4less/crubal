@@ -202,6 +202,14 @@ proven by its domain's key (chapter 7.8). Support from the platform that hosts t
 - Offer and take (chapter 7.8) remain the way owners share data. A cross-owner edge shares access, not data:
   the foreign caller works on the owner's records where they are.
 
+**Platform-hosted callers.** A host that hosts both an owner and a person (14.1) MAY treat that person as the
+owner's own caller: the owner and its admins grant them edges as they grant anyone of the owner's, within the
+grantor chain (14.5), with no `until` or gate required, and their requests carry no signature, because the host
+has already proven who they are (chapter 7.6). Such an edge names the person by their hosted ID
+(`who: person:<domain:id>`), the person's own records stay in their own chain and are never `within` the
+owner's (14.2), and the owner's log shows the person as `by` like any caller. Everything else in this section
+applies to callers hosted elsewhere.
+
 ## 14.9 Systems
 
 A system is a caller like a person. When a utility registers, it **requests** menu items, as an app requests
@@ -211,6 +219,14 @@ system may do is therefore a list anyone with `view` on the edge can read, and r
 
 An AI agent that signs in is a system or acts for a person; either way it holds only the edges granted to
 it, and its writes carry its own `by` in the log.
+
+**Acting for a person.** A system MAY act for a person who operates it: an AI account a person connected, a tool
+holding their key. This is not a grant, and the person needs no `admin` or `grant` item for it. The system's
+effective access is the person's own (14.4), capped by it and lapsing with it, narrowed to the items the person
+chose, with an `until` if they set one, and gated (14.7) until the person lifts the gate per item. Every write
+the system makes names both: `by` is the system, `for` is the person, so the person sees it as their own log and
+the owner sees who really acted. The person MAY revoke it at any moment. A system acting for a person MUST NOT
+grant onward and MUST NOT act under an emergency edge (14.13).
 
 ## 14.10 Relations
 
@@ -244,7 +260,8 @@ release.
 }
 ```
 
-A gated edge adds `"gate": "review"` and, when it isn't the grantor, `"reviewer"`. Permissions hold `menu`
+A gated edge adds `"gate": "review"` and, when it isn't the grantor, `"reviewer"`. A write made by a system acting for a
+person carries `"by": "system:S-2", "for": "person:P-2201"` (14.9). Permissions hold `menu`
 (name → `{"verbs": {"run": ["checkIn"]}, "on": "administered"}`), `presets` (name → `{"items": […],
 "audience": "staff"}`) and `relations` (name → `{"only": true}` or `{}`); `ownership` maps `person` to the
 kinds and classes a person may own.
@@ -263,6 +280,9 @@ A store MUST refuse a write that:
 6. makes a person the owner of a record the package's `ownership` doesn't let a person own;
 7. gives an edge a relation the package doesn't declare (14.6), or an emergency edge that breaks its terms
    (14.13).
+8. lets a system act for a person beyond that person's effective access, without `for`, onward, or under an
+   emergency edge (14.9);
+9. grants a platform-hosted caller what its grantor could not grant to anyone (14.5, 14.8).
 
 ## 14.13 Emergency access
 
