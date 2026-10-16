@@ -12,10 +12,9 @@ package: me /2026-10-13
   label: Media Encyclopedia
   crubal: 2
   licence: CC-BY-4.0
-  extends: commerce /2026-10-01, media /2026-10-01
+  extends: commerce /2026-10-01
   prefixes:
-    commerce: crubal.com/commerce
-    media: crubal.com/media
+    commerce: cashierfu.com/commerce
     wd: https://www.wikidata.org/entity/
     schema: https://schema.org/
     ebay: ebay.com
@@ -170,8 +169,8 @@ A published version MUST NOT change. A mistake is fixed by a new version.
   "id": "mediaencyclopedia.com/me",
   "crubal": "2",
   "licence": "CC-BY-4.0",
-  "extends": [ { "package": "crubal.com/commerce", "version": "2026-10-01" } ],
-  "prefixes": { "commerce": "crubal.com/commerce", "wd": "https://www.wikidata.org/entity/" },
+  "extends": [ { "package": "cashierfu.com/commerce", "version": "2026-10-01" } ],
+  "prefixes": { "commerce": "cashierfu.com/commerce", "wd": "https://www.wikidata.org/entity/" },
   "units": { "package": "crubal.com/units", "version": "2026-10-15" },
   "trust": ["person", "me:unitizer", "observed", "declared", "reported"],
   "facet-trust": { "runtime": ["observed", "person"] },
@@ -192,10 +191,12 @@ shape `crubal:portable`) are fixed by this specification.
 | `crubal.com/core` | the core's names |
 | `crubal.com/units` | the units table (11.9): units by dimension, with factors, offsets and accepted spellings, and ISO 4217 currencies |
 | `crubal.com/party` | the `person`, `organization` and `system` kinds, their base classes, and the caller facets that edges, contracts and the trust order read (chapter 14) |
-| `crubal.com/product` | the `item` kind (group > product > unit) and the base product facets |
-| `crubal.com/service` | the `service` kind (service > booking) and the base service facets |
-| `crubal.com/commerce` | stock, offers, prices and shipping, attached to products and services |
-| `crubal.com/media` | films, shows, music and games: formats, codecs, regions, contained works, cast |
+
+That is all crubal.com publishes: the engine is the silent layer, and nothing a person sees comes from it. Every
+other vocabulary is a package of its owner's domain, published from that domain's well-known file like any
+other: what a platform sells with (items, services, offers, orders) is the platform's, and what one of its
+tenants deals in (films and discs) is the tenant's. In this spec's examples those are `cashierfu.com/commerce`
+and `mediaencyclopedia.com/media`; both are examples (README).
 
 **Where a package is.** A package's identity `domain/name` resolves through the domain's **well-known file**:
 
@@ -209,8 +210,8 @@ https://<domain>/.well-known/crubal.json
   "owner": "crubal.com",
   "keys": { "crubal.com": { "alg": "Ed25519", "public": "…" } },
   "packages": [
-    { "package": "crubal.com/product", "latest": "2026-10-14",
-      "versions": { "2026-10-14": "https://crubal.com/product/2026-10-14/package.json" } }
+    { "package": "crubal.com/party", "latest": "2026-10-16",
+      "versions": { "2026-10-16": "https://crubal.com/party/2026-10-16/package.json" } }
   ]
 }
 ```

@@ -61,5 +61,7 @@ answered, a scheduled tick, an erasure, an offer taken across owners, a stream p
 real thing is `docs/design/gate-runbook.md`. Step 8 waits on the operator's parked rulings (the standard
 vocabularies: party, media classes by format, the order kind; the ME package's triage). Party was ruled and
 landed 2026-10-16 (`std/party`, docs/design/party.md): the three caller kinds, contact facets at staff, `connect`
-and `profile` forms; roles and relations stay the adopter's. Still parked: media classes by format, the order kind,
-the ME triage.
+and `profile` forms; roles and relations stay the adopter's. Layer ruling the same day: crubal.com is the silent
+engine and publishes only core, units and party; product, service and commerce moved to the Cashierfu layer
+(ME repo, `crubal/cashierfu/`, owner cashierfu.com) and media to ME's own (`crubal/me/media.crubal`). Media classes
+by format and the order kind are now Cashierfu- and ME-layer work, taken layer by layer after this one.

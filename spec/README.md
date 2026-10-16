@@ -5,7 +5,8 @@ the design review that produced it is recorded in Media Encyclopedia's blueprint
 
 CRUBAL is a language and engine for data about any kind of thing. Everything is a key and a value. Records
 are pairs; a facet's definition is pairs about a key; rules, contracts, views and packages are pairs too.
-The engine is universal at the kind level: commerce, media and the rest are packages that attach to kinds.
+The engine is universal at the kind level: commerce, media and the rest are packages that attach to kinds, each
+published by its own owner; crubal.com itself publishes only the core, the units and the parties (chapter 11.7).
 
 ## Chapters
 
@@ -39,7 +40,7 @@ The chapters follow the stack from the bottom. Each refers only to the chapters 
   comments.
 - `me:` in examples is the Media Encyclopedia package, CRUBAL's first adopter. `wd:` is Wikidata. `crubal:`
   is the core, `crubal.com/core` (chapter 11.7).
-- **Product, unit, catalog, disc and the like are the media and product packages' words.** They appear in
+- **Product, unit, catalog, disc and the like are adopters' words** (a platform's commerce package, a tenant's media package). They appear in
   this spec only as examples. The core knows kinds, levels, records, classes and views; nothing in it is
   defined in terms of a product or a unit.
 - **Named parties and tools are examples too.** eBay, Wikidata, a distributor, a platform such as

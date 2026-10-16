@@ -33,7 +33,7 @@ const roundTrip = (source: string, label: string) => {
   return first;
 };
 
-for (const name of ["core", "units", "product", "service", "commerce", "media"]) {
+for (const name of ["core", "units", "party"]) {
   test(`the standard package ${name} round-trips through its bundle`, () => {
     const b = roundTrip(read(`std/${name}/package.crubal`), name);
     assert.equal(b.id, `crubal.com/${name}`);
