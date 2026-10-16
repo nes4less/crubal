@@ -303,6 +303,8 @@ export function serve(host: Host): Server {
     if (what === "install" && method === "POST") {
       if (!isOwner) throw new HttpError(403, "the owner installs");
       const b = JSON.parse(bodyOf()) as JsonObject;
+      // A bundle in the body, or a package by name fetched from its publisher's well-known file.
+      if (typeof b.package === "string" && !b.facets && !b.hash) return json(res, 200, { installed: await host.installFrom(owner, b.package, typeof b.version === "string" ? b.version : undefined) });
       return json(res, 200, await host.install(owner, isObj(b.bundle) ? b.bundle : b));
     }
     if (what === "export" && method === "GET") {

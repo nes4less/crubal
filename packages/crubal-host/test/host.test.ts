@@ -18,6 +18,8 @@ let drop: () => Promise<void>;
 let base = "";
 let host: Host;
 let clock = "2026-10-15T22:00:00Z";
+/** Documents the test host fetches by URL: well-known files and bundles a publisher would serve. */
+const docs = new Map<string, JsonObject>();
 let server: ReturnType<typeof serve>;
 const acted: JsonObject[] = [];
 
@@ -38,6 +40,7 @@ before(async () => {
       return own ? { [domain]: { alg: "Ed25519", public: own.public } } : {};
     },
     hostOf: () => base,
+    fetchJson: async (url) => { const d = docs.get(url); if (!d) throw new Error(`no document at ${url}`); return d; },
     adapters: { label: async (_c, payload, run) => { acted.push({ payload, run }); return { acted: true, body: '{"itemId":"L-77"}' }; } },
   });
   await host.migrate();
@@ -446,4 +449,54 @@ test("operations: health, the body limit, CORS for an allowlisted origin, a log 
   const d0 = (drained.body as unknown as JsonObject[])[0] as JsonObject;
   assert.equal((d0.applied as string[]).length, 2);
   assert.ok(Number(d0.remaining) >= 1);
+});
+
+test("install by name from the publisher's well-known file: the bundle fetched where the file says, what it extends installed first, each verified", { skip: !url }, async () => {
+  const key = (globalThis as { pubKey?: { d: string; x: string } }).pubKey as { d: string; x: string };
+  const BASE = `package: base /2026-10-01
+  owner: pub.example
+  crubal: 2
+notes$
+`;
+  const EXT = `package: ext /2026-10-01
+  owner: pub.example
+  crubal: 2
+  extends: base /2026-10-01
+kind: thing
+  levels: thing
+class: Noted
+  for: thing
+  facets:
+    notes
+`;
+  const baseBundle = publish(BASE, { date: "2026-10-01", key }).bundle;
+  const extBundle = publish(EXT, { date: "2026-10-01", key }).bundle;
+  docs.set(`${base}/.well-known/crubal.json`, {
+    crubal: "2", owner: "pub.example",
+    keys: { "pub.example": { alg: "Ed25519", public: key.x } },
+    packages: [
+      { package: "pub.example/base", latest: "2026-10-01", versions: { "2026-10-01": `${base}/base/2026-10-01/package.json` } },
+      { package: "pub.example/ext", latest: "2026-10-01", versions: { "2026-10-01": `${base}/ext/2026-10-01/package.json` } },
+    ],
+  });
+  docs.set(`${base}/base/2026-10-01/package.json`, baseBundle);
+  docs.set(`${base}/ext/2026-10-01/package.json`, extBundle);
+  await host.createOwner("adopter.example");
+  const ownerKey = await host.issueKey("adopter.example", "adopter.example", "owner");
+  const r = await call("POST", "/o/adopter.example/install", ownerKey, { package: "pub.example/ext" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const done = r.body.installed as JsonObject[];
+  assert.deepEqual(done.map((d) => d.installed), ["pub.example/base", "pub.example/ext"], "the dependency first");
+  assert.equal(done[1]?.from, `${base}/ext/2026-10-01/package.json`);
+  const store = await host.storeFor("adopter.example");
+  assert.deepEqual((await store.state()).installed.map((i) => `${i.package} /${i.version}`), ["pub.example/base /2026-10-01", "pub.example/ext /2026-10-01"]);
+  // Again: nothing to do.
+  assert.deepEqual((await call("POST", "/o/adopter.example/install", ownerKey, { package: "pub.example/ext" })).body.installed, []);
+  // A tampered bundle is refused: the file's key doesn't sign it.
+  docs.set(`${base}/ext/2026-10-01/package.json`, { ...extBundle, label: "tampered" });
+  await host.createOwner("other.example");
+  const otherKey = await host.issueKey("other.example", "other.example", "owner");
+  const bad = await call("POST", "/o/other.example/install", otherKey, { package: "pub.example/ext" });
+  assert.notEqual(bad.status, 200);
+  assert.match(String(bad.body.error), /doesn't verify/);
 });

@@ -96,6 +96,7 @@ POST /o/<owner>/inbox/<contract>            a presenter's pushed stream entries,
 POST /push · POST /expire                    loops behind the host key: push `when: entry` streams and acknowledge; sweep taken values past their terms
 GET  /o/<domain>:<id>/export · POST /o/<domain>:<id>/erase/<record>   a hosted person (14.1), signed in to the domain as that caller: their own chain, their own records only
 POST /o/<owner>/rotate                      a new key signs from now; the well-known file lists the old with until and the new with from (11.7)
+POST /o/<owner>/install { package, version? }   install by name from the publisher's well-known file (11.7): the bundle fetched where the file says, what it extends installed first, each verified against the publisher's keys; { bundle } installs one handed in
 GET  /health                                the database reachable and every chain's head (503 when not)
 POST /drain                                 a loop behind the host key: pending instructions applied at a rate ({ owner?, rate? })
 GET  /o/<owner>/review (open items by key)   ·   POST /o/<owner>/review { key, decision, … }

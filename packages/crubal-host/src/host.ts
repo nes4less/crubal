@@ -55,6 +55,8 @@ export type HostOptions = {
   notify?: (owner: string, notice: JsonObject) => void | Promise<void>;
   /** Another owner's host by domain: its base URL; `https://<domain>` otherwise. */
   hostOf?: (domain: string) => string;
+  /** A JSON document by URL (a well-known file, a bundle); `fetch` otherwise. */
+  fetchJson?: (url: string) => Promise<JsonObject>;
 };
 
 export const hashKey = (key: string) => createHash("sha256").update(key).digest("hex");
@@ -396,6 +398,51 @@ export class Host {
     const keys = bundle.sig ? await this.resolveKeys(String(bundle.owner)) : undefined;
     const entry = await store.install(bundle, keys, this.now());
     return { installed: String(bundle.id), version: String(bundle.version), entry: String(entry.log) };
+  }
+
+  /** A JSON document by URL. */
+  async fetchJson(url: string): Promise<JsonObject> {
+    if (this.o.fetchJson) return this.o.fetchJson(url);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`${url}: ${res.status}`);
+    return (await res.json()) as JsonObject;
+  }
+
+  /** A publisher's well-known file (11.7), by its domain. */
+  async wellKnownOf(domain: string): Promise<JsonObject> {
+    return this.fetchJson(`${this.hostOf(domain)}/.well-known/crubal.json`);
+  }
+
+  /**
+   * Install a package by name from its publisher's well-known file (11.7, release.md): the version asked
+   * for or the latest, its bundle fetched from where the file says, what it extends installed first
+   * (from their own publishers), every bundle verified against its publisher's published keys.
+   */
+  async installFrom(owner: string, pkg: string, version?: string, seen = new Set<string>()): Promise<JsonObject[]> {
+    const store = await this.storeFor(owner);
+    const domain = pkg.split("/")[0] as string;
+    const wk = await this.wellKnownOf(domain);
+    const listed = ((wk.packages as JsonObject[] | undefined) ?? []).find((p) => p.package === pkg);
+    if (!listed) throw new Error(`${domain} doesn't publish ${pkg}`);
+    const v = version ?? String(listed.latest);
+    const url = (listed.versions as { [v: string]: string } | undefined)?.[v];
+    if (!url) throw new Error(`${pkg} has no version ${v} at ${domain}`);
+    const key = `${pkg} /${v}`;
+    if (seen.has(key)) throw new Error(`${key} extends itself through its dependencies`);
+    seen.add(key);
+    const out: JsonObject[] = [];
+    const installed = (await store.state()).installed;
+    if (installed.some((i) => i.package === pkg && String(i.version) === v)) return out;
+    const bundle = await this.fetchJson(url);
+    // A bundle names what it extends by short name within its own publisher, or by id across publishers.
+    for (const e of (bundle.extends as JsonObject[] | undefined) ?? []) {
+      const dep = String(e.package).includes("/") ? String(e.package) : `${bundle.owner}/${e.package}`;
+      out.push(...(await this.installFrom(owner, dep, String(e.version), seen)));
+    }
+    const keys = (wk.keys as Keys | undefined) ?? (await this.resolveKeys(domain));
+    const entry = await store.install(bundle, bundle.sig ? keys : undefined, this.now());
+    out.push({ installed: String(bundle.id), version: String(bundle.version), from: url, entry: String(entry.log) });
+    return out;
   }
 
   // ─── The well-known file ───────────────────────────────────────────────────

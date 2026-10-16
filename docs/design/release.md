@@ -53,3 +53,10 @@ Steps 1–6 landed 2026-10-15.
    replay, held release, adopt, the small gaps, split, views for pages, exchange between hosts, hosted
    persons and key rotation, operations, the MUST audit, the benchmark, the claim).
 8. Then the standard vocabularies and the first adopter package, and the gate.
+
+Step 7 landed 2026-10-16 (completion.md), with the host installing by name from a publisher's well-known
+file, dependencies first. What the gate names is now exercised by the host suite against two owners on one
+host: install by well-known, views projected and served by the index, a form run, a send acted and
+answered, a scheduled tick, an erasure, an offer taken across owners, a stream pushed. The runbook for the
+real thing is `docs/design/gate-runbook.md`. Step 8 waits on the operator's parked rulings (the standard
+vocabularies: party, media classes by format, the order kind; the ME package's triage).

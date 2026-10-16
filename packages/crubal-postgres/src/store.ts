@@ -147,7 +147,9 @@ export class PgStore {
     const installed = (await this.state()).installed;
     const have = (pkg: string) => installed.filter((i) => i.package === pkg).map((i) => String(i.version));
     for (const e of (bundle.extends as JsonObject[] | undefined) ?? []) {
-      if (!have(String(e.package)).includes(String(e.version))) throw new Error(`${bundle.id} extends ${e.package} /${e.version}, which isn't installed`);
+      // Named by short name within the bundle's own publisher, or by id across publishers.
+      const dep = String(e.package).includes("/") ? String(e.package) : `${bundle.owner}/${e.package}`;
+      if (!have(dep).includes(String(e.version))) throw new Error(`${bundle.id} extends ${e.package} /${e.version}, which isn't installed`);
     }
     const previous = have(String(bundle.id)).at(-1);
     if (previous === bundle.version) throw new Error(`${bundle.id} /${bundle.version} is already installed`);
