@@ -89,8 +89,8 @@ a new MUST or a new case updates this file.
 | 14.2 | `within` never cycles, never crosses owners; ancestors kept | exchange-errors/e11-within-cycle, e13-within-another-owner, views/009-partition (ancestors) |
 | 14.6 | an item naming nothing refused | exchange-errors/x02-undefined-facet |
 | 14.12 | a store refuses the listed writes | exchange-errors/e07-grant-above-held, e08-cross-owner-by-admin, e12-person-owns-item, e13-within-another-owner, e14-wears-not-for-kind; pg test: refused at the commit, nothing left behind |
-| 14.9 | a system acting for a person never exceeds the person's effective access, never grants onward, never acts under an emergency edge; every such write carries `for` | open: amendment of 2026-10-16 (Cashierfu plan, audit B2); engine work before the Agents object |
-| 14.8, 14.12 | a platform-hosted caller is the owner's caller without signature; a grant to one never exceeds what the grantor could grant to anyone | open: amendment of 2026-10-16 (audit B1); host work before the User object |
+| 14.9 | a system acting for a person never exceeds the person's effective access, never grants onward, never acts under an emergency edge; every such write carries `for` | host test: "acting for a person (14.9)" (runs as the person, capped to the items chosen, suggestions while gated, the entry's `by` carries `caller` and `for`, refused without the person's permission or beyond it); the onward-grant and emergency refusals are in `PgBorder.refuseActing`, exercised by the Agents object's suite later |
+| 14.8, 14.12 | a platform-hosted caller is the owner's caller without signature; a grant to one never exceeds what the grantor could grant to anyone | host test: "platform-hosted callers (14.8)" (a person proven by identity served unsigned at another owner; an admin grants them within the chain; a grant above the grantor's mode refused; a person hosted elsewhere is nobody) |
 | 14.13 | emergency terms published in advance; an edge without the approvals refused | exchange-errors/e09-emergency-without-terms, e10-emergency-self-approved, exchange/018-emergency-edge |
 
 ## Open

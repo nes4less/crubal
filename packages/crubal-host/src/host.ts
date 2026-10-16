@@ -18,7 +18,15 @@ import { verifyRequest, signRequest } from "./signatures.ts";
 
 const SCHEMA_SQL = readFileSync(new URL("./schema.sql", import.meta.url), "utf8");
 
-export type Caller = { owner: string; caller: string };
+/**
+ * Who is calling, as the host proved it: an owner's caller, and how (`key`: an API key the host issued, a
+ * system; `identity`: a token the identity provider issued, a person; `signature`: another owner's domain
+ * key). A person proven by identity is vouched for across every owner this host holds (14.8).
+ */
+export type Caller = { owner: string; caller: string; via?: "key" | "identity" | "signature" };
+
+/** A system acting for a hosted person (14.9): what the person allowed, as the host keeps it. */
+export type ActingFor = { id: number; systemOwner: string; system: string; person: string; items: string[]; until?: string; gated: boolean; created: string; revoked?: string };
 
 export type HostOptions = {
   /** The host's own domain, for its well-known file. */
@@ -158,7 +166,7 @@ export class Host {
   async whoSigned(owner: string, req: { method: string; url: string; body?: string; headers: { [h: string]: string | string[] | undefined } }): Promise<Caller | null> {
     const v = await verifyRequest({ ...req, publicX: async (keyid) => keyFor(await this.resolveKeys(keyid), keyid, this.now())?.public, now: Math.floor(Date.parse(this.now()) / 1000) });
     // The signing owner acts as the caller `domain:owner`: a caller of that domain (14.1), never a bare ID here.
-    return v ? { owner, caller: `${v.keyid}:owner` } : null;
+    return v ? { owner, caller: `${v.keyid}:owner`, via: "signature" } : null;
   }
 
   /** Who is calling: an API key, a token a verifier knows, or nobody. The store sees only the caller ID. */
@@ -167,13 +175,113 @@ export class Host {
     const token = authorization.replace(/^Bearer\s+/i, "").trim();
     if (token.startsWith("ck_")) {
       const { rows } = await this.pool.query("select owner, caller from host_api_keys where key_hash = $1", [hashKey(token)]);
-      return (rows[0] as Caller | undefined) ?? null;
+      const c = rows[0] as Caller | undefined;
+      return c ? { owner: c.owner, caller: c.caller, via: "key" } : null;
     }
     for (const v of this.o.verifiers ?? []) {
       const c = await v(token);
-      if (c) return c;
+      if (c) return { ...c, via: c.via ?? "identity" };
     }
     return null;
+  }
+
+  /** Does this host hold the owner (a domain, or a hosted person `domain:id`)? */
+  async hosts(owner: string): Promise<boolean> {
+    const { rows } = await this.pool.query("select 1 from host_owners where owner = $1", [owner]);
+    return rows.length > 0;
+  }
+
+  /**
+   * The caller as an owner on this host sees them (14.8): their own ID at the owner that hosts them, or
+   * themselves as that owner when they address their own chain; elsewhere on the host, a person proven by
+   * identity is `person:<domain:id>`, vouched for without a signature; a system or a stranger is nobody.
+   */
+  async callerFor(owner: string, who: Caller | null): Promise<string | undefined> {
+    if (!who) return undefined;
+    if (who.owner === owner) return who.caller;
+    const at = owner.indexOf(":");
+    if (at > 0 && who.owner === owner.slice(0, at) && who.caller === owner.slice(at + 1)) return owner;
+    if (who.via === "identity" && (await this.hosts(who.owner))) return `person:${who.owner}:${who.caller}`;
+    return undefined;
+  }
+
+  // ─── Acting for a person (14.9) ────────────────────────────────────────────
+
+  /** A person lets a system act for them: narrowed to items, until a moment, gated until they lift it. */
+  async allowActing(person: string, systemOwner: string, system: string, o: { items?: string[]; until?: string; gated?: boolean } = {}): Promise<ActingFor> {
+    const { rows } = await this.pool.query(
+      "insert into host_acting_for (system_owner, system, person, items, until, gated, created) values ($1, $2, $3, $4, $5, $6, $7) returning id",
+      [systemOwner, system, person, o.items ?? [], o.until ?? null, o.gated ?? true, this.now()],
+    );
+    return { id: Number((rows[0] as { id: number }).id), systemOwner, system, person, items: o.items ?? [], ...(o.until ? { until: o.until } : {}), gated: o.gated ?? true, created: this.now() };
+  }
+
+  /** The person revokes it: nothing is deleted, the row keeps when. */
+  async revokeActing(person: string, id: number): Promise<boolean> {
+    const r = await this.pool.query("update host_acting_for set revoked = $3 where person = $1 and id = $2 and revoked is null", [person, id, this.now()]);
+    return (r.rowCount ?? 0) > 0;
+  }
+
+  async actingFor(person: string): Promise<ActingFor[]> {
+    const { rows } = await this.pool.query("select id, system_owner, system, person, items, until, gated, created, revoked from host_acting_for where person = $1 order by id", [person]);
+    return (rows as { id: number; system_owner: string; system: string; person: string; items: string[]; until: string | null; gated: boolean; created: string; revoked: string | null }[]).map((r) => ({ id: Number(r.id), systemOwner: r.system_owner, system: r.system, person: r.person, items: r.items, ...(r.until ? { until: r.until } : {}), gated: r.gated, created: r.created, ...(r.revoked ? { revoked: r.revoked } : {}) }));
+  }
+
+  /** The live permission for this system to act for this person now, or none. */
+  async mayActFor(who: Caller, person: string, now = this.now()): Promise<ActingFor | null> {
+    if (who.via !== "key") return null;
+    const live = (await this.actingFor(person)).filter((a) => a.systemOwner === who.owner && a.system === who.caller && !a.revoked && (!a.until || a.until > now));
+    return live.at(-1) ?? null;
+  }
+
+  // ─── The platform index (14.8, docs/design/host.md) ───────────────────────
+
+  /**
+   * Every live edge a caller holds across every owner on this host, grouped by owner: who they are to
+   * each. A hosted person is named by their bare ID at home and `person:<domain:id>` elsewhere.
+   */
+  async whoami(who: Caller, now = this.now()): Promise<JsonObject> {
+    const names = [who.caller, `person:${who.owner}:${who.caller}`];
+    const { rows } = await this.pool.query("select owner, json from edges where json->>'who' = any($1) order by owner, ord", [names]);
+    const byOwner: { [owner: string]: JsonObject[] } = {};
+    for (const r of rows as { owner: string; json: JsonObject }[]) {
+      const e = r.json;
+      // Lapsed edges don't count (14.4); whether the grantor still stands is the owner's border's call at the write.
+      if (typeof e.until === "string" && e.until <= now) continue;
+      if (r.owner !== who.owner && e.who === who.caller) continue; // a bare ID at another owner is someone else
+      const list = byOwner[r.owner] ?? (byOwner[r.owner] = []);
+      list.push({ edge: e.edge as Json, relation: e.relation as Json, mode: e.mode as Json, on: e.on as Json, ...(Array.isArray(e.grants) && e.grants.length ? { grants: e.grants } : {}), ...(typeof e.until === "string" ? { until: e.until } : {}), ...(e.gate ? { gate: e.gate } : {}) });
+    }
+    const owners: JsonObject = {};
+    for (const [owner, edges] of Object.entries(byOwner)) {
+      const modes = ["none", "view", "consume", "control", "admin"];
+      const mode = edges.map((e) => String(e.mode)).sort((a, b) => modes.indexOf(b) - modes.indexOf(a))[0] ?? "none";
+      owners[owner] = { mode, relations: [...new Set(edges.map((e) => String(e.relation)))], grants: [...new Set(edges.flatMap((e) => (e.grants as string[] | undefined) ?? []))], edges };
+    }
+    return { caller: who.caller, home: who.owner, owners };
+  }
+
+  /**
+   * The rows the caller stands in a relation to, across every owner on this host (14.10, 12.6): the index
+   * rows whose record, or an ancestor, is a live edge of theirs with that relation. The feed's primitive.
+   */
+  async rowsFor(who: Caller, relation: string, o: { view?: string; limit?: number; now?: string } = {}): Promise<JsonObject[]> {
+    const me = await this.whoami(who, o.now);
+    const ons: { owner: string; on: string }[] = [];
+    for (const [owner, v] of Object.entries(me.owners as { [o: string]: JsonObject })) for (const e of v.edges as JsonObject[]) if (e.relation === relation) ons.push({ owner, on: String(e.on) });
+    if (!ons.length) return [];
+    const owners = [...new Set(ons.map((x) => x.owner))];
+    const targets = [...new Set(ons.map((x) => x.on))];
+    const params: unknown[] = [owners, targets];
+    let where = "owner = any($1) and (record = any($2) or ancestors && $2::text[])";
+    if (o.view) {
+      params.push(o.view);
+      where += ` and view = $${params.length}`;
+    }
+    params.push(o.limit ?? 100);
+    const { rows } = await this.pool.query(`select owner, view, record, row from index_rows where ${where} order by seq desc limit $${params.length}`, params);
+    // Only rows an edge of that owner covers: the same record or one of its ancestors.
+    return (rows as { owner: string; view: string; record: string; row: JsonObject }[]).map((r) => ({ owner: r.owner, view: r.view, record: r.record, row: r.row }));
   }
 
   // ─── Secrets ───────────────────────────────────────────────────────────────

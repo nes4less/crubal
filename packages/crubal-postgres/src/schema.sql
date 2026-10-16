@@ -250,3 +250,6 @@ insert into schema_version (version) values ('2026-10-15') on conflict do nothin
 
 -- One order across an owner's chain and the chains of the people it hosts (14.1), for a rebuild.
 alter table log add column if not exists ord bigint generated always as identity;
+
+-- The platform index reads a caller's edges across owners (14.8, docs/design/host.md).
+create index if not exists edges_who on edges ((json->>'who'));

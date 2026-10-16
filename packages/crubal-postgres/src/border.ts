@@ -33,15 +33,54 @@ export async function borderOptions(store: PgStore): Promise<BorderOptions> {
 
 type Row = { [column: string]: unknown };
 
+/**
+ * A system acting for a person (14.9): the run's caller is the person, whose access is capped to the items
+ * they chose and gated until they lifted it; the entry names the system as `caller` and the person as
+ * `for`; a write that grants onward, or runs under an emergency edge, is refused.
+ */
+export type Acting = { system: string; person: string; items?: string[]; gated?: boolean };
+
 export class PgBorder {
   readonly store: PgStore;
   readonly o: BorderOptions;
   readonly contracts: Map<string, Contract>;
+  /** Set for one request when a system acts for a person (14.9); every run of this border then runs as the person. */
+  acting?: Acting;
 
   constructor(store: PgStore, o: BorderOptions) {
     this.store = store;
     this.o = o;
     this.contracts = new Map(o.contracts.map((c) => [c.name, c]));
+  }
+
+  /** The person's access, narrowed as they chose (14.9), laid over the owner's access for this run. */
+  private cap(access: Access, acting: Acting): void {
+    const { person, items, gated } = acting;
+    const effective = access.effective.bind(access);
+    access.effective = (callerId: string, recordId: string) => {
+      const e = effective(callerId, recordId);
+      if (callerId !== person) return e;
+      if (items?.length) e.items = new Set([...e.items].filter((i) => items.includes(i)));
+      if (gated && e.mode !== "none") e.gated = true;
+      return e;
+    };
+    if (gated) {
+      const was = access.gated.bind(access);
+      access.gated = (callerId: string, recordId: string) => (callerId === person ? { edge: "acting-for", who: acting.system, relation: "agent", mode: "control", on: recordId, grants: [], by: person, gate: "review", reviewer: person, line: 0 } : was(callerId, recordId));
+    }
+  }
+
+  /** Refuse what a system acting for a person may never do (14.9, 14.12 items 8 and 9). */
+  private refuseActing(acting: Acting, recordId: string | undefined, access: Access | undefined, edgesBefore: Set<string>, edgesAfter: Map<string, unknown>): void {
+    if (recordId && access) {
+      const eff = access.effective(acting.person, recordId);
+      if (eff.edges.some((e) => e.relation === "emergency" || e.by === "platform")) throw Object.assign(new Error(`${acting.system} may not act for ${acting.person} under an emergency edge`), { status: 403 });
+    }
+    for (const [k, e] of edgesAfter) {
+      if (edgesBefore.has(k)) continue;
+      const who = (e as { who?: string }).who;
+      if (who !== acting.person) throw Object.assign(new Error(`${acting.system} acting for ${acting.person} may not grant onward (${k})`), { status: 403 });
+    }
   }
 
   /** A border over a store's own definitions. */
@@ -103,12 +142,20 @@ export class PgBorder {
       if (this.o.perms) {
         ex.access = new Access(this.o.dict, this.o.perms, draft.records, [...draft.edges.values()] as unknown as Edge[], this.owner);
         ex.access.edges = draft.edges as unknown as Map<string, Edge>;
+        if (this.acting) this.cap(ex.access, this.acting);
       }
       // The rules engine knows every record the working set holds, as the memory border's does.
       for (const [, r] of Map.prototype.entries.call(draft.records) as Iterable<[string, import("../../crubal/src/model.ts").Record]>) ex.engine.put(r);
       let captured: { by: JsonObject; extra: JsonObject[] } = { by: { contract: "" }, extra: [] };
       ex.journal = { commit: (by: JsonObject, _m: unknown, _at: unknown, extra: JsonObject[] = []) => { captured = { by, extra }; return null; } } as unknown as Journal;
+      const edgesBefore = new Set(draft.edges.keys());
       const result = fn(ex);
+      if (this.acting) {
+        const recordId = typeof result.record === "string" ? result.record : undefined;
+        this.refuseActing(this.acting, recordId, ex.access, edgesBefore, draft.edges);
+        // Every write names both (14.9): the system that acted and the person it acted for.
+        captured.by = { ...captured.by, caller: this.acting.system, for: this.acting.person };
+      }
       return { by: captured.by, extra: captured.extra, out: result };
     }, at);
     return out;

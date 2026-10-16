@@ -96,22 +96,64 @@ export function serve(host: Host): Server {
       return json(res, 200, await host.tick(now, owner));
     }
 
+    // The platform index (14.8, 14.10): who the caller is to every owner on this host, and the rows they
+    // stand in a relation to. A bearer token only; the host vouches, so no owner's signature is involved.
+    if (parts[0] === "whoami" && method === "GET") {
+      const me = await host.whoIs(req.headers.authorization);
+      if (!me) throw new HttpError(401, "sign in");
+      seen.caller = `${me.owner}:${me.caller}`;
+      if (parts[1] === "rows") {
+        const relation = q("relation");
+        if (!relation) throw new HttpError(400, "relation");
+        return json(res, 200, { caller: me.caller, home: me.owner, relation, rows: await host.rowsFor(me, relation, { ...(q("view") ? { view: q("view") as string } : {}), ...(q("limit") ? { limit: Number(q("limit")) } : {}) }) });
+      }
+      return json(res, 200, await host.whoami(me));
+    }
+
     if (parts[0] !== "o" || !parts[1]) throw new HttpError(404, "not found");
     const owner = decodeURIComponent(parts[1]);
     // A signed request from another owner (RFC 9421) names its signer; a bearer token names a caller.
     const target = `${(req.headers["x-forwarded-proto"] as string | undefined) ?? "http"}://${req.headers.host ?? "host"}${req.url ?? "/"}`;
     const who: Caller | null = req.headers.signature ? await host.whoSigned(owner, { method, url: target, body: raw, headers: req.headers }) : await host.whoIs(req.headers.authorization);
     // A hosted person (14.1) is the owner `domain:id`: the person signed in to the domain as that caller.
+    // At another owner on this host they are `person:<domain:id>`, vouched for without a signature (14.8).
     const hostedAt = owner.indexOf(":");
     const domain = hostedAt > 0 ? owner.slice(0, hostedAt) : owner;
     const hostedId = hostedAt > 0 ? owner.slice(hostedAt + 1) : undefined;
-    const callerId = who && who.owner === owner ? who.caller : who && hostedId && who.owner === domain && who.caller === hostedId ? owner : undefined;
+    const callerId = await host.callerFor(owner, who);
     const isOwner = callerId === owner;
     seen.owner = owner;
     seen.caller = callerId;
     const store = await host.storeFor(owner);
     const at = host.now();
     const [, , what, name, ...rest] = parts;
+
+    // Acting for a person (14.9): a system's request carries `for`; the person must have allowed it.
+    const forPerson = (b: JsonObject) => (typeof b.for === "string" ? b.for : q("for"))?.replace(/^person:/, "");
+    const acting = async (b: JsonObject) => {
+      const person = forPerson(b);
+      if (!person) return undefined;
+      if (!who || who.via !== "key") throw new HttpError(403, "only a system with its own key acts for a person");
+      const allowed = await host.mayActFor(who, person, at);
+      if (!allowed) throw new HttpError(403, `${person} hasn't let ${who.owner}:${who.caller} act for them`);
+      // The person as this owner sees them: at home their bare ID, elsewhere person:<domain:id>.
+      const pAt = person.indexOf(":");
+      const actor = pAt > 0 && person.slice(0, pAt) === owner ? person.slice(pAt + 1) : `person:${person}`;
+      return { actor, acting: { system: `${who.owner}:${who.caller}`, person: actor, ...(allowed.items.length ? { items: allowed.items } : {}), gated: allowed.gated } };
+    };
+
+    // What a person allows (14.9): their own chain's owner lists, allows and revokes.
+    if (what === "acting-for") {
+      if (!isOwner || !hostedId) throw new HttpError(403, "the person allows who acts for them");
+      if (method === "GET") return json(res, 200, { person: owner, allowed: (await host.actingFor(owner)) as unknown as Json });
+      if (method === "POST") {
+        const b = parseJson(bodyOf() || "{}") as { system?: string; items?: string[]; until?: string; gated?: boolean };
+        const sysAt = (b.system ?? "").indexOf(":");
+        if (!b.system || sysAt <= 0) throw new HttpError(400, "system, as <owner>:<id>");
+        return json(res, 200, (await host.allowActing(owner, b.system.slice(0, sysAt), b.system.slice(sysAt + 1), { ...(b.items ? { items: b.items } : {}), ...(b.until ? { until: b.until } : {}), ...(b.gated !== undefined ? { gated: b.gated } : {}) })) as unknown as Json);
+      }
+      if (method === "DELETE" && name) return json(res, 200, { revoked: await host.revokeActing(owner, Number(name)) });
+    }
 
     // Terms (12.5.1): robots rules and the terms file, from the owner's package.
     if (what === "robots.txt" && method === "GET") {
@@ -180,17 +222,21 @@ export function serve(host: Host): Server {
       const c = border.contracts.get(name);
       if (!c) throw new HttpError(404, `no contract ${name}`);
       const record = typeof b.record === "string" ? b.record : undefined;
-      if (!callerId && !isOwner) throw new HttpError(401, "sign in");
+      // A system acting for a person needs no standing of its own here (14.9); anyone else signs in.
+      const acted = await acting(b);
+      if (!acted && !callerId && !isOwner) throw new HttpError(401, "sign in");
+      const actor = acted?.actor ?? callerId;
+      if (acted) border.acting = acted.acting;
       // A form run is the person's answers landing as the contract says; a send acts.
       if (c.kind === "form") {
         if (!record) {
           const level = typeof b.level === "string" ? b.level : "product";
-          return json(res, 200, await border.arrive(name, JSON.stringify(b.answers ?? {}), level, callerId, undefined, at));
+          return json(res, 200, await border.arrive(name, JSON.stringify(b.answers ?? {}), level, actor, undefined, at));
         }
-        return json(res, 200, await border.receive(name, record, JSON.stringify(b.answers ?? {}), callerId, at));
+        return json(res, 200, await border.receive(name, record, JSON.stringify(b.answers ?? {}), actor, at));
       }
       if (!record) throw new HttpError(400, "record");
-      return json(res, 200, await border.send(name, record, callerId, at));
+      return json(res, 200, await border.send(name, record, actor, at));
     }
     if (what === "receive" && name && method === "POST") {
       const border = await host.borderFor(owner, store);
@@ -198,8 +244,11 @@ export function serve(host: Host): Server {
       const payload = bodyOf();
       const record = q("record");
       const run = q("run");
-      if (record) return json(res, 200, await border.receive(name, record, payload, callerId, at, run));
-      return json(res, 200, await border.arrive(name, payload, q("level") ?? "product", callerId, q("of"), at));
+      const acted = await acting({});
+      const actor = acted?.actor ?? callerId;
+      if (acted) border.acting = acted.acting;
+      if (record) return json(res, 200, await border.receive(name, record, payload, actor, at, run));
+      return json(res, 200, await border.arrive(name, payload, q("level") ?? "product", actor, q("of"), at));
     }
     if (what === "records" && name && method === "GET") {
       if (!callerId) throw new HttpError(401, "sign in");

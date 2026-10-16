@@ -500,3 +500,181 @@ class: Noted
   assert.notEqual(bad.status, 200);
   assert.match(String(bad.body.error), /doesn't verify/);
 });
+
+test("platform-hosted callers (14.8): a person proven by identity is vouched for at every owner on the host, unsigned; an admin grants them within the chain; a caller hosted elsewhere is nobody", { skip: !url }, async () => {
+  const key = (globalThis as { pubKey?: { d: string; x: string } }).pubKey as { d: string; x: string };
+  // Identity: the provider's subject maps to the person S-1 of shop.example; a stranger maps to a domain this host doesn't hold.
+  host.o.verifiers = [async (t) => (t === "tok-S1" ? { owner: "shop.example", caller: "S-1" } : t === "tok-stranger" ? { owner: "elsewhere.example", caller: "Z-1" } : null)];
+  const DIST2 = `package: dist /2026-10-03
+  owner: pub.example
+  crubal: 2
+
+kind: item
+  levels: product
+  base: Item
+kind: person
+  levels: person
+  base: Person
+title$
+format{DVD|Blu-ray}
+cost#USD
+notes$
+class: Item
+  for: item
+  facets:
+    !title
+    format
+    notes
+class: Person
+  for: person
+
+contract: fix
+  kind: form
+  origin: declared
+  needs:
+    !title
+    notes
+
+permissions: dist
+  menu:
+    read: see title, see cost
+    fix: run fix, edit title, edit notes
+    people: grant read, fix
+  presets:
+    helper: read, fix    audience: staff
+  relations: helper, follower only
+`;
+  const distKey = await host.issueKey("dist.example", "dist.example", "owner2");
+  const inst = await call("POST", "/o/dist.example/install", distKey, { bundle: publish(DIST2, { date: "2026-10-03", key }).bundle });
+  assert.equal(inst.status, 200, JSON.stringify(inst.body));
+  // Before any edge: the person reaches the owner as a caller (vouched), but sees nothing a member can't.
+  const before = await call("GET", "/o/dist.example/records/D-1", "tok-S1");
+  assert.equal(before.status, 200, JSON.stringify(before.body));
+  assert.deepEqual(before.body.values, {}, "no edge, no facet shown");
+  assert.equal((await call("GET", "/o/dist.example/records/D-1", "tok-stranger")).status, 401, "a person hosted elsewhere is nobody without a signature");
+  // An admin of the distributor (not the owner) grants the hosted person the helper preset, within the chain (14.5).
+  const dist = await host.storeFor("dist.example");
+  await dist.commit({ person: "dist.example" }, (d) => {
+    d.records.set("A-1", { id: "A-1", kind: "person", level: "person", owner: "dist.example", values: {} });
+    d.edges.set("E-A", { edge: "E-A", who: "A-1", relation: "helper", mode: "admin", on: "D-1", grants: [], by: "owner" });
+    d.edges.set("E-P", { edge: "E-P", who: "person:shop.example:S-1", relation: "helper", mode: "control", on: "D-1", grants: ["helper"], by: "E-A" });
+  }, "2026-10-16T12:00:00Z");
+  const after1 = await call("GET", "/o/dist.example/records/D-1", "tok-S1");
+  assert.equal(after1.status, 200, JSON.stringify(after1.body));
+  assert.deepEqual(Object.keys(after1.body.values as JsonObject).sort(), ["cost", "title"], "the helper sees exactly what read grants: title and cost, not format (14.6)");
+  // The person runs a form the preset opens, unsigned, from another owner's identity.
+  const ran = await call("POST", "/o/dist.example/run/fix", "tok-S1", { record: "D-1", answers: { title: "Gremlins 2" } });
+  assert.equal(ran.status, 200, JSON.stringify(ran.body));
+  assert.equal(ran.body.landed, "value", JSON.stringify(ran.body));
+  assert.equal(ran.body.caller, "person:shop.example:S-1");
+  // A grant beyond the grantor's reach is refused as for any caller (14.12 item 9).
+  await assert.rejects(dist.commit({ person: "dist.example" }, (d) => {
+    d.edges.set("E-Q", { edge: "E-Q", who: "person:shop.example:S-1", relation: "helper", mode: "admin", on: "D-1", grants: [], by: "E-P" });
+  }, "2026-10-16T12:01:00Z"), /E-P holds control, so it can't grant admin/);
+  // The log line names the vouched caller.
+  const lines: JsonObject[] = [];
+  host.o.log = (l) => lines.push(l);
+  await call("GET", "/o/dist.example/records/D-1", "tok-S1");
+  host.o.log = undefined;
+  assert.equal(lines[0]?.caller, "person:shop.example:S-1");
+});
+
+test("the platform index: whoami across owners, and the rows a caller stands in a relation to", { skip: !url }, async () => {
+  const me = await call("GET", "/whoami", "tok-S1");
+  assert.equal(me.status, 200, JSON.stringify(me.body));
+  assert.equal(me.body.home, "shop.example");
+  const owners = me.body.owners as JsonObject;
+  assert.deepEqual(Object.keys(owners).sort(), ["dist.example", "shop.example"]);
+  assert.equal((owners["shop.example"] as JsonObject).mode, "control", "the staff edge at home, by bare id");
+  assert.deepEqual((owners["dist.example"] as JsonObject).relations, ["helper"]);
+  assert.deepEqual((owners["dist.example"] as JsonObject).grants, ["helper"]);
+  assert.equal((await call("GET", "/whoami")).status, 401);
+  // Rows: the distributor's index rows for D-1 reach the helper through their edge on it.
+  const rows = await call("GET", "/whoami/rows?relation=helper", "tok-S1");
+  assert.equal(rows.status, 200, JSON.stringify(rows.body));
+  assert.deepEqual((rows.body.rows as JsonObject[]).map((r) => [r.owner, r.view, r.record]), [["dist.example", "discs", "D-1"]]);
+  assert.deepEqual((await call("GET", "/whoami/rows?relation=follower", "tok-S1")).body.rows, []);
+});
+
+test("acting for a person (14.9): a system runs as the person it is allowed to act for, capped to their items, gated until lifted, every entry naming both; without the permission, or beyond it, nothing lands", { skip: !url }, async () => {
+  const sysKey = await host.issueKey("shop.example", "S-9", "agent");
+  const ownerKey = await host.issueKey("shop.example", "shop.example", "owner5");
+  // The system alone reaches nothing at the distributor; a `for` it hasn't been allowed is refused.
+  assert.equal((await call("POST", "/o/dist.example/run/fix", sysKey, { record: "D-1", answers: { title: "x" } })).status, 401, "a system doesn't cross owners by itself");
+  const notAllowed = await call("POST", "/o/dist.example/run/fix", sysKey, { record: "D-1", for: "shop.example:S-1", answers: { title: "x" } });
+  assert.equal(notAllowed.status, 403, JSON.stringify(notAllowed.body));
+  // The person allows it, narrowed to `read` only: a run needs `fix`, so it stops at permission.
+  const staffKey = await host.issueKey("shop.example", "S-1", "staff3");
+  assert.equal((await call("POST", "/o/shop.example:S-1/acting-for", ownerKey, { system: "shop.example:S-9" })).status, 403, "only the person allows");
+  const narrow = await call("POST", "/o/shop.example:S-1/acting-for", staffKey, { system: "shop.example:S-9", items: ["read"], gated: false });
+  assert.equal(narrow.status, 200, JSON.stringify(narrow.body));
+  const stopped = await call("POST", "/o/dist.example/run/fix", sysKey, { record: "D-1", for: "shop.example:S-1", answers: { title: "x" } });
+  assert.equal(stopped.status, 200, JSON.stringify(stopped.body));
+  assert.equal(stopped.body.stopped, "permission", JSON.stringify(stopped.body));
+  // Widened to the whole of what the person holds, still gated: the write lands as a suggestion for the person.
+  await call("DELETE", `/o/shop.example:S-1/acting-for/${narrow.body.id}`, staffKey);
+  const gated = await call("POST", "/o/shop.example:S-1/acting-for", staffKey, { system: "shop.example:S-9" });
+  assert.equal(gated.status, 200);
+  const suggested = await call("POST", "/o/dist.example/run/fix", sysKey, { record: "D-1", for: "shop.example:S-1", answers: { notes: "Mogwai, do not feed after midnight" } });
+  assert.equal(suggested.status, 200, JSON.stringify(suggested.body));
+  assert.equal(suggested.body.landed, "suggestion", JSON.stringify(suggested.body));
+  assert.equal(suggested.body.gated, "acting-for");
+  assert.equal(suggested.body.reviewer, "person:shop.example:S-1");
+  const distKey = await host.issueKey("dist.example", "dist.example", "owner3");
+  assert.equal(((await call("GET", "/o/dist.example/records/D-1", distKey)).body.values as JsonObject).notes, undefined, "a suggestion isn't the value");
+  // The gate lifted: the write lands, and the entry names the system as caller and the person as for.
+  await call("DELETE", `/o/shop.example:S-1/acting-for/${gated.body.id}`, staffKey);
+  const lifted = await call("POST", "/o/shop.example:S-1/acting-for", staffKey, { system: "shop.example:S-9", gated: false, until: "2026-12-31T00:00:00Z" });
+  const landed = await call("POST", "/o/dist.example/run/fix", sysKey, { record: "D-1", for: "shop.example:S-1", answers: { notes: "Mogwai, do not feed after midnight" } });
+  assert.equal(landed.status, 200, JSON.stringify(landed.body));
+  assert.equal(landed.body.landed, "value", JSON.stringify(landed.body));
+  const dist = await host.storeFor("dist.example");
+  // The entry sits in the distributor's log (the run's own id is the border's); found by what it says.
+  const entry = (await dist.entries()).filter((e) => isObj(e.by) && e.by.for === "person:shop.example:S-1" && (e.writes as JsonObject[]).some((w) => w.record === "D-1" && w.address === "notes" && w.as === undefined)).at(-1);
+  assert.ok(entry, "the entry is in the distributor's log");
+  assert.equal((entry?.by as JsonObject).caller, "shop.example:S-9");
+  assert.equal((entry?.by as JsonObject).for, "person:shop.example:S-1");
+  const rec = await call("GET", "/o/dist.example/records/D-1", distKey);
+  assert.equal((rec.body.values as JsonObject).notes, "Mogwai, do not feed after midnight");
+  // Revoked: the next run is refused; the row keeps when.
+  assert.deepEqual((await call("DELETE", `/o/shop.example:S-1/acting-for/${lifted.body.id}`, staffKey)).body, { revoked: true });
+  assert.equal((await call("POST", "/o/dist.example/run/fix", sysKey, { record: "D-1", for: "shop.example:S-1", answers: { title: "x" } })).status, 403);
+  const listed = await call("GET", "/o/shop.example:S-1/acting-for", staffKey);
+  assert.equal((listed.body.allowed as JsonObject[]).length, 3);
+  assert.ok((listed.body.allowed as JsonObject[]).every((a) => typeof a.revoked === "string"));
+  // At home the person is their bare id: the same system acting for them on the shop's own form.
+  const home = await call("POST", "/o/shop.example:S-1/acting-for", staffKey, { system: "shop.example:S-9", gated: false });
+  const atHome = await call("POST", "/o/shop.example/run/bench", sysKey, { record: "U-1", for: "shop.example:S-1", answers: { condition: "NM" } });
+  assert.equal(atHome.status, 200, JSON.stringify(atHome.body));
+  assert.equal(atHome.body.caller, "S-1");
+  assert.equal(atHome.body.landed, "value", JSON.stringify(atHome.body));
+  await call("DELETE", `/o/shop.example:S-1/acting-for/${home.body.id}`, staffKey);
+});
+
+test("a hosted person's chain takes a package of its own (14.1): installed there, its definitions are theirs", { skip: !url }, async () => {
+  const key = (globalThis as { pubKey?: { d: string; x: string } }).pubKey as { d: string; x: string };
+  const PERSON = `package: mine /2026-10-16
+  owner: pub.example
+  crubal: 2
+kind: cart
+  levels: cart
+  base: Cart
+cartState{open|ordered}
+class: Cart
+  for: cart
+  facets:
+    cartState
+ownership:
+  person: cart
+`;
+  const r = await host.install("shop.example:S-1", publish(PERSON, { date: "2026-10-16", key }).bundle);
+  assert.equal(r.installed, "pub.example/mine");
+  const mine = await host.storeFor("shop.example:S-1");
+  const p = await mine.definitions();
+  assert.equal(p.dict.levels.get("cart"), "cart");
+  assert.deepEqual(p.perms.ownership.get("person"), ["cart"]);
+  const shop = await host.storeFor("shop.example");
+  assert.equal((await shop.definitions()).dict.levels.get("cart"), undefined, "the shop's definitions are untouched");
+  const health = await call("GET", "/health");
+  assert.ok(Number((health.body.chains as JsonObject)["shop.example:S-1"]) >= 2, "the install is an entry in the person's chain");
+});

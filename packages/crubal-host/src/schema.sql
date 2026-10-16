@@ -36,6 +36,9 @@ create table if not exists index_rows (
   primary key (owner, view, version, audience, record)
 );
 create index if not exists index_rows_search on index_rows using gin (search);
+-- The platform index (14.8, 14.10): rows reached by an edge on an ancestor, across owners.
+create index if not exists index_rows_ancestors on index_rows using gin (ancestors);
+create index if not exists index_rows_record on index_rows (record);
 
 create table if not exists index_cursors (
   owner text not null,
@@ -84,6 +87,21 @@ create table if not exists host_keys (
   until text not null,
   primary key (owner, public)
 );
+
+-- A system acting for a hosted person (14.9): what the person allowed, narrowed to items, until when, gated
+-- until they lift it. Revoking keeps the row with when. Identity-adjacent, so the host's, like API keys.
+create table if not exists host_acting_for (
+  id bigint generated always as identity primary key,
+  system_owner text not null,
+  system text not null,
+  person text not null,
+  items text[] not null default '{}',
+  until text,
+  gated boolean not null default true,
+  created text not null,
+  revoked text
+);
+create index if not exists host_acting_for_person on host_acting_for (person);
 
 -- When each view with a delay (12.6 fresh: 5m) was last published by the loop.
 create table if not exists host_publish (

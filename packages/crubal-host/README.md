@@ -122,3 +122,17 @@ erases as the owner, and drives the loops with the host key.
 
 The `system` record a connection writes into the owner's data (it needs the party package's kinds, which
 wait with the vocabularies), and a deployment: the host runs and is tested locally only.
+
+## The platform surface (14.8, 14.9; 2026-10-16)
+
+- **Hosted callers.** A person proven by an identity token is `person:<domain:id>` at every other owner on
+  the host, with no signature; owners and their admins grant them edges within the grantor chain. A system
+  (API key) never crosses owners by itself; another host's callers keep the signed path.
+- **Acting for a person.** `POST /o/<domain:id>/acting-for {system: "<owner>:<id>", items?, until?,
+  gated?}` by the person; `GET` lists, `DELETE /…/<id>` revokes. A run or receive carrying `for:
+  "<domain:id>"` from that system runs as the person, capped to the items, landing as suggestions while
+  gated; the entry names `caller` and `for`.
+- **The platform index.** `GET /whoami`: the caller's live edges across every owner, grouped by owner with
+  the mode, relations and grants they add up to. `GET /whoami/rows?relation=<name>[&view=…&limit=…]`: the
+  index rows they stand in that relation to, across owners. `bench/platform.ts` measures both over ten
+  owners and a million records.

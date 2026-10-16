@@ -236,3 +236,17 @@ person. The border then evaluates access as the person's, capped and narrowed as
 system and `for` as the person, and refuses the write when it exceeds the person's effective access, grants
 onward, or runs under an emergency edge (14.12 items 8 and 9). Callers hosted elsewhere keep the signed-request
 path of 7.8.
+
+**Built 2026-10-16 (Cashierfu brief 0, step 2).** `Host.callerFor(owner, who)` is the one place the rule
+lives: a caller proven by an identity token (`via: identity`) whose home owner this host holds is
+`person:<domain:id>` at every other owner, unsigned; one proven by an API key (`via: key`) is a system and
+never crosses owners on its own; a signature is the foreign path. The person's edges elsewhere name
+`person:<domain:id>`, which `foreign()` treats as the owner's own caller, so admins grant them within the
+chain (14.5). **Acting for a person** is kept by the host, like API keys: `host_acting_for` (system, person,
+items, until, gated), written by the person at `/o/<domain:id>/acting-for`; a run carrying `for` runs as the
+person through `PgBorder.acting`, which caps the person's items, marks the access gated (so writes land as
+suggestions for the person) and refuses an emergency edge or a new edge for anyone but the person; the entry's
+`by` carries `caller` (the system) and `for` (the person). **The platform index** is `GET /whoami` (the
+caller's live edges grouped by owner, over the store's `edges` table with an index on `who`) and `GET
+/whoami/rows?relation=…` (the index rows whose record or ancestor is one of those edges' `on`, across owners;
+the feed's primitive). `bench/platform.ts` measures the three over ten owners and a million records.
