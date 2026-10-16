@@ -194,6 +194,12 @@ only when there is a menu or a relation to check, and the records route reads on
 and the stale-row publish pay the working set's load-and-rerun loop per page; not a target, noted for the
 next round.
 
+After the fixes, same data: commit attaching one unit 3.5 ms (target 50); receive 6.6 ms; index page with
+two picks 3.1 ms and search 1.8 ms (target 100); one record by id through `store.get` is a row read. Still
+slow and first for the next round: the full publish of a 200-row view, 56.6 s, and the stale-row publish,
+752 ms, both in the projector's working-set loop (`settle` reruns the whole projection each time a record
+it needs loads).
+
 ## Calls made here
 
 - A hand-made list is a record with the core facet `crubal:items` (G).

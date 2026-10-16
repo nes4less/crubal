@@ -5,7 +5,7 @@
 import { applyEntry, diffWrites, differs, type Draft, type Entry, type State } from "../../crubal/src/log.ts";
 import type { View } from "../../crubal/src/views.ts";
 import { apply, pending, type Store as LifecycleStore } from "../../crubal/src/lifecycle.ts";
-import type { Json, JsonObject } from "../../crubal/src/model.ts";
+import type { Json, JsonObject, Record } from "../../crubal/src/model.ts";
 import { entryHash, verifyChain, writeHash, type Keys } from "../../crubal/src/store.ts";
 import { type Client, type Pool, transaction } from "./db.ts";
 import { isObj, loadState, persist, wipeState, recordOf } from "./state.ts";

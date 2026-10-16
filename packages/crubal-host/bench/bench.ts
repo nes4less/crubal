@@ -115,7 +115,8 @@ try {
   console.log(`  rows ${page.rows.length}, pages ${page.pages}, counts ${JSON.stringify(page.counts.format)}`);
   const found = await ms("index search", () => index.serve(store, "discs", { q: "Hard" }));
   console.log(`  rows ${found.rows.length}`);
-  await ms("record read through state (one product)", async () => (await store.state()).records.get("P-7"));
+  await ms("record read by id (one product)", () => store.get("P-7"));
+  await ms("record read through the whole state", async () => (await store.state()).records.get("P-7"));
 } finally {
   await drop();
   await pool.end();
