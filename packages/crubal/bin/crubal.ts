@@ -7,6 +7,7 @@
 //   crubal publish <dir> [--previous <package.json>] [--date YYYY-MM-DD] [--key <file>] [--out <dir>]
 //                                            cut a version: members by diff, recipes required, hash, signature
 
+import { parseJson } from "../src/model.ts";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { canonical, emptyDictionary, printText, publish, readDefinitions, readText, runCorpus } from "../src/index.ts";
@@ -67,7 +68,7 @@ if (cmd === "test" && target) {
   // Reference records (11.1): every other .crubal file in the directory.
   const records = readdirSync(dir).filter((f) => f.endsWith(".crubal") && f !== "package.crubal").flatMap((f) => readText(readFileSync(join(dir, f), "utf8"), dict).records as unknown as import("../src/model.ts").Json[]);
   const previousFile = flag("--previous")[0];
-  const previous = previousFile ? (JSON.parse(readFileSync(previousFile, "utf8")) as import("../src/model.ts").JsonObject) : undefined;
+  const previous = previousFile ? (parseJson(readFileSync(previousFile, "utf8")) as import("../src/model.ts").JsonObject) : undefined;
   const keyFile = flag("--key")[0];
   const keyJson = keyFile ? (JSON.parse(readFileSync(keyFile, "utf8")) as { public: string; private: string }) : undefined;
   const date = flag("--date")[0] ?? new Date().toISOString().slice(0, 10);
@@ -86,7 +87,7 @@ if (cmd === "test" && target) {
   } else console.log(JSON.stringify(bundle, null, 2));
   void existsSync;
 } else if (cmd === "print" && target) {
-  console.log(printText(JSON.parse(readFileSync(target, "utf8")) as Wrapper, dictionary(), rest.includes("--plain") ? "plain" : "full"));
+  console.log(printText(parseJson(readFileSync(target, "utf8")) as Wrapper, dictionary(), rest.includes("--plain") ? "plain" : "full"));
 } else {
   console.log("usage: crubal test <corpus> [--level reader] | crubal claim <corpus> [--level views] [--out CLAIM.md] | crubal read <file> --defs <file> | crubal print <file.json> --defs <file> | crubal publish <dir> [--previous <package.json>] [--date YYYY-MM-DD] [--key <file>] [--out <dir>]");
   process.exit(2);

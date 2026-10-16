@@ -5,7 +5,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { Access } from "../../crubal/src/access.ts";
 import { formOf } from "../../crubal/src/forms.ts";
-import type { Json, JsonObject } from "../../crubal/src/model.ts";
+import { type Json, type JsonObject, parseJson } from "../../crubal/src/model.ts";
 import type { Caller, Host } from "./host.ts";
 import { endEmergencyEdge, type EmergencyRequest, logEmergencyRead, makeEmergencyEdge } from "./emergency.ts";
 import { Index } from "./indexer.ts";
@@ -85,7 +85,7 @@ export function serve(host: Host): Server {
     if (parts[0] === "project" || parts[0] === "tick" || parts[0] === "retry" || parts[0] === "push" || parts[0] === "expire" || parts[0] === "drain") {
       if (method !== "POST") throw new HttpError(405, "POST");
       if (!hostKeyOk) throw new HttpError(403, "the host key");
-      const o = JSON.parse(bodyOf() || "{}") as JsonObject;
+      const o = parseJson(bodyOf() || "{}") as JsonObject;
       const owner = typeof o.owner === "string" ? o.owner : undefined;
       const now = typeof o.now === "string" ? o.now : undefined;
       if (parts[0] === "project") return json(res, 200, await host.project(owner, now));
@@ -135,7 +135,7 @@ export function serve(host: Host): Server {
         return json(res, 200, { url: host.credentials.authorizeUrl(owner, name, provider, scopes) });
       }
       if (method === "POST") {
-        const b = JSON.parse(bodyOf() || "{}") as { scheme?: string; material?: JsonObject; scopes?: string[]; expires?: string };
+        const b = parseJson(bodyOf() || "{}") as { scheme?: string; material?: JsonObject; scopes?: string[]; expires?: string };
         if (!b.scheme || !b.material) throw new HttpError(400, "scheme and material");
         return json(res, 200, (await host.credentials.connect(owner, name, b.scheme, b.material, b.scopes ?? [], b.expires)) as unknown as Json);
       }
@@ -148,7 +148,7 @@ export function serve(host: Host): Server {
     // Emergency access (14.13): made by the platform under its terms; ended by the owner unless legal.
     if (what === "emergency" && method === "POST" && !name) {
       if (!hostKeyOk) throw new HttpError(403, "the platform makes emergency edges");
-      const r = JSON.parse(bodyOf() || "{}") as EmergencyRequest;
+      const r = parseJson(bodyOf() || "{}") as EmergencyRequest;
       const made = await makeEmergencyEdge(store, r, host.o.emergency, at);
       await host.notice(owner, { emergency: r.edge, kind: r.kind, reference: r.reference, who: r.who, until: r.until });
       return json(res, 200, made as unknown as Json);
@@ -175,7 +175,7 @@ export function serve(host: Host): Server {
       return json(res, 200, page as unknown as Json);
     }
     if (what === "run" && name && method === "POST") {
-      const b = JSON.parse(bodyOf() || "{}") as JsonObject;
+      const b = parseJson(bodyOf() || "{}") as JsonObject;
       const border = await host.borderFor(owner, store);
       const c = border.contracts.get(name);
       if (!c) throw new HttpError(404, `no contract ${name}`);
@@ -232,7 +232,7 @@ export function serve(host: Host): Server {
         return json(res, 200, await border.streamRun(name, callerId, cursor, at));
       }
       if (rest[0] === "ack" && method === "POST") {
-        const b = JSON.parse(bodyOf() || "{}") as { cursor?: { [view: string]: number } };
+        const b = parseJson(bodyOf() || "{}") as { cursor?: { [view: string]: number } };
         return json(res, 200, await border.ack(name, b.cursor ?? {}));
       }
     }
@@ -267,7 +267,7 @@ export function serve(host: Host): Server {
     if (what === "inbox" && name && method === "POST") {
       if (!callerId || !/:owner$/.test(callerId)) throw new HttpError(401, "a signed request from the presenter");
       const presenter = callerId.replace(/:owner$/, "");
-      const b = JSON.parse(bodyOf() || "{}") as { entries?: { [view: string]: JsonObject[] } };
+      const b = parseJson(bodyOf() || "{}") as { entries?: { [view: string]: JsonObject[] } };
       const index = new Index(host.pool);
       const cursor: JsonObject = {};
       for (const [view, list] of Object.entries(b.entries ?? {})) {
@@ -291,7 +291,7 @@ export function serve(host: Host): Server {
     }
     if (what === "review" && method === "POST") {
       if (!callerId) throw new HttpError(401, "sign in");
-      const d = JSON.parse(bodyOf() || "{}") as JsonObject;
+      const d = parseJson(bodyOf() || "{}") as JsonObject;
       if (typeof d.key !== "string" || typeof d.decision !== "string") throw new HttpError(400, "a decision names its key and decision");
       if (d.key.startsWith("run:")) {
         const border = await host.borderFor(owner, store);
@@ -302,7 +302,7 @@ export function serve(host: Host): Server {
     }
     if (what === "install" && method === "POST") {
       if (!isOwner) throw new HttpError(403, "the owner installs");
-      const b = JSON.parse(bodyOf()) as JsonObject;
+      const b = parseJson(bodyOf()) as JsonObject;
       // A bundle in the body, or a package by name fetched from its publisher's well-known file.
       if (typeof b.package === "string" && !b.facets && !b.hash) return json(res, 200, { installed: await host.installFrom(owner, b.package, typeof b.version === "string" ? b.version : undefined) });
       return json(res, 200, await host.install(owner, isObj(b.bundle) ? b.bundle : b));

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { checkWrapper } from "../src/model.ts";
+import { addressNames, checkWrapper, parseJson } from "../src/model.ts";
 import { test } from "node:test";
 import { canonical, CrubalError, emptyDictionary, printText, readDefinitions, readText } from "../src/index.ts";
 import { needsQuotes, readList, readPiece } from "../src/lex.ts";
@@ -84,4 +84,39 @@ test("the JSON form refuses what the spec forbids (3, 3.2): null anywhere, an un
   assert.throws(() => checkWrapper({ ...ok, records: [{ ...ok.records[0], extra: 1 }] } as never), /unknown member extra/);
   assert.throws(() => checkWrapper({ ...ok, records: [{ ...ok.records[0], values: { title: null } }] } as never), /null/);
   assert.throws(() => checkWrapper({ ...ok, records: [{ id: "P-1", kind: "item", level: "product", values: {} }] } as never), /needs owner/);
+});
+
+test("JSON text naming a member twice is refused (3), wherever the object sits; a string that looks like one is not", () => {
+  assert.throws(() => parseJson('{"crubal": "2", "crubal": "2", "records": []}'), /member crubal twice in the object at \$:/);
+  assert.throws(() => parseJson('{"crubal": "2", "records": [{"id": "P-1", "values": {"title": "a", "title": "b"}}]}'), /member title twice in the object at \$\.records\[0\]\.values/);
+  assert.throws(() => parseJson('{"a": 1, "\\u0061": 2}'), /member a twice/); // the same name, escaped
+  assert.deepEqual(parseJson('{"a": "{\\"x\\": 1, \\"x\\": 2}", "b": ["x", "x"]}'), { a: '{"x": 1, "x": 2}', b: ["x", "x"] });
+  assert.deepEqual(parseJson('[{"a": 1}, {"a": 2}]'), [{ a: 1 }, { a: 2 }]); // the same name in two objects is fine
+  assert.throws(() => parseJson('{"a": '), SyntaxError); // malformed text is still JSON.parse's to refuse
+});
+
+test("a source address that names nothing in values or parts is refused (3.7)", () => {
+  const d = emptyDictionary();
+  readDefinitions(`kind: item\n  levels: product\ntitle$\ngenres{Comedy|Drama|...}*\nrating$*\n  region$\ncast*\n  person -> person\n  character$\ntracks*\n  title$\n  language$`, d);
+  const r = {
+    id: "P-1", kind: "item", level: "product", owner: "test.example",
+    values: {
+      title: "x",
+      genres: ["Comedy", "Drama"],
+      rating: [{ $value: "15", region: "UK" }],
+      cast: [{ person: { $link: "wd:Q229048" }, character: "Neo" }],
+      tracks: [{ $row: "t3", title: "Intro", language: "en" }],
+    },
+    parts: [{ $row: "disc1", wears: ["Disc"], values: { condition: "good" } }],
+  };
+  const ok = (address: string) => assert.equal(addressNames(r as never, address, d), true, address);
+  const no = (address: string) => assert.equal(addressNames(r as never, address, d), false, address);
+  for (const a of ["*", "title", "genres", 'genres["Drama"]', 'rating["15 [region: UK]"]', "cast[wd:Q229048]", "cast[wd:Q229048].character", "tracks[t3].language", "parts[disc1]", "parts[disc1].condition"]) ok(a);
+  for (const a of ["runtime", 'genres["Holiday"]', 'rating["15"]', "cast[wd:Q1]", "cast[wd:Q229048].role", "tracks[t9]", "parts", "parts[disc2]", "parts[disc1].title", "title[x]", "unit::condition", "", "genres[", 'genres["x"]y']) no(a);
+  // Without the dictionary a quoted selector is matched by the item's core value.
+  assert.equal(addressNames(r as never, 'rating["15 [region: UK]"]'), true);
+  assert.equal(addressNames(r as never, 'genres["Holiday"]'), false);
+  const w = { crubal: "2", records: [{ ...r, sources: { "*": { origin: "declared", via: "L-1" }, title: { origin: "observed", via: "L-2" } } }] };
+  checkWrapper(w as never, d);
+  assert.throws(() => checkWrapper({ ...w, records: [{ ...r, sources: { runtime: { origin: "observed", via: "L-2" } } }] } as never, d), /records\[0\]\.sources: runtime names nothing in values or parts/);
 });

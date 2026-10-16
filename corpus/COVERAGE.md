@@ -31,12 +31,12 @@ a new MUST or a new case updates this file.
 | 2.7 | `-`, `_`, `- -` never list items | reader-errors/e02-empty-list-item |
 | 2.7 | a derived row key is never written; a row key never repeats; parts carry row keys | reader-errors/e07-row-on-identity, e06-duplicate-row, reader/009-parts |
 | 2.8 | refusals name the line and say what is wrong | reader-errors/* (every error.txt) |
-| 3 | lossless both ways; no duplicate members, no non-finite numbers | reader/001–013 (JSON side), unit: reader.test (null refused); open: duplicate members, which JSON.parse folds before a reader sees them |
+| 3 | lossless both ways; no duplicate members, no non-finite numbers | reader/001–013 (JSON side), unit: reader.test (null refused; `parseJson` refuses a member named twice in one object, wherever it sits) |
 | 3.2 | a member not in the table is refused | unit: reader.test (`checkWrapper`: an unknown member, a missing required one) |
 | 3.3 | a number string matches the grammar; a qualifier's value never qualified or empty | reader/001-scalars, reader/006-qualifiers-sources |
 | 3.4 | no empty array; no empty item; no two equal items | reader/003-lists, reader/002-empties |
 | 3.5 | `$row` derived when there is an identity child, else present and unique | reader/005-rows, reader-errors/e06, e07 |
-| 3.7 | every stored value covered by a source; an address naming nothing refused | reader/006-qualifiers-sources (coverage); open: the refusal |
+| 3.7 | every stored value covered by a source; an address naming nothing refused | reader/006-qualifiers-sources (coverage); unit: reader.test (`checkWrapper` refuses a source address that names nothing: a missing key, a list item, a row, a part, or a step below one) |
 | 3.8 | a payload is never parsed and re-serialized for storage | store/015-raw-bytes |
 | 3.8 | a contradiction carries exactly one `cites`; a unit question cites the unit | dictionary/003-check-outcomes, store/027-unit-question |
 | 3.10 | the same canonical JSON from a text and from its print | reader/001–013 |
@@ -92,10 +92,8 @@ a new MUST or a new case updates this file.
 
 ## Open
 
-The rows marked "open" are MUSTs without a case because the engine doesn't enforce them yet: duplicate
-JSON members (3; `JSON.parse` folds them before a reader sees them, so refusing them needs a parser of
-our own), a source address naming nothing (3.7; in the text form every source rides on its value, so only
-the JSON form can name nothing), an intake written under a newer package version held until the receiver
-upgrades (10.1; needs the version an intake was written under on the wire), and the publish check that a
-change which stops projecting a key carries its instruction (10.7; instructions are issued at run time
-today, not published in a bundle). The first two are small; the last two are design before code.
+The rows marked "open" are MUSTs without a case because the engine doesn't enforce them yet: an intake
+written under a newer package version held until the receiver upgrades (10.1; needs the version an intake
+was written under on the wire), and the publish check that a change which stops projecting a key carries
+its instruction (10.7; instructions are issued at run time today, not published in a bundle). Both are
+design before code.

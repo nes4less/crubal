@@ -28,7 +28,7 @@ import { checkPackage, checkRecord, facetJson, foldRecord, type Outcome, resolve
 import type { Facet } from "./defs.ts";
 import type { Json, JsonObject } from "./model.ts";
 import { serialize } from "./canonical.ts";
-import { checkWrapper, type Wrapper } from "./model.ts";
+import { checkWrapper, parseJson, type Wrapper } from "./model.ts";
 import { printText } from "./print-text.ts";
 import { readText } from "./read-text.ts";
 import { CrubalError } from "./tree.ts";
@@ -100,7 +100,7 @@ function runDictionaryCase(folder: string, caseDir: string, name: string, shared
       }
     }
     if (existsSync(longFile)) {
-      const expected = serialize(JSON.parse(readFileSync(join(caseDir, "expected.json"), "utf8")) as Json);
+      const expected = serialize(parseJson(readFileSync(join(caseDir, "expected.json"), "utf8")) as Json);
       for (const [label, text] of [["shorthand", input], ["long form", readFileSync(longFile, "utf8")]] as const) {
         const d = readDefinitions(text);
         checkPackage(d);
@@ -115,7 +115,7 @@ function runDictionaryCase(folder: string, caseDir: string, name: string, shared
     checkPackage(dict);
     const resolveLine = defs.match(/^resolve: (\S+)/m);
     if (resolveLine) {
-      const expected = JSON.parse(readFileSync(join(caseDir, "expected.json"), "utf8")) as { class: string; resolved: Json };
+      const expected = parseJson(readFileSync(join(caseDir, "expected.json"), "utf8")) as { class: string; resolved: Json };
       const got = serialize(resolvedJson(resolve(dict, [resolveLine[1] as string])) as Json);
       return got === serialize(expected.resolved) ? { folder, name, pass: true } : { folder, name, pass: false, detail: `got ${got}` };
     }
@@ -130,8 +130,8 @@ function runDictionaryCase(folder: string, caseDir: string, name: string, shared
       const problem = compareOutcomes(actual, JSON.parse(readFileSync(outcomesFile, "utf8")) as Outcome[]);
       return problem ? { folder, name, pass: false, detail: problem } : { folder, name, pass: true };
     }
-    const expected = JSON.parse(readFileSync(join(caseDir, "expected.json"), "utf8")) as Wrapper;
-    checkWrapper(expected);
+    const expected = parseJson(readFileSync(join(caseDir, "expected.json"), "utf8")) as Wrapper;
+    checkWrapper(expected, dict);
     const want = canonical(expected, dict);
     const got = canonical(w, dict);
     if (got !== want) return { folder, name, pass: false, detail: `read and fold: ${firstDiff(got, want)}` };
@@ -166,8 +166,8 @@ function runCase(folder: string, dir: string, name: string, dict: Dictionary): C
     }
   }
   try {
-    const expected = JSON.parse(readFileSync(join(caseDir, "expected.json"), "utf8")) as Wrapper;
-    checkWrapper(expected);
+    const expected = parseJson(readFileSync(join(caseDir, "expected.json"), "utf8")) as Wrapper;
+    checkWrapper(expected, dict);
     const want = canonical(expected, dict);
     const got = readText(input, dict);
     const gotC = canonical(got, dict);
