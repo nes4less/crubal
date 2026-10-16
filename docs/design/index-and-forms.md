@@ -1,6 +1,7 @@
 # The reference index and the form contract
 
-**Status:** design, 2026-10-15; ruled; the form as data is built (`formOf`, corpus `forms/`); the index is next. Two pieces of the host (host.md) that face people: the index that
+**Status:** design, 2026-10-15; ruled; built: the form as data (`formOf`, corpus `forms/`) and the reference
+index in `packages/crubal-host` (stream entries now carry `sort` and `pin`, spec 12.7). Two pieces of the host (host.md) that face people: the index that
 serves a view's pages, counts and search from the projection stream (spec 12.6.1), and the shape a form
 takes when a host renders a contract of kind `form` (7.7). Neither decides anything about visibility: the
 store decided when it projected; the index matches edges and roles; a form's fields are the contract's

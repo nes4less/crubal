@@ -26,10 +26,22 @@ its own tables.
   commit); `tick(now)` runs every scheduled contract's due ticks. Both are behind `POST /project` and
   `POST /tick` for a scheduler, guarded by the host key.
 
+## The reference index
+
+`GET /o/<owner>/v/<view>?page=&<filter>=<bucket>,<bucket>&q=` serves a view's page from the index
+(`src/indexer.ts`, docs/design/index-and-forms.md): the index pulls the view's projection stream from the
+store into its own `index_rows`, idempotently by (view, audience, seq), truncating on a `reset`, and
+serves pages in the view's order from the `sort` and `pin` the store put on each row, counts per bucket
+over the rows the *other* picks leave, full-text search over the row's text slots, partition by the caller's
+edges, role-marked slots dropped for a caller without the role, and the `X-Robots-Tag` header
+(`noindex` past page one or off a single `index` bucket). It reads nothing but the stream and can be
+dropped and rebuilt from it.
+
 ## The HTTP surface
 
 ```
 GET  /.well-known/crubal.json
+GET  /o/<owner>/v/<view>?page=&<filter>=&q=   a view's page, counts and indexability, from the index
 POST /o/<owner>/run/<contract>           { record, answers? }   a form run lands the answers; a send acts
 POST /o/<owner>/receive/<contract>?record=&run=   an answer (or an arrival with ?level=&of=)
 GET  /o/<owner>/records/<id>[?full=1]    the values the caller may see
@@ -56,7 +68,6 @@ erases as the owner, and drives the loops with the host key.
 
 ## Not yet here
 
-The reference index (`GET /o/<owner>/v/<view>`, docs/design/index-and-forms.md), an OIDC verifier for a
-real identity provider, the OAuth connect flow and the `system` record a connection writes
+An OIDC verifier for a real identity provider, the OAuth connect flow and the `system` record a connection writes
 (docs/design/host.md, "Identity and credentials"), the retry loop for failed runs, terms as robots rules
 and headers, signed requests between owners, and the emergency-access mechanics.

@@ -185,6 +185,8 @@ create table if not exists projections (
   buckets jsonb,
   marks jsonb,
   ancestors text[] not null default '{}',
+  sort jsonb,
+  pin integer,
   seq bigint not null,
   primary key (owner, view, version, audience, record)
 );

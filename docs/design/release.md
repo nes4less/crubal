@@ -39,6 +39,7 @@ because the handoffs it names are unproven.
 ## Before the gate: the order of work
 
 Everything below is engine assembly; kinds, the standard vocabularies and the adopter package wait for it.
+Steps 1–6 landed 2026-10-15.
 
 1. JSON readers for definitions; the bundle builder, the change classifier and `crubal publish`; the
    well-known writer. (publishing.md)

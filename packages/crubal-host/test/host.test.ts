@@ -90,10 +90,15 @@ contract: label
 shape: card
   slots:
     !title -> heading
+filter: format
+  facet: format
 view: discs
   select:
     level: product
+  order: title
   shape: card
+  filters: format
+  index: format
 
 permissions: shop
   menu:
@@ -168,6 +173,25 @@ test("install through the host, then a form run, a send with an adapter and an a
   const erased = await call("POST", "/o/shop.example/erase/U-1", ownerKey);
   assert.equal(erased.status, 200);
   assert.deepEqual(((await call("GET", "/o/shop.example/records/U-1", ownerKey)).body.values as JsonObject), {});
+  // The reference index: the view's page from the stream, counts over the other picks, search, noindex past page 1.
+  await store.commit({ person: "shop.example" }, (d) => {
+    d.records.set("P-2", { id: "P-2", kind: "item", level: "product", owner: "shop.example", values: { title: "Home Alone", format: "Blu-ray" }, sources: { "*": { origin: "declared", via: "L-2" } } });
+  }, "2026-10-15T22:00:05Z");
+  const pageRes = await fetch(`${base}/o/shop.example/v/discs`);
+  assert.equal(pageRes.headers.get("x-robots-tag"), "all");
+  const page = (await pageRes.json()) as JsonObject;
+  assert.deepEqual((page.rows as JsonObject[]).map((r) => r.heading), ["Christmas Vacation", "Home Alone"]);
+  assert.deepEqual(page.counts, { format: { DVD: 1, "Blu-ray": 1 } });
+  const picked = await call("GET", "/o/shop.example/v/discs?format=Blu-ray");
+  assert.deepEqual((picked.body.rows as JsonObject[]).map((r) => r.heading), ["Home Alone"]);
+  assert.deepEqual(picked.body.counts, { format: { DVD: 1, "Blu-ray": 1 } }, "a filter's counts ignore its own pick");
+  assert.equal(picked.body.indexable, true, "one index filter, one bucket");
+  const searched = await call("GET", "/o/shop.example/v/discs?q=alone");
+  assert.deepEqual((searched.body.rows as JsonObject[]).map((r) => r.heading), ["Home Alone"]);
+  assert.equal(searched.body.indexable, false);
+  const p2 = await fetch(`${base}/o/shop.example/v/discs?page=2`);
+  assert.equal(p2.headers.get("x-robots-tag"), "noindex");
+
   // The loops, with the host key.
   assert.equal((await call("POST", "/project", undefined, {}, { "x-host-key": "hk" })).status, 200);
   assert.equal((await call("POST", "/tick", undefined, {}, { "x-host-key": "hk" })).status, 200);

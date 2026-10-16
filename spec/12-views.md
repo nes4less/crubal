@@ -327,7 +327,9 @@ A projection entry, as the stream carries it:
 }
 ```
 
-A record leaving the view is `{"projection", "audience", "seq", "record", "removed": true}`. In a view above
+A record leaving the view is `{"projection", "audience", "seq", "record", "removed": true}`. An entry with a
+row MAY carry `sort`, the values of the view's `order` keys as text in order, and `pin`, the record's
+position among the pinned, so an index orders rows without reading records. In a view above
 `member`, `marks` maps a slot to the role it needs: `"marks": { "cost": "buyer" }`. `projection` names the
 view with its version when it has one (`"dvds /2026-11-01"`), and the first entry of a new version carries
 `"reset": true` (12.6.2).

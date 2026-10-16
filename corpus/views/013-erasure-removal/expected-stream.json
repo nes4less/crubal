@@ -13,7 +13,11 @@
         "genres": [
           "Drama"
         ]
-      }
+      },
+      "sort": [
+        "1988"
+      ],
+      "pin": 1
     },
     { "projection": "discs",
       "audience": "public",
@@ -36,7 +40,10 @@
           "Comedy",
           "Holiday"
         ]
-      }
+      },
+      "sort": [
+        "1990"
+      ]
     },
     { "projection": "discs",
       "audience": "public",
@@ -60,7 +67,10 @@
           "Comedy",
           "Holiday"
         ]
-      }
+      },
+      "sort": [
+        "1989"
+      ]
     }
   ],
   [

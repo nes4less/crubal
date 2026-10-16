@@ -7,6 +7,7 @@ import { Access } from "../../crubal/src/access.ts";
 import { formOf } from "../../crubal/src/forms.ts";
 import type { Json, JsonObject } from "../../crubal/src/model.ts";
 import type { Caller, Host } from "./host.ts";
+import { Index } from "./indexer.ts";
 
 type Req = IncomingMessage;
 type Res = ServerResponse;
@@ -60,6 +61,17 @@ export function serve(host: Host): Server {
     const at = host.now();
     const [, , what, name, ...rest] = parts;
 
+    // A view's page from the reference index (12.6.1): applied from the stream first, then served.
+    if (what === "v" && name && method === "GET") {
+      const index = new Index(host.pool);
+      await index.apply(store, name);
+      const picks: { [filter: string]: string[] } = {};
+      for (const [k, val] of url.searchParams) if (!["page", "q"].includes(k)) picks[k] = val.split(",").map((x) => x.trim()).filter(Boolean);
+      const page = await index.serve(store, name, { ...(q("page") ? { page: Number(q("page")) } : {}), ...(Object.keys(picks).length ? { picks } : {}), ...(q("q") ? { q: q("q") as string } : {}), ...(callerId ? { caller: callerId } : {}) });
+      res.setHeader("x-robots-tag", page.indexable ? "all" : "noindex");
+      res.setHeader("x-crubal-seq", String(page.seq));
+      return json(res, 200, page as unknown as Json);
+    }
     if (what === "run" && name && method === "POST") {
       const b = JSON.parse((await body(req)) || "{}") as JsonObject;
       const border = await host.borderFor(owner, store);
@@ -161,7 +173,7 @@ export function serve(host: Host): Server {
 
   return createServer((req, res) => {
     handle(req, res).catch((e: unknown) => {
-      const status = e instanceof HttpError ? e.status : 400;
+      const status = e instanceof HttpError ? e.status : typeof (e as { status?: number }).status === "number" ? ((e as { status: number }).status) : 400;
       json(res, status, { error: e instanceof Error ? e.message : String(e) });
     });
   });

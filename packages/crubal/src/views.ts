@@ -204,7 +204,7 @@ export type ProjectOptions = {
 };
 export type Projection = { rows: JsonObject[]; records: string[]; counts: { [filter: string]: { [bucket: string]: number } }; pages: number; indexable: boolean };
 /** One entry of a view's projection stream (12.6, 12.7). */
-export type StreamEntry = { projection: string; audience: string; seq: number; record: string; row?: JsonObject; buckets?: JsonObject; removed?: true; reset?: true };
+export type StreamEntry = { projection: string; audience: string; seq: number; record: string; row?: JsonObject; buckets?: JsonObject; sort?: string[]; pin?: number; removed?: true; reset?: true };
 
 /** A view's partition: what it declares, else `controlled` above member and `none` otherwise (12.2). */
 export function partitionOf(v: View): string {
@@ -321,6 +321,14 @@ export class Views {
   private conditionValues(r: Record): JsonObject {
     const status = r.status?.state ?? "active";
     return { id: r.id, status, "crubal:id": r.id, "crubal:status": status, ...this.effective(r) };
+  }
+
+  /** The values of the view's order keys as text, and the pin position: what an index orders rows by (12.7). */
+  sortOf(v: View, r: Record): { sort: string[]; pin?: number } {
+    const vals = this.effective(r);
+    const sort = v.order.map((o) => plainText((vals[o.key] ?? "") as Json));
+    const at = v.pin.indexOf(r.id);
+    return at >= 0 ? { sort, pin: at + 1 } : { sort };
   }
 
   /** The buckets a record falls into, per filter of the view (12.6): what an index counts from. */
@@ -483,9 +491,10 @@ export class Views {
     for (const [id, row] of now) {
       const rec = this.records.get(id);
       const buckets = rec ? this.bucketsFor(v, rec) : {};
-      const s = serialize({ row, buckets });
+      const order = rec ? this.sortOf(v, rec) : { sort: [] };
+      const s = serialize({ row, buckets, order: order as unknown as Json });
       next.rows.set(id, s);
-      if (last.rows.get(id) !== s) out.push({ projection, audience, seq: ++next.seq, record: id, row, ...(Object.keys(buckets).length ? { buckets } : {}) });
+      if (last.rows.get(id) !== s) out.push({ projection, audience, seq: ++next.seq, record: id, row, ...(Object.keys(buckets).length ? { buckets } : {}), ...(order.sort.length ? { sort: order.sort } : {}), ...(order.pin ? { pin: order.pin } : {}) });
     }
     for (const id of last.rows.keys()) if (!now.has(id)) out.push({ projection, audience, seq: ++next.seq, record: id, removed: true });
     if (reset && out[0]) out[0].reset = true;

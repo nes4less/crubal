@@ -13,7 +13,11 @@
         "genres": [
           "Drama"
         ]
-      }
+      },
+      "sort": [
+        "1988"
+      ],
+      "pin": 1
     },
     { "projection": "discs",
       "audience": "public",
@@ -36,7 +40,10 @@
           "Comedy",
           "Holiday"
         ]
-      }
+      },
+      "sort": [
+        "1990"
+      ]
     },
     { "projection": "discs",
       "audience": "public",
@@ -60,7 +67,10 @@
           "Comedy",
           "Holiday"
         ]
-      }
+      },
+      "sort": [
+        "1989"
+      ]
     }
   ],
   [
@@ -72,7 +82,10 @@
         "record": "P-5",
         "heading": "Elf",
         "line": "DVD · 1995"
-      }
+      },
+      "sort": [
+        "1995"
+      ]
     },
     { "projection": "discs",
       "audience": "public",
@@ -96,7 +109,10 @@
           "Comedy",
           "Holiday"
         ]
-      }
+      },
+      "sort": [
+        "1989"
+      ]
     }
   ]
 ]
