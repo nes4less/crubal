@@ -74,7 +74,7 @@ POST /o/<owner>/receive/<contract>?record=&run=   an answer (or an arrival with 
 GET  /o/<owner>/records/<id>[?full=1]    the values the caller may see
 GET  /o/<owner>/forms/<contract>?record= the form as data for this caller
 GET  /o/<owner>/stream/<contract>?cursor=view=seq   ·   POST …/ack { cursor }
-GET  /o/<owner>/review   ·   POST /o/<owner>/review/<item> { decision }
+GET  /o/<owner>/review (open items by key)   ·   POST /o/<owner>/review { key, decision, … }
 POST /o/<owner>/install { bundle }       owner only
 GET  /o/<owner>/export                   owner only: the log and the intake
 POST /o/<owner>/erase/<record>           owner only

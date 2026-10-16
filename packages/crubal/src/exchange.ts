@@ -215,15 +215,26 @@ export class Exchange {
       if (r.result === "held" && r.address && r.rule) {
         const v = values[r.address];
         if (v !== undefined) {
-          held[r.address] = { value: v, rule: r.rule };
+          const src = sources[r.address];
+          held[r.address] = { value: v, rule: r.rule, ...(src ? { source: src as unknown as JsonObject } : {}) };
           delete values[r.address];
           delete sources[r.address];
         }
         summary.held = [...((summary.held as Json[]) ?? []), r.address];
       }
+      if (r.result === "released" && r.address && held[r.address]) {
+        // The held value comes back as it was (6.7).
+        const h = held[r.address] as JsonObject;
+        values[r.address] = h.value as Json;
+        if (isObj(h.source)) sources[r.address] = h.source as unknown as Source;
+        delete held[r.address];
+        summary.released = [...((summary.released as Json[]) ?? []), r.address];
+      }
       if (r.result === "flagged" && r.rule) summary.flagged = [...((summary.flagged as Json[]) ?? []), r.rule];
     }
-    const record = { ...landed, values, sources, ...(Object.keys(held).length ? { held } : {}) } as unknown as Record;
+    // The held bag is rebuilt from what stayed held: a released key leaves it.
+    const { held: _was, ...base } = landed as unknown as { held?: unknown } & Record;
+    const record = { ...base, values, sources, ...(Object.keys(held).length ? { held } : {}) } as unknown as Record;
     this.engine.put(record);
     return { record, summary };
   }
@@ -402,6 +413,21 @@ export class Exchange {
     }
     this.commit({ contract: s.contract, run }, run, { contract: s.contract, record: s.record, key: s.key, state: "failed", reason, attempt: s.attempts });
     return { contract: s.contract, record: s.record, run, failed: true, attempt: s.attempts, ...(dead ? { dead: true, review: `run:${s.contract}` } : { retry: allowed - s.attempts }) };
+  }
+
+  /**
+   * A decision on a dead run (runs.md): `retry` releases its key and starts a new run from the record as it
+   * now is; `drop` closes the item. Either is a review write.
+   */
+  decideRun(run: string, decision: "retry" | "drop", callerId?: string): RunResult {
+    const w = this.runOf(run);
+    if (!w) throw new Error(`no run ${run}`);
+    const item = this.review.find((it) => it.run === run && it.key === `run:${w.contract}` && it.decision === undefined);
+    const key = [...this.sent].find((k) => k.startsWith(`${w.contract}|${w.record}|`));
+    if (decision === "retry" && key) this.sent.delete(key);
+    this.review.push({ ...(item ?? { key: `run:${w.contract}`, run, record: w.record }), decision, ...(decision === "retry" && key ? { releases: key } : {}), ...(callerId ? { by: callerId } : {}) });
+    if (decision === "drop") return { contract: w.contract, run, decision };
+    return { ...this.prepare(w.contract, w.record, callerId), decision, retried: run };
   }
 
   /** Run the contract that reverses a run (7.5 `undo`): an ordinary send naming its cause. */

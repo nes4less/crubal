@@ -1,0 +1,11 @@
+// A gated write landed as a suggestion (14.7): accepting writes the value with its original source, denying
+// keeps it in the history as denied; either is a review write, and the suggestion leaves the record.
+title$
+format{DVD|Blu-ray}
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: DVD

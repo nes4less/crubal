@@ -1,0 +1,3 @@
+{ "id": "P-1", "kind": "item", "level": "product", "owner": "test.example",
+  "values": { "title": "Christmas Vacation", "format": "Blu-ray", "hdrFormats": ["HDR10"] },
+  "sources": { "*": { "origin": "declared", "via": "L-1" }, "hdrFormats": { "origin": "observed", "via": "L-R1" } } }

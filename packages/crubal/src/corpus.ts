@@ -13,8 +13,10 @@ import { checkPackages } from "./packages.ts";
 import { checkViews, readViews, Views } from "./views.ts";
 import { formOf } from "./forms.ts";
 import { Journal, rebuild, redactable, redactableWrite, stateJson } from "./log.ts";
+import { decide as decideReview } from "./review.ts";
+import { resetUnits } from "./units.ts";
 import { arrive, decide, type Arrival, type ArrivalStore } from "./arrival.ts";
-import { apply as applyInstructions, archive, attach, detach, emptyStore, issue, merge, unarchive } from "./lifecycle.ts";
+import { adopt, apply as applyInstructions, archive, attach, clone, detach, emptyStore, giveBack, issue, merge, unarchive } from "./lifecycle.ts";
 import { Access, checkPermissions, readAccess } from "./access.ts";
 import { readPiece } from "./lex.ts";
 import { readUnder } from "./read-text.ts";
@@ -23,6 +25,7 @@ import type { Record as Rec } from "./model.ts";
 import { MemoryRecords } from "./records.ts";
 import { checkRules, Engine, readRules, type Result, type Rule } from "./rules.ts";
 import { checkPackage, checkRecord, facetJson, foldRecord, type Outcome, resolve, resolvedJson } from "./dictionary.ts";
+import type { Facet } from "./defs.ts";
 import type { Json, JsonObject } from "./model.ts";
 import { serialize } from "./canonical.ts";
 import { checkWrapper, type Wrapper } from "./model.ts";
@@ -250,6 +253,7 @@ function subset(actual: { [k: string]: Json }, expected: { [k: string]: Json }, 
 }
 
 function runStoreCase(folder: string, caseDir: string, name: string, shared: Dictionary): CaseResult {
+  resetUnits();
   const file = (f: string) => join(caseDir, f);
   const json = (f: string) => JSON.parse(readFileSync(file(f), "utf8")) as Json;
   const pass = { folder, name, pass: true };
@@ -364,6 +368,9 @@ function runStoreCase(folder: string, caseDir: string, name: string, shared: Dic
       // is refused by the journal itself (8.5).
       const journal = new Journal("test.example", records, "2026-10-15T00:00:00Z");
       const store = journal.draft as unknown as ReturnType<typeof emptyStore>;
+      const caseRules = readRules(defs);
+      const decisionDefs = { dict, contracts: new Map(readContracts(defs).map((c) => [c.name, c])) };
+      let adoptFlag: string | undefined;
       let n = 0;
       for (const op of readTree(readFileSync(file("ops.crubal"), "utf8"))) {
         if (op.kind !== "pair" || !op.key) continue;
@@ -372,6 +379,7 @@ function runStoreCase(folder: string, caseDir: string, name: string, shared: Dic
         const [a = "", b] = piece.text.split(" -> ").map((s) => s.trim());
         const key = op.key;
         let problem: string | null = null;
+        const extra: JsonObject[] = [];
         journal.commit({ person: "tester" }, () => {
           if (key === "archive") archive(store, a, detail("reason") ?? "archived", dict, detail("into"));
           else if (key === "unarchive") unarchive(store, a, dict);
@@ -380,6 +388,36 @@ function runStoreCase(folder: string, caseDir: string, name: string, shared: Dic
           else if (key === "detach") detach(store, a, dict);
           else if (key === "instruct") issue(store, piece.text, op.children);
           else if (key === "apply") applyInstructions(store, a, dict);
+          else if (key === "adopt" && b) adoptFlag = adopt(store, a, b, caseRules).flagged ?? adoptFlag;
+          else if (key === "give-back" && b) giveBack(store, a, b);
+          else if (key === "clone" && b) clone(store, a, b, detail("owner") ?? "test.example");
+          else if (key === "suggest") {
+            // Test scaffolding: a suggestion on a record, as a gated or lands: suggestion run would leave it.
+            const r = store.records.get(a) as Rec & { suggestions?: { [x: string]: JsonObject[] } };
+            const address = op.children.find((c) => c.key === "address")?.value ?? "";
+            const f = dict.facets.get(address);
+            const raw = op.children.find((c) => c.key === "value")?.value ?? "";
+            const value = f ? (readUnder(f, raw, dict) ?? raw) : raw;
+            const item: JsonObject = { value, origin: op.children.find((c) => c.key === "origin")?.value ?? "reported", via: op.children.find((c) => c.key === "via")?.value ?? "L-S" };
+            store.records.set(a, { ...r, suggestions: { ...(r.suggestions ?? {}), [address]: [...(r.suggestions?.[address] ?? []), item] } } as Rec);
+          } else if (key === "hold") {
+            // Test scaffolding: a value held by a rule, with its source kept (6.7).
+            const r = store.records.get(a) as Rec & { held?: { [x: string]: JsonObject } };
+            const address = op.children.find((c) => c.key === "address")?.value ?? "";
+            const v = r.values[address];
+            if (v === undefined) {
+              problem = `${a} has nothing at ${address} to hold`;
+              return;
+            }
+            const { [address]: _v, ...values } = r.values;
+            const src = (r.sources?.[address] ?? r.sources?.["*"]) as unknown as JsonObject | undefined;
+            store.records.set(a, { ...r, values, held: { ...(r.held ?? {}), [address]: { value: v, rule: op.children.find((c) => c.key === "rule")?.value ?? "rule", ...(src ? { source: src } : {}) } } } as Rec);
+          } else if (key === "decide") {
+            // A review decision (9.5): the item's key on the line, the decision's fields below it.
+            const d: JsonObject & { key: string; decision: string } = { key: piece.text, decision: "" };
+            for (const c of op.children) if (c.key) d[c.key] = c.key === "factor" || c.key === "offset" ? c.value : (dict.facets.get(c.key) ? (readUnder(dict.facets.get(c.key) as Facet, c.value, dict) ?? c.value) : c.value);
+            extra.push(...decideReview(d, store, decisionDefs));
+          }
           else if (key === "write") {
             const r = store.records.get(a);
             if (!r) {
@@ -393,8 +431,12 @@ function runStoreCase(folder: string, caseDir: string, name: string, shared: Dic
             }
             store.records.set(a, { ...r, values });
           } else problem = `unknown op ${key}`;
-        }, `2026-10-15T00:01:${String(++n).padStart(2, "0")}Z`);
+        }, `2026-10-15T00:01:${String(++n).padStart(2, "0")}Z`, extra);
         if (problem) return fail(problem);
+      }
+      if (existsSync(file("expected-flag.json"))) {
+        const want = json("expected-flag.json") as JsonObject;
+        if (want.adopt !== (adoptFlag ?? null)) return fail(`adopt flagged ${adoptFlag ?? "nothing"}, expected ${serialize(want.adopt as Json)}`);
       }
       if (existsSync(file("expected-entries.json"))) {
         const got = journal.entries.map(({ at: _at, owner: _o, ...e }) => e);
@@ -627,7 +669,7 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
 
     // The runs, in order.
     const results: Json[] = [];
-    let current: { run?: string; on?: string; caller?: string; offer?: string; arrive?: string; level?: string; answer?: string; stream?: string; ack?: string; cursor?: string; tick?: string; now?: string; prepare?: string; acted?: string; failed?: string; reason?: string; undo?: string; forRun?: string } = {};
+    let current: { run?: string; on?: string; caller?: string; offer?: string; arrive?: string; level?: string; answer?: string; stream?: string; ack?: string; cursor?: string; tick?: string; now?: string; prepare?: string; acted?: string; failed?: string; reason?: string; undo?: string; forRun?: string; decideRun?: string; decision?: string } = {};
     const parseCursor = (s: string | undefined) => (s ? Object.fromEntries(s.split(",").map((p) => p.trim().split("=")).map(([v, n]) => [v ?? "", Number(n)])) : undefined);
     const flush = () => {
       // The send split (docs/design/runs.md): prepare, then acted or failed; undo names its cause.
@@ -648,6 +690,11 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
       }
       if (current.undo) {
         results.push(ex.undo(current.undo, current.caller) as Json);
+        current = {};
+        return;
+      }
+      if (current.decideRun) {
+        results.push(ex.decideRun(current.decideRun, current.decision === "drop" ? "drop" : "retry", current.caller) as Json);
         current = {};
         return;
       }
@@ -699,7 +746,11 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
       } else if (n.key === "prepare" || n.key === "acted" || n.key === "failed" || n.key === "undo") {
         flush();
         current[n.key] = n.value;
-      } else if (n.key === "reason") current.reason = n.value;
+      } else if (n.key === "decide-run") {
+        flush();
+        current.decideRun = n.value;
+      } else if (n.key === "decision") current.decision = n.value;
+      else if (n.key === "reason") current.reason = n.value;
       else if (n.key === "for-run") current.forRun = n.value;
       else if (n.key === "cursor") current.cursor = n.value;
       else if (n.key === "tick") {

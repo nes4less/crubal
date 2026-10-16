@@ -35,7 +35,7 @@ export function emptyState(): State {
   return { records: new MemoryRecords(), edges: new Map(), bindings: new Map(), instructions: new Map(), observations: [], reviews: [], runs: new Map(), installed: [], reads: [], definitions: new Map() };
 }
 
-const MEMBERS = ["facet", "class", "rule", "contract", "kind", "view", "shape", "filter", "permissions", "ownership"];
+const MEMBERS = ["facet", "class", "rule", "contract", "kind", "view", "shape", "filter", "permissions", "ownership", "units"];
 
 /** The key of a `define` write's member: which kind of member, and its name. */
 function memberKey(def: JsonObject): string | null {
@@ -172,12 +172,21 @@ function applyValue(state: State, entry: Entry, w: JsonObject) {
     }
     return;
   }
+  if (as === "held" && removed) {
+    // A hold let go by a decision (10.4): nothing comes back.
+    const held = { ...(r.held ?? {}) };
+    delete held[address];
+    if (Object.keys(held).length) r.held = held;
+    else delete r.held;
+    return;
+  }
   if (as === "held") {
     // Held: the value leaves the current state and waits, with the rule that held it (6.7).
     const held = { ...(r.held ?? {}) };
     const value = w.value ?? r.values[address];
     if (value === undefined) throw new CrubalError(`entry ${entry.log}: nothing at ${address} to hold`);
-    held[address] = { value, ...(typeof w.rule === "string" ? { rule: w.rule } : {}), ...(typeof w.instruction === "string" ? { instruction: w.instruction } : {}) };
+    const kept = isObj(w.source) ? w.source : undefined;
+    held[address] = { value, ...(typeof w.rule === "string" ? { rule: w.rule } : {}), ...(typeof w.instruction === "string" ? { instruction: w.instruction } : {}), ...(kept ? { source: kept } : {}) };
     r.held = held;
     place(r, address, undefined, source);
     return;
@@ -189,8 +198,11 @@ function applyValue(state: State, entry: Entry, w: JsonObject) {
     const item: JsonObject = { value: value as Json, origin: source.origin, via: source.via, ...(source.owner ? { owner: source.owner } : {}) };
     bag[address] = removed ? (bag[address] ?? []).filter((x) => serialize(x.value as Json) !== serialize(value as Json)) : [...(bag[address] ?? []), item];
     if (!bag[address]?.length) delete bag[address];
-    if (as === "alternative") r.alternatives = bag;
-    else r.suggestions = bag;
+    if (as === "alternative") {
+      if (Object.keys(bag).length) r.alternatives = bag;
+      else delete r.alternatives;
+    } else if (Object.keys(bag).length) r.suggestions = bag;
+    else delete r.suggestions;
     return;
   }
   throw new CrubalError(`entry ${entry.log}: a value lands as current, alternative, suggestion or held, not ${as}`);
@@ -297,8 +309,11 @@ export function diffWrites(before: State, after: Draft): JsonObject[] {
     const newlyHeld = new Set(Object.keys(heldNow).filter((k) => !sameJson(heldWas[k], heldNow[k])));
     for (const k of newlyHeld) {
       const h = heldNow[k] as JsonObject;
-      writes.push({ record: id, address: k, as: "held", value: h.value as Json, ...(typeof h.rule === "string" ? { rule: h.rule } : {}), ...(typeof h.instruction === "string" ? { instruction: h.instruction } : {}) });
+      // The value's source rides with the hold, so a release gives it back as it was (6.7).
+      const src = isObj(h.source) ? h.source : undefined;
+      writes.push({ record: id, address: k, as: "held", value: h.value as Json, ...(typeof h.rule === "string" ? { rule: h.rule } : {}), ...(typeof h.instruction === "string" ? { instruction: h.instruction } : {}), ...(src ? { source: src } : {}) });
     }
+    for (const k of Object.keys(heldWas)) if (heldNow[k] === undefined && now.values[k] === undefined) writes.push({ record: id, address: k, as: "held", removed: true });
     for (const [k, v] of Object.entries(now.values)) {
       const s = sourceAt(now, k);
       if (was && sameJson(was.values[k], v) && sameJson((sourceAt(was, k) ?? "") as Json, (s ?? "") as Json)) continue;
@@ -307,6 +322,11 @@ export function diffWrites(before: State, after: Draft): JsonObject[] {
     for (const k of Object.keys(was?.values ?? {})) if (now.values[k] === undefined && !newlyHeld.has(k)) writes.push({ record: id, address: k, removed: true });
     for (const bag of ["alternatives", "suggestions"] as const) {
       const bw = was?.[bag] ?? {};
+      // Items gone from the bag: accepted or denied (14.7), kept in the history as removed.
+      for (const [addr, olds] of Object.entries(bw)) {
+        const keep = (now[bag]?.[addr] ?? []).map((x) => serialize(x));
+        for (const it of olds) if (!keep.includes(serialize(it))) writes.push({ record: id, address: addr, as: bag === "alternatives" ? "alternative" : "suggestion", value: it.value as Json, removed: true });
+      }
       for (const [addr, items] of Object.entries(now[bag] ?? {})) {
         const old = (bw[addr] ?? []).map((x) => serialize(x));
         for (const it of items) {

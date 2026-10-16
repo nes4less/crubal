@@ -42,7 +42,8 @@ the internals later behind the same API.
   one (`records.ts`, docs/design/store.md); a package as one JSON document, printed back to the text form so
   the text readers stay the one parser, hashed and signed (`bundle.ts`), and cut as a version with members by
   diff, the change classifier of 4.8 and 5.11 and the recipe requirement (`publish.ts`, `crubal publish`;
-  docs/design/publishing.md); a form as data from a contract's needs, the record's answers and states and the caller's edges
+  docs/design/publishing.md); review decisions as writes, each one entry with the define, value or release it causes (`review.ts`); a held value
+  coming back when its verdict changes again; adopt, give back and clone (`lifecycle.ts`); a form as data from a contract's needs, the record's answers and states and the caller's edges
   (`forms.ts`, docs/design/index-and-forms.md); and a border that
   consults access, journals every run, and grants a consumer's edge (`exchange.ts`).
 
@@ -50,7 +51,7 @@ A run applies the rules (7.4 step 6): a value a `must` rule won't have is parked
 the rule and never lands, a `suggest` fills and a derivation lands with `origin: derived` and the rule as
 its `via`, a changed verdict holds, and each is a logged effect.
 
-It passes every corpus folder (155 cases). The corpus and this package name no adopter and no third party:
+It passes every corpus folder (163 cases). The corpus and this package name no adopter and no third party:
 `test.example` owns the data, `market:` stands for any marketplace, `bench` for any in-house tool, and
 product, unit and the like are the test package's own kinds, never the core's.
 

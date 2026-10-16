@@ -1,0 +1,17 @@
+run: disc
+on: P-1
+answer: hdr.json
+
+write: P-1
+  format: DVD
+
+run: disc
+on: P-1
+answer: name.json
+
+write: P-1
+  format: Blu-ray
+
+run: disc
+on: P-1
+answer: name.json

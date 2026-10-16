@@ -55,11 +55,14 @@ export class PgBorder {
     const sent = new Set<string>();
     const known = new Map<string, { contract: string; record: string }>();
     const open = new Map<string, { contract: string; record: string; key: string; attempts: number }>();
+    // A retry decision releases a dead run's key (runs.md), so the same payload may go again.
+    const released = new Set((await this.store.pool.query("select json->>'releases' as k from review where owner = $1 and json->>'decision' = 'retry' and json ? 'releases'", [this.owner])).rows.map((x: Row) => String(x.k)));
     for (const r of rows as Row[]) {
       const j = r.json as JsonObject;
       const run = String(r.run);
       known.set(run, { contract: String(j.contract), record: String(j.record ?? "") });
       if (typeof j.key !== "string") continue;
+      if (released.has(j.key) && j.state === "failed") continue;
       if (j.state === "acted" || j.state === "closed" || j.state === "started" || j.state === "failed") sent.add(j.key);
       // A run still open: started, or failed with attempts left (docs/design/runs.md).
       const c = this.contracts.get(String(j.contract));
@@ -174,6 +177,17 @@ export class PgBorder {
     if (!row) throw new Error(`no payload kept for ${run}`);
     const payload = JSON.parse(Buffer.from(row.raw as Uint8Array).toString("utf8")) as JsonObject;
     return this.act(String(row.contract), run, String(row.record ?? ""), payload, callerId, at);
+  }
+
+  /** A decision on a dead run (runs.md): retry (a new run, the key released) or drop; then the act for a retry. */
+  async decideRun(run: string, decision: "retry" | "drop", callerId?: string, at?: string): Promise<RunResult> {
+    const p = await this.run((ex) => ex.decideRun(run, decision, callerId), at);
+    if (p.started !== true) return p;
+    const payload = (p.payload ?? {}) as JsonObject;
+    const bytes = Buffer.from(JSON.stringify(payload), "utf8");
+    const { createHash } = await import("node:crypto");
+    await this.store.pool.query("insert into outtake (owner, run, contract, record, key, raw, sha256) values ($1, $2, $3, $4, $5, $6, $7) on conflict (owner, run) do nothing", [this.owner, String(p.log), String(p.contract), String(p.record), String(p.key), bytes, createHash("sha256").update(bytes).digest("hex")]);
+    return { ...p, ...(await this.act(String(p.contract), String(p.log), String(p.record), payload, callerId, at)) };
   }
 
   /** Run the contract that reverses a run (7.5 `undo`), naming its cause. */

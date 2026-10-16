@@ -92,6 +92,15 @@ After the last attempt a review item `run:<contract>` opens. An answer the adapt
 run as a receive with `via` that run; `undo(run)` runs the reversing contract naming its cause; `erase`
 takes the record's outtake rows with its values.
 
+## Review decisions and replay
+
+`store.review()` lists the open items; `store.decide(decision, by)` makes one as one entry (the review
+write with the define, value or release it causes), then replays every kept intake the decision reaches (a
+facet's new value, a contract's unknown field, a unit's spelling), each its own entry `by: migration:
+replay`, superseding what that intake landed before and leaving the rest to the trust order. A `units`
+define feeds the owner's extension into the units table in force (one owner per process for now). A dead
+run's `retry` releases its key, so a fresh border sends the payload again.
+
 ## Not yet here
 
 The host: authentication, secrets, named adapters, signing, the loops and the HTTP surface

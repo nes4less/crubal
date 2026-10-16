@@ -202,26 +202,28 @@ export function serve(host: Host): Server {
         return json(res, 200, await border.ack(name, b.cursor ?? {}));
       }
     }
+    // The review queue (9.5): open items by key; a decision is one entry, then the affected intakes replay.
     if (what === "review" && method === "GET") {
       if (!callerId) throw new HttpError(401, "sign in");
-      const items = (await store.state()).reviews;
       const byKey: JsonObject = {};
-      items.forEach((it, i) => {
-        const key = String(it.key ?? it.address ?? "?");
+      for (const it of await store.review()) {
+        const key = String(it.key ?? "?");
         const list = (byKey[key] as JsonObject[] | undefined) ?? [];
-        list.push({ item: i, ...it });
+        list.push(it);
         byKey[key] = list;
-      });
+      }
       return json(res, 200, byKey);
     }
-    if (what === "review" && name && method === "POST") {
+    if (what === "review" && method === "POST") {
       if (!callerId) throw new HttpError(401, "sign in");
-      const items = (await store.state()).reviews;
-      const it = items[Number(name)];
-      if (!it) throw new HttpError(404, `no review item ${name}`);
-      const b = JSON.parse(bodyOf() || "{}") as JsonObject;
-      const entry = await store.commitFrom(() => ({ by: { person: callerId }, extra: [{ review: { ...it, decision: b.decision ?? b, by: callerId } }], out: null }), at);
-      return json(res, 200, { decided: Number(name), entry: entry.entry ? String(entry.entry.log) : "" });
+      const d = JSON.parse(bodyOf() || "{}") as JsonObject;
+      if (typeof d.key !== "string" || typeof d.decision !== "string") throw new HttpError(400, "a decision names its key and decision");
+      if (d.key.startsWith("run:")) {
+        const border = await host.borderFor(owner, store);
+        return json(res, 200, await border.decideRun(String(d.run), d.decision === "drop" ? "drop" : "retry", callerId, at));
+      }
+      const r = await store.decide(d as { key: string; decision: string } & JsonObject, { person: callerId }, at);
+      return json(res, 200, { decided: d.key, entry: r.entry ? String(r.entry.log) : "", replayed: r.replayed });
     }
     if (what === "install" && method === "POST") {
       if (!isOwner) throw new HttpError(403, "the owner installs");

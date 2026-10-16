@@ -1,0 +1,5 @@
+[
+  { "contract": "disc", "record": "P-1", "landed": "value" },
+  { "contract": "disc", "record": "P-1", "landed": "value", "rules": { "held": ["hdrFormats"] } },
+  { "contract": "disc", "record": "P-1", "landed": "value", "rules": { "released": ["hdrFormats"] } }
+]

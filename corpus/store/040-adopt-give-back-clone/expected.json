@@ -1,0 +1,14 @@
+{
+  "crubal": "2",
+  "records": [
+    { "id": "P-1", "kind": "item", "level": "product", "owner": "test.example",
+      "values": { "title": "Christmas Vacation", "format": "DVD", "listingTitle": "Christmas Vacation [DVD]" },
+      "sources": { "*": { "origin": "declared", "via": "L-1" }, "listingTitle": { "origin": "derived", "via": "listingTitle" } } },
+    { "id": "D-100", "kind": "item", "level": "product", "owner": "distributor.example",
+      "values": { "title": "Home Alone", "format": "Blu-ray" },
+      "sources": { "*": { "origin": "declared", "via": "L-9" } } },
+    { "id": "P-2", "kind": "item", "level": "product", "owner": "test.example",
+      "values": { "title": "Home Alone", "format": "Blu-ray", "crubal:clonedFrom": { "$link": "distributor.example:D-100" } },
+      "sources": { "title": { "origin": "declared", "via": "L-9", "owner": "distributor.example" }, "format": { "origin": "declared", "via": "L-9", "owner": "distributor.example" }, "crubal:clonedFrom": { "origin": "declared", "via": "clone" } } }
+  ]
+}

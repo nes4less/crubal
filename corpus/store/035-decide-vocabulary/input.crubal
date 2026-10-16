@@ -1,0 +1,9 @@
+// A vocabulary decision (9.5) is one entry: the review write and the define of the facet as it now stands.
+// `add value` grows the list; `add alias` joins a spelling to a value; `reject` writes only the decision.
+format{DVD|Blu-ray}
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation

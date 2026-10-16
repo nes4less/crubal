@@ -316,6 +316,10 @@ export class Engine {
     const rec: Record = before
       ? { ...before.rec, values: { ...before.rec.values, ...incoming.values }, parts: incoming.parts ?? before.rec.parts }
       : { ...incoming, values: { ...incoming.values } };
+    // A value a record holds (6.7) is evaluated as if present, so a verdict that no longer holds releases it.
+    const heldBag = ((incoming as unknown as { held?: { [k: string]: { value?: Json } } }).held ?? (before?.rec as unknown as { held?: { [k: string]: { value?: Json } } })?.held ?? {}) as { [k: string]: { value?: Json } };
+    for (const [k, h] of Object.entries(heldBag)) if (rec.values[k] === undefined && h.value !== undefined) rec.values[k] = h.value;
+    const heldBefore = new Set<string>([...(before?.held ?? []), ...Object.keys(heldBag)]);
     const touched = new Set(Object.keys(incoming.values));
     const produced = new Set(before?.produced ?? []);
     const held = new Set<string>();
@@ -386,6 +390,12 @@ export class Engine {
       rec.values[key] = v;
       produced.add(key);
       results.push({ record: rec.id, result: "derived", address: key, value: v, rule: r.name });
+    }
+
+    // 2b. A value held before whose verdict no longer holds comes back (6.7).
+    for (const k of heldBefore) {
+      if (held.has(k) || rec.values[k] === undefined) continue;
+      results.push({ record: rec.id, result: "released", address: k, value: rec.values[k] as Json });
     }
 
     // 3. Results: incomplete, flagged, complete, completeness.

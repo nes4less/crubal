@@ -1,0 +1,17 @@
+// A map decision (9.5) changes the contract, never the objects: `map` adds a reads line for a field that was
+// unknown, `map value` adds a value map, `ignore` lists the field. Each is a define of the contract.
+title$
+studio$
+format{DVD|Blu-ray}
+contract: catalog
+  kind: receive
+  origin: reported
+  reads:
+    Title -> title
+    Format -> format
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation

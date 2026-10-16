@@ -1,0 +1,13 @@
+// A held value (6.7, 10.4) is resolved by a person: `value` writes it current with the source it had,
+// `drop` lets it go. The held bag empties either way.
+title$
+runtime#min 1..600
+notes$
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  runtime: 97min [origin: observed, via: L-2]
+  notes: scratched

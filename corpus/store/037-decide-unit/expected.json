@@ -1,0 +1,6 @@
+{
+  "crubal": "2",
+  "records": [
+    { "id": "P-1", "kind": "item", "level": "product", "owner": "test.example", "values": { "title": "Christmas Vacation" }, "sources": { "*": { "origin": "declared", "via": "L-1" } } }
+  ]
+}

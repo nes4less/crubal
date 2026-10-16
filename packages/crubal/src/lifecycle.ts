@@ -10,7 +10,7 @@ import type { Json, JsonObject, Record, Source } from "./model.ts";
 import { MemoryRecords, type RecordSet } from "./records.ts";
 import { readUnder } from "./read-text.ts";
 import { land } from "./store.ts";
-import { type Node, readTree } from "./tree.ts";
+import { CrubalError, type Node, readTree } from "./tree.ts";
 
 const isObj = (v: Json | undefined): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);
 
@@ -157,6 +157,49 @@ export function detach(store: Store, lowerId: string, dict: Dictionary): void {
 
 function childrenOf(store: Store, id: string, along: "of" | "within"): Record[] {
   return store.records.childrenOf(id, along);
+}
+
+/**
+ * Adopt a value (8.2): it stops following its rule or presenter; the source gains `adopted`. A `must`
+ * production refuses; a `should` one is flagged (the caller decides what to do with the flag).
+ */
+export function adopt(store: Store, id: string, address: string, rules: { produces?: { key: string }; strength: string; name: string }[] = []): { flagged?: string } {
+  const r = store.records.get(id);
+  if (!r) throw new CrubalError(`no record ${id}`);
+  if (r.values[address] === undefined) throw new CrubalError(`${id} has no value at ${address} to adopt`);
+  const rule = rules.find((x) => x.produces?.key === address);
+  if (rule?.strength === "must") throw new CrubalError(`${address} is produced by ${rule.name}, a must rule: it can't be adopted`);
+  const was = (r.sources?.[address] ?? r.sources?.["*"] ?? { origin: "reported", via: "" }) as Source;
+  store.records.set(id, { ...r, sources: { ...(r.sources ?? {}), [address]: { ...was, adopted: true } } });
+  return rule?.strength === "should" ? { flagged: rule.name } : {};
+}
+
+/** Give an adopted value back (8.2): the mark goes, and the next rule run or update replaces it. */
+export function giveBack(store: Store, id: string, address: string): void {
+  const r = store.records.get(id);
+  if (!r) throw new CrubalError(`no record ${id}`);
+  const s = r.sources?.[address];
+  if (!s?.adopted) throw new CrubalError(`${id} hasn't adopted ${address}`);
+  const { adopted: _a, ...rest } = s;
+  store.records.set(id, { ...r, sources: { ...(r.sources ?? {}), [address]: rest as Source } });
+}
+
+/** Adopt another owner's whole record (8.2): a new record of ours, every value with its source, linked by crubal:clonedFrom. */
+export function clone(store: Store, fromId: string, newId: string, owner: string): Record {
+  const r = store.records.get(fromId);
+  if (!r) throw new CrubalError(`no record ${fromId}`);
+  if (store.records.has(newId)) throw new CrubalError(`${newId} exists`);
+  const sources: { [a: string]: Source } = {};
+  for (const k of Object.keys(r.values)) {
+    const s = (r.sources?.[k] ?? r.sources?.["*"] ?? { origin: "reported", via: "" }) as Source;
+    sources[k] = { ...s, ...(s.owner || r.owner === owner ? {} : { owner: r.owner }) };
+  }
+  const link = `${r.owner === owner ? "" : `${r.owner}:`}${fromId}`;
+  const next: Record = { id: newId, kind: r.kind, level: r.level, owner, values: { ...r.values, "crubal:clonedFrom": { $link: link } }, sources: { ...sources, "crubal:clonedFrom": { origin: "declared", via: "clone" } } };
+  if (r.wears) next.wears = [...r.wears];
+  if (r.parts) next.parts = structuredClone(r.parts);
+  store.records.set(newId, next);
+  return next;
 }
 
 /** Archive (1.12): snapshot folded values, set the status, cascade as the package says. */

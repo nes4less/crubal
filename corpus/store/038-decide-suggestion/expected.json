@@ -1,0 +1,8 @@
+{
+  "crubal": "2",
+  "records": [
+    { "id": "P-1", "kind": "item", "level": "product", "owner": "test.example",
+      "values": { "title": "Christmas Vacation (Special Edition)", "format": "DVD" },
+      "sources": { "*": { "origin": "declared", "via": "L-1" }, "title": { "origin": "declared", "via": "L-7" } } }
+  ]
+}

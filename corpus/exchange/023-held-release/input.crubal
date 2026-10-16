@@ -1,0 +1,22 @@
+// A held value comes back when the verdict changes again (6.7). hdrFormats lands while the format is
+// Blu-ray; when the format becomes DVD the gate's verdict changes and hdrFormats is held, with its source;
+// when the format is Blu-ray again it is released as it was. (A value the write itself breaks is a
+// contradiction at the border, never a hold: holding is for verdicts another value changed.)
+hdrFormats{HDR10|Dolby Vision}*
+rule: hdrOnlyOnHd
+  when: not format in Blu-ray, 4K
+  then: hdrFormats is -
+  strength: must
+contract: disc
+  kind: receive
+  origin: observed
+  reads:
+    hdr -> hdrFormats
+    name -> title
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: Blu-ray

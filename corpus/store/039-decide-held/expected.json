@@ -1,0 +1,8 @@
+{
+  "crubal": "2",
+  "records": [
+    { "id": "P-1", "kind": "item", "level": "product", "owner": "test.example",
+      "values": { "title": "Christmas Vacation", "runtime": { "$qty": "97", "unit": "min" } },
+      "sources": { "*": { "origin": "declared", "via": "L-1" }, "runtime": { "origin": "observed", "via": "L-2" } } }
+  ]
+}

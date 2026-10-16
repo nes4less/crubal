@@ -1,6 +1,8 @@
 # Completing the engine
 
-**Status:** plan, 2026-10-15. Everything the specification states that the engine, the store or the host
+**Status:** plan, 2026-10-15; A, B and C built (review decisions with replay, held release, adopt / give
+back / clone), corpus 163. The units table is global per process: one owner's extension at a time until it
+is made per dictionary. Everything the specification states that the engine, the store or the host
 doesn't do yet, and nothing that depends on a kind, a vocabulary or an adopter. Each item says what it is,
 how it works, what it writes, and what proves it. The coding round takes them in the order of the last
 section.

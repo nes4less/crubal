@@ -1,0 +1,8 @@
+decide: unit:stone
+  decision: new unit
+  unit: test:stone
+  dimension: mass
+  factor: 6.35029318
+decide: unit:Lbs.
+  decision: alias
+  unit: lb

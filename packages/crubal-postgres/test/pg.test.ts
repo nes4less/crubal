@@ -434,3 +434,80 @@ test("a send over the store: started, the adapter, acted or failed, retry from o
   assert.equal((await pool.query("select count(*)::int as n from outtake where owner = $1 and record = 'P-1'", [owner])).rows[0].n, 0);
   assert.deepEqual(await store.verify(), { valid: true });
 });
+
+test("review decisions over the store: a vocabulary decision replays the held intake; a unit question; a suggestion; a dead run", { skip: !url }, async () => {
+  const owner = "review.example";
+  const store = new PgStore(pool, owner, { allowUnsigned: true });
+  const text = `package: shop /2026-10-01
+  owner: review.example
+  crubal: 2
+
+kind: item
+  levels: product
+  base: Item
+title$
+format{DVD|Blu-ray}
+weight#kg accepts: g, lb
+class: Item
+  for: item
+  facets:
+    title
+    format
+
+contract: catalog
+  kind: receive
+  origin: reported
+  reads:
+    Title -> title
+    Format -> format
+    Weight -> weight
+contract: label
+  kind: send
+  writes:
+    title -> Title
+`;
+  await store.install(publish(text, { date: "2026-10-01" }).bundle, undefined, "2026-10-16T09:00:00Z");
+  await store.commit({ person: owner }, (d) => { d.records.set("P-1", { id: "P-1", kind: "item", level: "product", owner, values: { title: "Christmas Vacation" }, sources: { "*": { origin: "declared", via: "L-1" } } }); }, "2026-10-16T09:00:01Z");
+  const border = await PgBorder.over(store);
+  // The catalog brings a format the list doesn't hold and a weight in a unit the table doesn't know.
+  const got = await border.receive("catalog", "P-1", '{"Title":"Christmas Vacation","Format":"4K","Weight":"2.5 stone"}', undefined, "2026-10-16T09:00:02Z");
+  const outcomes = got.outcomes as JsonObject[];
+  assert.equal(outcomes.find((o) => o.from === "Format")?.outcome, "new");
+  assert.deepEqual(outcomes.find((o) => o.from === "Weight")?.cites, { unit: "stone" });
+  assert.equal((await store.state()).records.get("P-1")?.values.format, "4K", "a new value lands, marked new, pending review");
+  // Add the value: one entry (review + define), then the kept intake replays and the value is no longer new.
+  const added = await store.decide({ key: "facet:format", value: "4K", decision: "add value" }, { person: owner }, "2026-10-16T09:01:00Z");
+  assert.ok(added.entry);
+  assert.equal(added.replayed.length, 1, "the intake holding the new value replayed");
+  const defs = await store.definitions();
+  assert.ok(defs.dict.facets.get("format")?.values?.some((v) => v.value === "4K"));
+  const replay = (await pool.query("select json from intake where owner = $1", [owner])).rows[0].json as JsonObject;
+  assert.equal(((replay.replays as JsonObject[])[0]?.outcomes as JsonObject[]).find((o) => o.from === "Format")?.outcome, "absorbed");
+  // The unit question: a new unit under the owner's prefix; the replayed weight converts into kilograms.
+  const unit = await store.decide({ key: "unit:stone", decision: "new unit", unit: "shop:stone", dimension: "mass", factor: "6.35029318", accepts: ["weight"] }, { person: owner }, "2026-10-16T09:02:00Z");
+  assert.equal(unit.replayed.length, 1);
+  const weight = (await store.state()).records.get("P-1")?.values.weight as JsonObject;
+  assert.equal(weight.unit, "kg");
+  assert.equal(weight.$qty, "15.8757");
+  // A suggestion accepted through the decision, with its original source.
+  await store.commit({ person: owner }, (d) => {
+    const r = d.records.get("P-1") as Record;
+    d.records.set("P-1", { ...r, suggestions: { title: [{ value: "Christmas Vacation (Special Edition)", origin: "declared", via: "L-9" }] } } as unknown as Record);
+  }, "2026-10-16T09:03:00Z");
+  await store.decide({ key: "suggestion", record: "P-1", address: "title", decision: "accept" }, { person: owner }, "2026-10-16T09:03:01Z");
+  const p1 = (await store.state()).records.get("P-1") as Record & { suggestions?: unknown };
+  assert.equal(p1.values.title, "Christmas Vacation (Special Edition)");
+  assert.equal(p1.sources?.title?.via, "L-9");
+  assert.equal(p1.suggestions, undefined);
+  // A dead run retried: its key released, a new run started by a fresh border.
+  const failing = new PgBorder(store, { ...(await (await import("../src/border.ts")).borderOptions(store)), adapters: { label: async () => ({ failed: "printer offline" }) } });
+  const dead = await failing.send("label", "P-1", undefined, "2026-10-16T09:04:00Z");
+  assert.equal(dead.dead, true);
+  assert.equal((await failing.send("label", "P-1", undefined, "2026-10-16T09:04:01Z")).acted, false, "the key is held");
+  const again = new PgBorder(store, { ...(await (await import("../src/border.ts")).borderOptions(store)), adapters: { label: async () => ({ acted: true }) } });
+  const retried = await again.decideRun(String(dead.log), "retry", owner, "2026-10-16T09:05:00Z");
+  assert.equal(retried.retried, dead.log);
+  assert.equal(retried.acted, true);
+  assert.equal((await store.review()).filter((it) => it.key === "run:label").length, 0, "the item is decided");
+  assert.deepEqual(await store.verify(), { valid: true });
+});

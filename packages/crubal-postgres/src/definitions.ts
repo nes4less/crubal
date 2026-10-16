@@ -8,6 +8,8 @@ import { emptyParsed, type Parsed, readBundleOnto } from "../../crubal/src/bundl
 import { checkPackage } from "../../crubal/src/dictionary.ts";
 import { checkContracts } from "../../crubal/src/exchange.ts";
 import type { JsonObject } from "../../crubal/src/model.ts";
+import { unitsExtensionText } from "../../crubal/src/review.ts";
+import { extendUnits, resetUnits } from "../../crubal/src/units.ts";
 import { checkRules } from "../../crubal/src/rules.ts";
 import { checkViews } from "../../crubal/src/views.ts";
 import type { Client } from "./db.ts";
@@ -15,6 +17,13 @@ import type { Client } from "./db.ts";
 type Row = { [column: string]: unknown };
 
 /** The owner's working package as one bundle: the define writes grouped by member kind, in log order. */
+/** The owner's units extension (11.9), from the last `units` define write. */
+export function unitsExtensionOf(definitions: Iterable<JsonObject>): JsonObject[] {
+  let measures: JsonObject[] = [];
+  for (const d of definitions) if (d.units === "extension" && Array.isArray(d.measures)) measures = d.measures as JsonObject[];
+  return measures;
+}
+
 export function workingBundle(owner: string, definitions: Iterable<JsonObject>): JsonObject {
   const sections: { [member: string]: string } = { facet: "facets", class: "classes", rule: "rules", contract: "contracts", kind: "kinds", view: "views", shape: "shapes", filter: "filters" };
   const b: JsonObject = { crubal: "2", package: "working", version: "working", owner, id: `${owner}/working` };
@@ -45,6 +54,11 @@ export async function definitionsOf(client: Client, owner: string): Promise<Pars
   }
   const defs = (await client.query("select json from definitions where owner = $1 order by ord", [owner])).rows as Row[];
   if (defs.length) readBundleOnto(workingBundle(owner, defs.map((r) => r.json as JsonObject)), base);
+  // The units table in force: the standard table plus this owner's extension (one owner per process for now).
+  const measures = unitsExtensionOf(defs.map((r) => r.json as JsonObject));
+  resetUnits();
+  if (measures.length) extendUnits(unitsExtensionText(measures));
+  (base as Parsed & { units?: JsonObject[] }).units = measures;
   return base;
 }
 

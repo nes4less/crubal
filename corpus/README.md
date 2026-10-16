@@ -67,6 +67,13 @@ records in `input.crubal`, a `form.crubal` read like `run.crubal` (`form:` names
 follows edges and gates, an optional `arrival.json` (a held arrival whose candidates the form offers), and
 `expected-form.json`: the form as data, exactly.
 
+Lifecycle cases (`ops.crubal`) also take `adopt: ID -> address`, `give-back: ID -> address`, `clone: ID -> NEW
+[owner: …]` (8.2; `expected-flag.json` says which should rule flagged an adoption), `decide: <key>` with the
+decision's fields indented below it (9.5, 11.9, 14.7, 10.4: `facet:<key>`, `contract:<name>`,
+`unit:<spelling>`, `suggestion`, `held`), and the scaffolding `suggest: ID` and `hold: ID` (address, value,
+origin, via; address, rule) that leave a record as a gated run or a changed verdict would. An exchange
+`run.crubal` takes `decide-run: L-Rn` with `decision: retry|drop` (runs.md).
+
 ### Cases for the backbone chapters
 
 - **Rebuild (8.5.3):** a `store/` case with `log.json` and `expected-state.json` rebuilds the state from the

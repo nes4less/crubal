@@ -1,0 +1,13 @@
+[
+  { "log": "J-1", "by": { "migration": "backfill" }, "writes": [
+    { "record": "P-1", "envelope": "created", "value": { "kind": "item", "level": "product", "owner": "test.example" } },
+    { "record": "P-1", "address": "title", "value": "Christmas Vacation", "source": { "origin": "declared", "via": "L-1" } } ] },
+  { "log": "J-2", "by": { "person": "tester" }, "writes": [
+    { "review": { "key": "facet:format", "value": "4K", "decision": "add value" } },
+    { "define": { "facet": "format", "type": "choice", "values": [ { "value": "DVD" }, { "value": "Blu-ray" }, { "value": "4K" } ] } } ] },
+  { "log": "J-3", "by": { "person": "tester" }, "writes": [
+    { "review": { "key": "facet:format", "value": "4K", "alias": "4K UHD", "decision": "add alias" } },
+    { "define": { "facet": "format", "type": "choice", "values": [ { "value": "DVD" }, { "value": "Blu-ray" }, { "value": "4K", "aliases": ["4K UHD"] } ] } } ] },
+  { "log": "J-4", "by": { "person": "tester" }, "writes": [
+    { "review": { "key": "facet:format", "value": "Betamax", "decision": "reject" } } ] }
+]

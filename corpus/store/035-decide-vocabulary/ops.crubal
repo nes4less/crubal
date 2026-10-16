@@ -1,0 +1,10 @@
+decide: facet:format
+  value: 4K
+  decision: add value
+decide: facet:format
+  value: 4K
+  alias: 4K UHD
+  decision: add alias
+decide: facet:format
+  value: Betamax
+  decision: reject

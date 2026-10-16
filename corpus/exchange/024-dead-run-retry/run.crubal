@@ -1,0 +1,17 @@
+prepare: label
+on: P-1
+
+failed: L-R1
+reason: printer offline
+
+prepare: label
+on: P-1
+
+decide-run: L-R1
+decision: retry
+
+failed: L-R3
+reason: still offline
+
+decide-run: L-R3
+decision: drop

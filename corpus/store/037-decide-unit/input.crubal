@@ -1,0 +1,9 @@
+// A unit question's decision (11.9) is a define of the owner's units extension: a new unit under the owner's
+// prefix with its dimension and factor, or a spelling joining a standard unit. The table in force grows.
+weight#kg accepts: g, lb
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation

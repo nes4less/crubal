@@ -1,0 +1,11 @@
+[
+  { "log": "J-1", "by": { "migration": "backfill" }, "writes": [
+    { "record": "P-1", "envelope": "created", "value": { "kind": "item", "level": "product", "owner": "test.example" } },
+    { "record": "P-1", "address": "title", "value": "Christmas Vacation", "source": { "origin": "declared", "via": "L-1" } } ] },
+  { "log": "J-2", "by": { "person": "tester" }, "writes": [
+    { "review": { "key": "unit:stone", "decision": "new unit", "unit": "test:stone", "dimension": "mass", "factor": "6.35029318" } },
+    { "define": { "units": "extension", "measures": [ { "measure": "test:stone", "dimension": "mass", "factor": "6.35029318", "spellings": ["stone"] } ] } } ] },
+  { "log": "J-3", "by": { "person": "tester" }, "writes": [
+    { "review": { "key": "unit:Lbs.", "decision": "alias", "unit": "lb" } },
+    { "define": { "units": "extension", "measures": [ { "measure": "test:stone", "dimension": "mass", "factor": "6.35029318", "spellings": ["stone"] }, { "measure": "lb", "spellings": ["Lbs."] } ] } } ] }
+]

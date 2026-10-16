@@ -1,0 +1,18 @@
+suggest: P-1
+  address: title
+  value: Christmas Vacation (Special Edition)
+  origin: declared
+  via: L-7
+suggest: P-1
+  address: format
+  value: Blu-ray
+  origin: reported
+  via: L-8
+decide: suggestion
+  record: P-1
+  address: title
+  decision: accept
+decide: suggestion
+  record: P-1
+  address: format
+  decision: deny

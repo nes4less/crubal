@@ -1,0 +1,12 @@
+decide: contract:catalog
+  field: Studio
+  decision: map
+  to: studio
+decide: contract:catalog
+  field: Format
+  decision: map value
+  theirs: Blu-ray Disc
+  ours: Blu-ray
+decide: contract:catalog
+  field: Condition
+  decision: ignore

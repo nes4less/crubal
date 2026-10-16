@@ -1,0 +1,19 @@
+[
+  { "log": "J-1", "by": { "migration": "backfill" }, "writes": [
+    { "record": "P-1", "envelope": "created", "value": { "kind": "item", "level": "product", "owner": "test.example" } },
+    { "record": "P-1", "address": "title", "value": "Christmas Vacation", "source": { "origin": "declared", "via": "L-1" } },
+    { "record": "P-1", "address": "format", "value": "DVD", "source": { "origin": "declared", "via": "L-1" } },
+    { "record": "P-1", "address": "listingTitle", "value": "Christmas Vacation [DVD]", "source": { "origin": "derived", "via": "listingTitle" } },
+    { "record": "D-100", "envelope": "created", "value": { "kind": "item", "level": "product", "owner": "distributor.example" } },
+    { "record": "D-100", "address": "title", "value": "Home Alone", "source": { "origin": "declared", "via": "L-9" } },
+    { "record": "D-100", "address": "format", "value": "Blu-ray", "source": { "origin": "declared", "via": "L-9" } } ] },
+  { "log": "J-2", "by": { "person": "tester" }, "writes": [
+    { "record": "P-1", "address": "listingTitle", "value": "Christmas Vacation [DVD]", "source": { "origin": "derived", "via": "listingTitle", "adopted": true } } ] },
+  { "log": "J-3", "by": { "person": "tester" }, "writes": [
+    { "record": "P-2", "envelope": "created", "value": { "kind": "item", "level": "product", "owner": "test.example" } },
+    { "record": "P-2", "address": "title", "value": "Home Alone", "source": { "origin": "declared", "via": "L-9", "owner": "distributor.example" } },
+    { "record": "P-2", "address": "format", "value": "Blu-ray", "source": { "origin": "declared", "via": "L-9", "owner": "distributor.example" } },
+    { "record": "P-2", "address": "crubal:clonedFrom", "value": { "$link": "distributor.example:D-100" }, "source": { "origin": "declared", "via": "clone" } } ] },
+  { "log": "J-4", "by": { "person": "tester" }, "writes": [
+    { "record": "P-1", "address": "listingTitle", "value": "Christmas Vacation [DVD]", "source": { "origin": "derived", "via": "listingTitle" } } ] }
+]

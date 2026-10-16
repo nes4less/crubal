@@ -1,0 +1,14 @@
+[
+  { "log": "J-1", "by": { "migration": "backfill" }, "writes": [
+    { "record": "P-1", "envelope": "created", "value": { "kind": "item", "level": "product", "owner": "test.example" } },
+    { "record": "P-1", "address": "title", "value": "Christmas Vacation", "source": { "origin": "declared", "via": "L-1" } } ] },
+  { "log": "J-2", "by": { "person": "tester" }, "writes": [
+    { "review": { "key": "contract:catalog", "field": "Studio", "decision": "map", "to": "studio" } },
+    { "define": { "contract": "catalog", "kind": "receive", "reads": [ { "from": "Title", "to": "title" }, { "from": "Format", "to": "format" }, { "from": "Studio", "to": "studio" } ], "origin": "reported" } } ] },
+  { "log": "J-3", "by": { "person": "tester" }, "writes": [
+    { "review": { "key": "contract:catalog", "field": "Format", "decision": "map value", "theirs": "Blu-ray Disc", "ours": "Blu-ray" } },
+    { "define": { "contract": "catalog", "kind": "receive", "reads": [ { "from": "Title", "to": "title" }, { "from": "Format", "to": "format", "values": [ { "from": "Blu-ray Disc", "to": "Blu-ray" } ] }, { "from": "Studio", "to": "studio" } ], "origin": "reported" } } ] },
+  { "log": "J-4", "by": { "person": "tester" }, "writes": [
+    { "review": { "key": "contract:catalog", "field": "Condition", "decision": "ignore" } },
+    { "define": { "contract": "catalog", "kind": "receive", "reads": [ { "from": "Title", "to": "title" }, { "from": "Format", "to": "format", "values": [ { "from": "Blu-ray Disc", "to": "Blu-ray" } ] }, { "from": "Studio", "to": "studio" } ], "origin": "reported", "ignore": ["Condition"] } } ] }
+]

@@ -1,0 +1,22 @@
+// Adopting (8.2): a derived value stops following its rule and its source gains `adopted`; a should rule's
+// is flagged; giving it back removes the mark. Cloning another owner's record makes one of ours, every
+// value with its source and owner, linked by crubal:clonedFrom.
+title$
+format{DVD|Blu-ray}
+listingTitle$
+rule: listingTitle
+  then: listingTitle is "{title} [{format}]"
+  strength: should
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  format: DVD
+  listingTitle: Christmas Vacation [DVD] [origin: derived, via: listingTitle]
+
+product: D-100 [origin: declared, via: L-9]
+  crubal:owner: distributor.example
+  title: Home Alone
+  format: Blu-ray

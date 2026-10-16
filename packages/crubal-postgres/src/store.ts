@@ -3,13 +3,15 @@
 // The log is the truth; `rebuild` gives every other table back from it.
 
 import { applyEntry, diffWrites, differs, type Draft, type Entry, type State } from "../../crubal/src/log.ts";
-import type { JsonObject } from "../../crubal/src/model.ts";
+import type { Json, JsonObject } from "../../crubal/src/model.ts";
 import { entryHash, verifyChain, writeHash, type Keys } from "../../crubal/src/store.ts";
 import { type Client, type Pool, transaction } from "./db.ts";
 import { isObj, loadState, persist, wipeState } from "./state.ts";
 import { type Parsed, readBundleOnto, verifyBundle } from "../../crubal/src/bundle.ts";
 import { restamp } from "../../crubal/src/migrate.ts";
-import { checkAll, definitionsOf, workingBundle } from "./definitions.ts";
+import { checkAll, definitionsOf, unitsExtensionOf, workingBundle } from "./definitions.ts";
+import { decide as decideReview, type Decision, openItems } from "../../crubal/src/review.ts";
+import { land, receive, type IntakeOutcome } from "../../crubal/src/store.ts";
 import { entriesSince, markStale, type Projecting, publish } from "./projector.ts";
 import { copyWorking, loadWhole, Needs, settle, type WorkingRecords, workingState } from "./working.ts";
 import type { StreamEntry } from "../../crubal/src/views.ts";
@@ -173,6 +175,66 @@ export class PgStore {
     this.defsCache = undefined;
     if (previous) for (const table of ["projections", "projection_stream", "stale"]) await this.pool.query(`delete from ${table} where owner = $1`, [this.owner]);
     return result.entry;
+  }
+
+  /** The review items still open (9.5). */
+  async review(): Promise<JsonObject[]> {
+    return openItems((await this.state()).reviews);
+  }
+
+  /**
+   * A review decision (9.5, 11.9, 14.7, runs.md): one entry holding the review write and what it causes;
+   * then the intakes the decision affects are replayed (9.6), each its own entry.
+   */
+  async decide(d: Decision, by: JsonObject = { person: "owner" }, at?: string): Promise<{ entry: Entry | null; replayed: string[] }> {
+    const p = await this.definitions(true);
+    // The operation may run more than once while the working set loads (working.ts): each run changes a copy.
+    const fresh = () => ({ dict: { ...p.dict, facets: new Map(p.dict.facets) }, contracts: new Map(p.contracts.map((c) => [c.name, c])), units: [...((p as Parsed & { units?: JsonObject[] }).units ?? [])] });
+    const result = await this.commitFrom((draft) => {
+      const extra = decideReview(d, draft as unknown as Parameters<typeof decideReview>[1], fresh());
+      return { by, extra, out: null };
+    }, at);
+    this.defsCache = undefined;
+    const replayed = await this.replayFor(d, at);
+    return { entry: result.entry, replayed };
+  }
+
+  /** Replay the kept intakes a decision reaches: by facet, by contract field, or by unit spelling (9.6). */
+  private async replayFor(d: Decision, at?: string): Promise<string[]> {
+    const key = d.key;
+    const reaches = (o: JsonObject) =>
+      (key.startsWith("facet:") && o.to === key.slice(6) && o.outcome === "new") ||
+      (key.startsWith("contract:") && o.from === d.field && o.outcome === "unknown") ||
+      (key.startsWith("unit:") && isObj(o.cites) && o.cites.unit === key.slice(5));
+    if (!key.startsWith("facet:") && !key.startsWith("contract:") && !key.startsWith("unit:")) return [];
+    if (d.decision === "reject" || d.decision === "ignore" || d.decision === "not a unit") return [];
+    const p = await this.definitions(true);
+    const { rows } = await this.pool.query("select intake, contract, \"for\", raw, json from intake where owner = $1 order by received", [this.owner]);
+    const out: string[] = [];
+    for (const row of rows as { intake: string; contract: string; for: string | null; raw: Uint8Array; json: JsonObject }[]) {
+      const outcomes = (row.json.outcomes as JsonObject[] | undefined) ?? [];
+      if (!outcomes.some(reaches) || !row.for) continue;
+      const c = p.contracts.find((x) => x.name === row.contract);
+      if (!c) continue;
+      const body = Buffer.from(row.raw).toString("utf8");
+      const again = receive(c, body, row.for, p.dict, row.intake);
+      const recordId = row.for;
+      const earlier = `L-${row.intake.slice(2)}`;
+      const entry = await this.commitFrom((draft) => {
+        const r = draft.records.get(recordId);
+        if (!r) return { by: { migration: "replay" }, out: null };
+        // What this intake landed before is replaced by its replay, never left to a tie with itself.
+        const values = { ...r.values };
+        const sources = { ...(r.sources ?? {}) };
+        for (const [k, s] of Object.entries(sources)) if (s.via === earlier || s.via === row.intake) { delete values[k]; delete sources[k]; }
+        const cleared = { ...r, values, sources };
+        draft.records.set(recordId, land(cleared, { outcomes: again.outcomes as IntakeOutcome[], contract: c.name }, { origin: c.origin || "reported", via: row.intake }, p.dict.trust, p.dict.facetTrust));
+        return { by: { migration: "replay" }, extra: [], out: null };
+      }, at);
+      await this.pool.query("update intake set json = $3 where owner = $1 and intake = $2", [this.owner, row.intake, { ...row.json, replays: [...((row.json.replays as JsonObject[]) ?? []), { outcomes: again.outcomes as unknown as Json, contract: c.name, ...(entry.entry ? { entry: String(entry.entry.log) } : {}) }] }]);
+      out.push(row.intake);
+    }
+    return out;
   }
 
   /** A define write (8.5, 11.4): one member of the working package as it now stands, checked with the rest first. */

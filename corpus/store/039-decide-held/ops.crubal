@@ -1,0 +1,14 @@
+hold: P-1
+  address: runtime
+  rule: runtimeRange
+hold: P-1
+  address: notes
+  rule: notesGate
+decide: held
+  record: P-1
+  address: runtime
+  decision: value
+decide: held
+  record: P-1
+  address: notes
+  decision: drop

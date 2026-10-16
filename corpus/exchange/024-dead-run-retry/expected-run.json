@@ -1,0 +1,8 @@
+[
+  { "contract": "label", "record": "P-1", "started": true, "log": "L-R1" },
+  { "contract": "label", "record": "P-1", "run": "L-R1", "failed": true, "attempt": 1, "dead": true, "review": "run:label" },
+  { "contract": "label", "record": "P-1", "acted": false, "reason": "the same payload was already sent" },
+  { "contract": "label", "record": "P-1", "started": true, "log": "L-R3", "decision": "retry", "retried": "L-R1" },
+  { "contract": "label", "record": "P-1", "run": "L-R3", "failed": true, "attempt": 1, "dead": true, "review": "run:label" },
+  { "contract": "label", "run": "L-R3", "decision": "drop" }
+]
