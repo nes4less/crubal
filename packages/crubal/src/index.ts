@@ -11,7 +11,7 @@ export { checkPackage, checkRecord, facetJson, foldKey, foldRecord, resolve, res
 export { evaluate, parseCondition, type Truth } from "./conditions.ts";
 export { checkRules, Engine, readRules, shortcutRules, type Result, type Rule, type Strength } from "./rules.ts";
 export { entryHash, fieldPath, land, matchParts, readContracts, receive, sha256, validate, verifyChain, writeHash, type Contract, type IntakeRecord, type Observation } from "./store.ts";
-export { checkRecipe, readRecipes, restamp, type Recipe, type ReviewItem, type Step } from "./migrate.ts";
+export { checkRecipe, dryRun, readRecipes, restamp, type Recipe, type ReviewItem, type Step, type StepStats } from "./migrate.ts";
 export { checkContracts, Exchange, readRoles, verifyBorder, type Role, type RunResult } from "./exchange.ts";
 export { checkPackages, readPackages, type PackageInfo } from "./packages.ts";
 export { AUDIENCES, checkViews, partitionOf, readViews, Views, type Projection, type ProjectOptions, type StreamEntry, type View, type ViewSet } from "./views.ts";

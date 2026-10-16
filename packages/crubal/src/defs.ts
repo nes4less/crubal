@@ -76,6 +76,8 @@ export type ClassLine = {
   level?: string;
   when?: string;
   section?: string;
+  /** Which photo slot an image fills (5.3.3). */
+  frame?: string;
 };
 
 export type PartSlot = { slot: string; wears: string; many: boolean; fungible: boolean; match?: string; line: number };
@@ -231,7 +233,7 @@ function splitOutside(s: string, sep: string, line: number): string[] {
 }
 
 /** The type mark, count and tails of a shorthand line or class line, after its key. */
-type Parsed = { facet: Facet; marked: boolean; count: string | null; whenText?: string; level?: string; required: boolean };
+type Parsed = { facet: Facet; marked: boolean; count: string | null; whenText?: string; level?: string; required: boolean; frame?: string };
 
 function parseLine(text: string, line: number): Parsed {
   let s = text.trim();
@@ -317,8 +319,14 @@ function parseLine(text: string, line: number): Parsed {
   }
 
   const tails = tokens(rest, line);
+  let frame: string | undefined;
   for (let i = 0; i < tails.length; i++) {
     const t = tails[i] as string;
+    if (t === "frame:") {
+      // Placement (5.3.3): which photo slot an image fills; a class line's setting, never the facet's.
+      frame = tails[++i];
+      continue;
+    }
     if (t.startsWith("~")) facet.aliases.push(unquote(t.slice(1)));
     else if (t.startsWith("=")) facet.sameAs.push(t.slice(1));
     else if (t.startsWith("+")) facet.combine = t.slice(1);
@@ -339,7 +347,7 @@ function parseLine(text: string, line: number): Parsed {
     } else if (/^[a-z][\w-]*$/.test(t)) applySetting(facet, t, "yes", line);
     else throw new CrubalError(`unknown tail ${t} in ${text}`, line);
   }
-  return { facet, marked, count, whenText, level, required };
+  return { facet, marked, count, whenText, level, required, ...(frame ? { frame } : {}) };
 }
 
 /** Read one shorthand facet line (spec 4.5). */
@@ -484,6 +492,7 @@ export function readClassLine(text: string, line: number, section?: string): Cla
   if (p.required) cl.required = true;
   if (p.level) cl.level = p.level;
   if (p.whenText) cl.when = p.whenText;
+  if (p.frame) cl.frame = p.frame;
   if (section) cl.section = section;
   if (p.marked) {
     (cl as ClassLine & { type?: FacetType }).type = f.type;

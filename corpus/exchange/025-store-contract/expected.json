@@ -1,0 +1,4 @@
+{ "id": "U-1", "kind": "item", "level": "unit", "owner": "test.example",
+  "values": { "shelf": "A", "slot": "7" },
+  "sources": { "*": { "origin": "reported", "via": "L-1" }, "slot": { "origin": "declared", "via": "L-R1" } },
+  "alternatives": { "slot": [ { "value": "4", "origin": "reported", "via": "L-1" } ] } }

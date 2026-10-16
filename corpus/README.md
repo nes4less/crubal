@@ -47,7 +47,8 @@ break), or a record, an `intake.json` and the `expected.json` record after it la
 `contract.crubal`, an `answer.json` and `expected-intake.json`; evidence cases add `observations.json` and
 `expected-validation.json`. Signed-chain cases add a `keys.json` (the owner's published public key, from
 `store/_keys.json`); a chain case without one checks links only. Replay cases add `contract-v2.crubal` and
-`expected-replay.json`; review cases add `intakes.json` and `expected-review.json`; raw-byte cases add
+`expected-replay.json`; a restamp case with `expected-dry-run.json` instead of `expected.json` checks what the
+recipe would do per step without doing it (10.4); review cases add `intakes.json` and `expected-review.json`; raw-byte cases add
 `answer.bin` and `expected-raw.json`. `tools/` holds the generators for cases that need real hashes or
 signatures. Migration cases add a `recipe.crubal` and expect the restamped data plus its
 `review` queue; `store-errors/` holds recipes a publish must refuse. `package-errors/` holds packages a

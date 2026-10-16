@@ -1,0 +1,14 @@
+// retype (10.3): each value is read again under the facet's new type; what fits lands, the rest goes to
+// review, held. year was text and is now a number: "1997" lands as a number, "unknown year" waits.
+year#
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation
+  year: "1997"
+
+product: P-2 [origin: declared, via: L-1]
+  title: Home Alone
+  year: "unknown year"

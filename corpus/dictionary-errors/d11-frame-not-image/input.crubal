@@ -1,0 +1,9 @@
+// A frame names a photo slot (5.3.3); it belongs only on an image facet (5.10).
+title$
+cover^
+
+class: Card
+  for: item
+  facets:
+    title frame: front
+    cover

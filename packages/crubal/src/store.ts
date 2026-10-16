@@ -71,6 +71,8 @@ export type Contract = {
   prefix?: string;
   reads: MapLine[];
   writes: MapLine[];
+  /** A store contract's one map (7.3): `reads` and `writes` are derived from it. */
+  stores: MapLine[];
   ignore: string[];
   keepRaw: string[];
   absorb: boolean;
@@ -121,6 +123,7 @@ export function readContracts(source: string): Contract[] {
       origin: "",
       reads: [],
       writes: [],
+      stores: [],
       ignore: [],
       keepRaw: [],
       absorb: true,
@@ -165,11 +168,17 @@ export function readContracts(source: string): Contract[] {
       else if (p.key === "prefix") c.prefix = p.value;
       else if (p.key === "reads") c.reads = readMap(p.children);
       else if (p.key === "writes") c.writes = readMap(p.children);
+      else if (p.key === "stores") {
+        // Written, ourAddress -> theirField; read, the same lines the other way, value maps too.
+        c.stores = readMap(p.children);
+        c.writes = c.stores.map((m) => ({ ...m, values: [...m.values] }));
+        c.reads = c.stores.map((m) => ({ from: m.to, to: m.from, values: m.values.map(([ours, theirs]) => [theirs, ours] as [string, string]), line: m.line, valueLines: m.valueLines }));
+      }
       else if (p.key === "ignore") c.ignore = list();
       else if (p.key === "keep-raw") c.keepRaw = list();
       else if (p.key === "absorb") c.absorb = p.value !== "no";
       else if (p.key === "lands") c.lands = p.value;
-      if (!["kind", "origin", "prefix", "reads", "writes", "ignore", "keep-raw", "absorb", "lands", "gives", "who", "when", "from", "mode", "undo", "ref", "stream"].includes(p.key)) c.parts[p.key] = p.value;
+      if (!["kind", "origin", "prefix", "reads", "writes", "stores", "ignore", "keep-raw", "absorb", "lands", "gives", "who", "when", "from", "mode", "undo", "ref", "stream"].includes(p.key)) c.parts[p.key] = p.value;
     }
     if (!c.origin) c.origin = c.kind === "form" ? "declared" : "reported";
     if (c.keepRaw.length && !c.prefix) throw new CrubalError(`${c.name} keeps raw fields, so it needs a prefix`, c.line);

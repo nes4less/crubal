@@ -57,7 +57,7 @@ function callerStates(caller: Record | undefined, roles: Role[]): StateOf {
 const PARTS: { [kind: string]: string[] } = {
   send: ["needs", "gives", "writes", "reads", "stream", "to", "when", "missed", "who", "auth", "scope", "credential", "retry", "undo", "for", "label", "describe", "version"],
   receive: ["needs", "gives", "reads", "when", "missed", "who", "origin", "lands", "evidence", "absorb", "ignore", "keep-raw", "prefix", "ref", "relation", "auth", "scope", "credential", "retry", "undo", "for", "label", "describe", "version"],
-  store: ["needs", "stores", "when", "who", "for", "label", "describe", "version"],
+  store: ["needs", "stores", "origin", "when", "who", "for", "label", "describe", "version"],
   form: ["needs", "gives", "writes", "reads", "when", "who", "origin", "lands", "ref", "relation", "for", "label", "describe", "version"],
   offer: ["needs", "gives", "to", "mode", "terms", "for", "when", "who", "label", "describe", "version"],
   take: ["needs", "from", "reads", "mode", "lands", "origin", "absorb", "ignore", "keep-raw", "prefix", "ref", "when", "who", "for", "label", "describe", "version"],

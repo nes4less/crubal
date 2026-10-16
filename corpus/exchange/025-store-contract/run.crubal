@@ -1,0 +1,6 @@
+prepare: location
+on: U-1
+
+run: location
+on: U-1
+for-run: L-R1

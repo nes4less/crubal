@@ -161,6 +161,7 @@ function checkClassLine(c: ClassDef, l: ClassLine, dict: Dictionary) {
     throw new CrubalError(`the class line ${l.text} widens ${f.key}'s range`, l.line);
   }
   if (l.when) parseCondition(l.when, l.line);
+  if (l.frame && f.type !== "image") throw new CrubalError(`the class line ${l.text} gives ${f.key} a frame, but it isn't an image`, l.line);
   void c;
 }
 

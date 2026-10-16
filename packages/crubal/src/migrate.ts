@@ -2,7 +2,10 @@
 // reaches, then steps grouped by facet, run in the order written. Restamping applies it to every record;
 // steps that need a person send items to the review queue and hold the value. Nothing is dropped.
 
+import { serialize } from "./canonical.ts";
 import { evaluate, parseCondition } from "./conditions.ts";
+import { checkScalar } from "./dictionary.ts";
+import { readUnder } from "./read-text.ts";
 import type { Dictionary } from "./defs.ts";
 import { splitTop } from "./lex.ts";
 import type { Json, JsonObject, Record } from "./model.ts";
@@ -132,13 +135,29 @@ function mapScalars(v: Json, fn: (x: Json) => Json): Json {
 export type ReviewItem = { record: string; address: string; step: string; held: true };
 
 /** Restamp records with a recipe. Returns the restamped records and the review queue. */
-export function restamp(records: Record[], recipe: Recipe, dict: Dictionary): { records: Record[]; review: ReviewItem[] } {
+export type StepStats = { step: string; facet: string; verb: string; changed: number; review: number };
+
+/** A value's text as the text form writes it, for a retype to re-read (10.3). */
+function textOf(v: Json): string {
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (isObj(v) && "$qty" in v) return `${v.$qty}${v.unit}`;
+  if (isObj(v) && "$money" in v) return `${v.$money}${v.currency}`;
+  if (isObj(v) && "$link" in v) return `&${v.$link}`;
+  if (isObj(v) && "$value" in v) return textOf(v.$value as Json);
+  return JSON.stringify(v);
+}
+
+export function restamp(records: Record[], recipe: Recipe, dict: Dictionary, stats?: StepStats[]): { records: Record[]; review: ReviewItem[] } {
   const review: ReviewItem[] = [];
+  if (stats) for (const s of recipe.steps) stats.push({ step: s.text, facet: s.facet, verb: s.verb, changed: 0, review: 0 });
   const out = records.map((rec) => {
     const values: JsonObject = { ...rec.values };
-    for (const s of recipe.steps) {
+    recipe.steps.forEach((s, si) => {
       const v = values[s.facet];
-      if (v === undefined && s.verb !== "review") continue;
+      if (v === undefined && s.verb !== "review") return;
+      const before = serialize((values[s.facet] ?? null) as Json);
+      const reviewsBefore = review.length;
       switch (s.verb) {
         case "rename":
           values[s.facet] = mapScalars(v as Json, (x) => (x === s.from ? s.to : x));
@@ -183,12 +202,33 @@ export function restamp(records: Record[], recipe: Recipe, dict: Dictionary): { 
         case "review":
           if (evaluate(parseCondition(s.cond, s.line), values) === true) review.push({ record: rec.id, address: s.facet, step: s.text, held: true });
           break;
+        case "retype": {
+          // Each value is read again under the facet's new type (10.3): what fits lands, the rest goes to review.
+          const f = dict.facets.get(s.facet);
+          if (!f) break;
+          const again = readUnder(f, textOf(v as Json), dict);
+          const ok = again !== undefined && checkScalar(f, again).outcome === "absorbed";
+          if (ok) values[s.facet] = again as Json;
+          else review.push({ record: rec.id, address: s.facet, step: s.text, held: true });
+          break;
+        }
         case "recompute":
-        case "retype":
-          break; // the rules rebuild produced values; the new type reads the value on the next check
+          break; // the rules rebuild produced values
       }
-    }
+      if (stats) {
+        const st = stats[si] as StepStats;
+        if (serialize((values[s.facet] ?? null) as Json) !== before) st.changed += 1;
+        st.review += review.length - reviewsBefore;
+      }
+    });
     return { ...rec, values };
   });
   return { records: out, review };
+}
+
+/** What a restamp would do, without doing it (10.4): per step, how many values change and how many go to review. */
+export function dryRun(records: Record[], recipe: Recipe, dict: Dictionary): { steps: StepStats[]; records: number; review: number } {
+  const stats: StepStats[] = [];
+  const { review } = restamp(structuredClone(records), recipe, dict, stats);
+  return { steps: stats, records: records.length, review: review.length };
 }

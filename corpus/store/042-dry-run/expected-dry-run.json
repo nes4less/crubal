@@ -1,0 +1,48 @@
+{
+  "steps": [
+    {
+      "step": "rename: \"VC 1\" -> VC-1",
+      "facet": "videoCodec",
+      "verb": "rename",
+      "changed": 1,
+      "review": 0
+    },
+    {
+      "step": "merge: AVC, H264 -> H.264",
+      "facet": "videoCodec",
+      "verb": "merge",
+      "changed": 1,
+      "review": 0
+    },
+    {
+      "step": "convert: h -> min",
+      "facet": "runtime",
+      "verb": "convert",
+      "changed": 1,
+      "review": 0
+    },
+    {
+      "step": "precision: day -> month",
+      "facet": "releaseDate",
+      "verb": "precision",
+      "changed": 1,
+      "review": 0
+    },
+    {
+      "step": "split: Blu-ray",
+      "facet": "format",
+      "verb": "split",
+      "changed": 1,
+      "review": 0
+    },
+    {
+      "step": "review: count of languages over 2",
+      "facet": "languages",
+      "verb": "review",
+      "changed": 0,
+      "review": 1
+    }
+  ],
+  "records": 2,
+  "review": 1
+}

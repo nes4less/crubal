@@ -8,7 +8,7 @@ import { entryHash, verifyChain, writeHash, type Keys } from "../../crubal/src/s
 import { type Client, type Pool, transaction } from "./db.ts";
 import { isObj, loadState, persist, wipeState } from "./state.ts";
 import { type Parsed, readBundleOnto, verifyBundle } from "../../crubal/src/bundle.ts";
-import { restamp } from "../../crubal/src/migrate.ts";
+import { dryRun, restamp, type StepStats } from "../../crubal/src/migrate.ts";
 import { checkAll, definitionsOf, unitsExtensionOf, workingBundle } from "./definitions.ts";
 import { decide as decideReview, type Decision, openItems } from "../../crubal/src/review.ts";
 import { land, receive, type IntakeOutcome } from "../../crubal/src/store.ts";
@@ -235,6 +235,17 @@ export class PgStore {
       out.push(row.intake);
     }
     return out;
+  }
+
+  /** What installing a version would restamp (10.4): per recipe and step, how many values change and how many go to review. */
+  async dryRun(bundle: JsonObject): Promise<{ recipes: { from: string; to: string; steps: StepStats[]; review: number }[]; records: number }> {
+    const installed = (await this.state()).installed;
+    const previous = installed.filter((i) => i.package === bundle.id).map((i) => String(i.version)).at(-1);
+    if (!previous) return { recipes: [], records: 0 };
+    const next = readBundleOnto(bundle, await this.definitions(true));
+    const records = (await this.state()).records.all();
+    const recipes = next.recipes.filter((r) => r.from === `${bundle.package} /${previous}`).map((r) => { const d = dryRun(records, r, next.dict); return { from: r.from, to: r.to, steps: d.steps, review: d.review }; });
+    return { recipes, records: records.length };
   }
 
   /** A define write (8.5, 11.4): one member of the working package as it now stands, checked with the rest first. */

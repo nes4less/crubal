@@ -1,0 +1,15 @@
+// A frame on an image need (5.3.3) rides into the form's field, so a bench knows which slot the photo fills.
+cover^
+back^
+contract: photos
+  kind: form
+  origin: observed
+  needs:
+    !cover frame: front
+    back frame: back
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation

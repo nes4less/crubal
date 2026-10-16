@@ -1,0 +1,9 @@
+{
+  "crubal": "2",
+  "package": "test /2026-11-01",
+  "records": [
+    { "id": "P-1", "kind": "item", "level": "product", "owner": "test.example", "values": { "title": "Christmas Vacation", "year": "1997" }, "sources": { "*": { "origin": "declared", "via": "L-1" } } },
+    { "id": "P-2", "kind": "item", "level": "product", "owner": "test.example", "values": { "title": "Home Alone", "year": "unknown year" }, "sources": { "*": { "origin": "declared", "via": "L-1" } } }
+  ],
+  "review": [ { "record": "P-2", "address": "year", "step": "retype: text -> number", "held": true } ]
+}

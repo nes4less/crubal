@@ -1,0 +1,6 @@
+[
+  { "contract": "location", "record": "U-1", "started": true, "log": "L-R1", "payload": { "bin": { "shelf": "Aisle A", "slot": "4" } } },
+  { "contract": "location", "record": "U-1", "log": "L-R1", "landed": "value", "outcomes": [
+    { "from": "bin.shelf", "to": "shelf", "outcome": "absorbed", "value": "A" },
+    { "from": "bin.slot", "to": "slot", "outcome": "absorbed", "value": "7" } ] }
+]

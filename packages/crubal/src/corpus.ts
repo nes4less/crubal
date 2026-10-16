@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { canonical } from "./canonical.ts";
 import { type Dictionary, emptyDictionary, readDefinitions, splitCaseInput } from "./defs.ts";
 import { type Keys, land, matchParts, rawOf, readContracts, receive, replay, reviewByKey, validate, verifyChain, type IntakeOutcome, type IntakeRecord, type Observation } from "./store.ts";
-import { checkRecipe, readRecipes, restamp } from "./migrate.ts";
+import { checkRecipe, dryRun, readRecipes, restamp } from "./migrate.ts";
 import { checkContracts, Exchange, readRoles, verifyBorder } from "./exchange.ts";
 import { checkPackages } from "./packages.ts";
 import { checkViews, readViews, Views } from "./views.ts";
@@ -457,6 +457,10 @@ function runStoreCase(folder: string, caseDir: string, name: string, shared: Dic
       const [recipe] = readRecipes(readFileSync(file("recipe.crubal"), "utf8"));
       if (!recipe) return fail("no recipe");
       checkRecipe(recipe, dict);
+      if (existsSync(file("expected-dry-run.json"))) {
+        const got = dryRun(records, recipe, dict);
+        return serialize(got as unknown as Json) === serialize(json("expected-dry-run.json")) ? pass : fail(`dry run: ${serialize(got as unknown as Json)}`);
+      }
       const { records: out, review } = restamp(records, recipe, dict);
       const want = json("expected.json") as JsonObject;
       const got = { ...JSON.parse(canonical({ crubal: "2", package: recipe.to, records: out }, dict)), review };

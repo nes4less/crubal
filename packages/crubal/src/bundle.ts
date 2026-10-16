@@ -70,6 +70,7 @@ export function classLineJson(l: ClassLine): JsonObject {
   if (l.precision) o.precision = l.precision;
   if (l.level) o.level = l.level;
   if (l.when) o.when = l.when;
+  if (l.frame) o.frame = l.frame;
   return o;
 }
 
@@ -117,8 +118,11 @@ export function contractJson(c: Contract): JsonObject {
   for (const k of ["label", "describe", "for"]) if (c.parts[k] !== undefined) o[k] = c.parts[k] as string;
   if (c.needs.length) o.needs = c.needs.map(classLineJson);
   if (c.gives.length) o.gives = [...c.gives];
-  if (c.writes.length) o.writes = c.writes.map(mapJson);
-  if (c.reads.length) o.reads = c.reads.map(mapJson);
+  if (c.stores.length) o.stores = c.stores.map(mapJson);
+  else {
+    if (c.writes.length) o.writes = c.writes.map(mapJson);
+    if (c.reads.length) o.reads = c.reads.map(mapJson);
+  }
   if (c.stream.length) o.stream = [...c.stream];
   for (const k of ["when", "who", "from", "to", "mode", "undo", "ref", "prefix"] as const) if (c[k]) o[k] = c[k] as string;
   // origin is a part of the kinds that bring values in (7.2); the reader defaults it for the rest.
@@ -330,6 +334,7 @@ export function lineText(l: JsonObject, type?: string): string {
   if (l.pick !== undefined) s += l.pick === "any" ? "*" : `*${l.pick}`;
   if (isObj(l.range)) s += ` ${l.range.min}..${l.range.max}`;
   if (typeof l.precision === "string") s += `@${type === "time" ? (l.precision === "second" ? "hms" : "hm") : (PRECISION_CODE[l.precision] ?? l.precision)}`;
+  if (typeof l.frame === "string") s += ` frame: ${l.frame}`;
   if (typeof l.when === "string") s += ` when ${l.when}`;
   return s;
 }

@@ -63,7 +63,7 @@ contract: ebayListing
 | `from` | the presenter, by domain (7.8) | take |
 | `mode` · `terms` | how shared data is held, and the presenter's terms for `controlled` (7.8) | offer, take · offer |
 | `who` | who may run it: a condition over the caller (7.6) | all |
-| `origin` | the origin of the values it brings in (chapter 1.9) | receive, form, take; default `reported` for systems and `declared` for forms |
+| `origin` | the origin of the values it brings in (chapter 1.9) | receive, form, take, store; default `reported` for systems and `declared` for forms |
 | `lands` | `value` (the default), `suggestion` (7.5) or `observation` (chapter 9.7) | receive, form, take |
 | `ref` | the field of their payload that is their own ID for the thing; arrivals are bound by it (chapter 9.2a) | receive, form, take |
 | `relation` | the relation of the edge a run grants the caller on a record it creates for them (chapter 14.4): `buyer` on an order | receive, form |

@@ -47,7 +47,7 @@ function statesOf(r: Extra | undefined, f: Facet | undefined, key: string): stri
 }
 
 /** One field: the facet's settings narrowed by the line, and the record's answer. */
-function field(line: { facet: string; required?: boolean; values?: string[]; length?: number; pick?: string; range?: { min: string; max: string }; precision?: string; level?: string; when?: string }, dict: Dictionary, r: Extra | undefined, vals: JsonObject, o: FormOptions, recordId: string | undefined): JsonObject {
+function field(line: { facet: string; required?: boolean; values?: string[]; length?: number; pick?: string; range?: { min: string; max: string }; precision?: string; level?: string; when?: string; frame?: string }, dict: Dictionary, r: Extra | undefined, vals: JsonObject, o: FormOptions, recordId: string | undefined): JsonObject {
   const f = dict.facets.get(line.facet);
   const key = line.level ? `${line.level}::${line.facet}` : line.facet;
   const out: JsonObject = { key, label: f?.label ?? label(line.facet), type: f?.type ?? "raw" };
@@ -78,6 +78,7 @@ function field(line: { facet: string; required?: boolean; values?: string[]; len
   if (range) out.range = [range.min, range.max];
   if (f?.qualifiers.length) out.qualifiers = [...f.qualifiers];
   if (f?.to) out.to = f.to;
+  if (line.frame) out.frame = line.frame;
   if (line.when) {
     out.when = line.when;
     const asked = evaluate(parseCondition(line.when), vals);

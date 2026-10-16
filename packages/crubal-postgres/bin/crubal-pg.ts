@@ -6,6 +6,7 @@
 //   crubal-pg export <owner>                        the owner's log, as JSON
 //   crubal-pg redact <owner> <log> [<write>]        redact one write (by index) or the whole entry
 //   crubal-pg erase <owner> <record>                redact every value write to a record
+//   crubal-pg dry-run <owner> <bundle.json>         what installing the version would restamp, without writing
 //   crubal-pg project <owner> --defs <file>...      publish every view's stale rows
 //   crubal-pg tick <owner> <contract> --now <moment> --defs <file>...   run a scheduled contract's due ticks
 
@@ -70,6 +71,11 @@ async function main(): Promise<number> {
       console.log(`redacted ${rest[0]}${rest[1] ? ` write ${rest[1]}` : ""}`);
       return 0;
     }
+    if (cmd === "dry-run" && rest[0]) {
+      const bundle = JSON.parse(readFileSync(rest[0], "utf8"));
+      console.log(JSON.stringify(await new PgStore(pool, owner).dryRun(bundle), null, 2));
+      return 0;
+    }
     if (cmd === "erase" && rest[0]) {
       const r = await new PgStore(pool, owner).erase(rest[0]);
       console.log(`erased ${rest[0]}: ${r.redacted} writes redacted${r.witnessed.length ? `; witnessed entries left as they are: ${r.witnessed.join(", ")}` : ""}`);
@@ -96,7 +102,7 @@ async function main(): Promise<number> {
 }
 
 function usage(): number {
-  console.log("usage: crubal-pg migrate | rebuild <owner> | verify <owner> [--keys <file>] | export <owner> | redact <owner> <log> [<write>] | erase <owner> <record> | project <owner> --defs <file>... | tick <owner> <contract> --now <moment> --defs <file>...");
+  console.log("usage: crubal-pg migrate | rebuild <owner> | verify <owner> [--keys <file>] | export <owner> | redact <owner> <log> [<write>] | erase <owner> <record> | dry-run <owner> <bundle.json> | project <owner> --defs <file>... | tick <owner> <contract> --now <moment> --defs <file>...");
   return 2;
 }
 

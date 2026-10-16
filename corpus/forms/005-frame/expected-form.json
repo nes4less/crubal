@@ -1,0 +1,12 @@
+{
+  "contract": "photos",
+  "record": "P-1",
+  "origin": "observed",
+  "sections": [
+    { "fields": [
+      { "key": "cover", "label": "Cover", "type": "image", "required": true, "frame": "front", "editable": true },
+      { "key": "back", "label": "Back", "type": "image", "frame": "back", "editable": true }
+    ] }
+  ],
+  "submit": { "run": "photos", "record": "P-1" }
+}

@@ -1,0 +1,3 @@
+migration: test /2026-10-14 -> test /2026-11-01
+  facet: year
+    retype: text -> number
