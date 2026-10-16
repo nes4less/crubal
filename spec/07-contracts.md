@@ -140,12 +140,20 @@ Every run has a **run ID** (`R-118`), and the log entry for its writes names it 
   entry and one idempotency key per record (chapter 8.5): each item is `acted` or `failed` on its own, a
   refusal refuses that item, and a retry acts only on the items that failed. There is no partial success of
   one item.
-- **Retry.** `retry: 3 every 10m` retries a failed act up to three times, ten minutes apart. With no `retry`,
-  a failed act is not retried.
-- **Late answers.** An answer that arrives after its run closed is taken as intake against that run, and
-  folds like any other.
-- **Undo.** `undo: ebayEndListing` names the contract that reverses this one. The engine never assumes a
-  contract is reversible.
+- **Two entries around the act.** A send is logged `started` before the host acts (its idempotency key,
+  the hash of its mapped-out payload, and the versions it uses) and `acted` or `failed` after, so a host
+  that restarts between the two finds the run and never acts twice. The payload itself is kept beside the
+  log, as intake bytes are (chapter 9.1), never in it: a run write holds its hash, so a payload holding a
+  person's data can be erased (chapter 8.5.2).
+- **Retry.** `retry: 3 every 10m` retries a failed act up to three times, ten minutes apart, from the kept
+  payload, never re-mapping it. With no `retry`, a failed act is not retried. A run still failed after its
+  last attempt stays failed and opens a review item `run:<contract>` (chapter 9.5), grouped by contract
+  across records; a person's decision is a new run or nothing.
+- **Late answers.** An answer that arrives after its run closed names the run (the run ID travels with the
+  act) and is taken as intake against it, folding like any other with that run as its `via`. An answer that
+  names no run the store knows lands nowhere: it opens a review item and is never guessed onto a record.
+- **Undo.** `undo: ebayEndListing` names the contract that reverses this one; a run of it names the run it
+  reverses as `cause`. The engine never assumes a contract is reversible.
 - **Suggestions.** With `lands: suggestion`, values that arrive don't change the record: they are kept as
   suggestions on it, for a person to accept. Customer corrections land this way.
 
@@ -171,9 +179,10 @@ contracts. A contract only declares what the other side requires:
 
 A form is a contract with a person. Its screen assembles itself:
 
-- the fields are `needs`, in its lines' order and sections (chapter 5.3.3), each drawn with its facet's own
-  control (a choice as bubbles, a date at its precision);
-- `writes` shows current values, `reads` takes the person's answers;
+- the fields are `needs`, in its lines' order and sections (chapter 5.3.3; a `needs` block MAY hold
+  `section:` lines), each drawn with its facet's own control (a choice as bubbles, a date at its precision);
+- `writes` shows current values, `reads` takes the person's answers; a form with no `reads` of its own
+  takes each answer by its facet's name, since its fields are its needs;
 - `who` is the person, and `origin` says what the person is doing: `declared` when they state it,
   `observed` when they read it off a real instance in front of them.
 
@@ -220,7 +229,9 @@ contract: catalogTake
 - A presenter's update never overrides a value a person entered on the consumer's side, unless the consumer
   took `controlled` terms.
 - **Parties** are identified by domain, with their keys published in the domain's well-known file,
-  `https://<domain>/.well-known/crubal.json` (chapter 11.7).
+  `https://<domain>/.well-known/crubal.json` (chapter 11.7). A request one owner's host makes to another's
+  proves its party by a signature over the request with that key (an HTTP message signature, RFC 9421,
+  over the method, the target, the body's digest and the date).
 
 ## 7.9 The JSON form
 

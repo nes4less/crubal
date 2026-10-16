@@ -159,7 +159,11 @@ POST /o/<owner>/review/<item>               a decision
 POST /o/<owner>/install                     install a package version
 GET  /o/<owner>/export                      the owner's log and intake (the owner's power)
 POST /o/<owner>/erase/<record>              erasure (the owner's power)
-POST /project  ·  POST /tick                the loops, for a scheduler; guarded by a host key
+GET  /o/<owner>/v/<view>?page=&<filter>=&q= a view's page from the reference index (index-and-forms.md)
+GET  /o/<owner>/robots.txt  ·  GET /o/<owner>/terms.json   the owner's terms (12.5.1)
+GET  /o/<owner>/connections  ·  GET|POST|DELETE /o/<owner>/connect/<name>  ·  GET /oauth/callback
+POST /o/<owner>/emergency  ·  POST /o/<owner>/emergency/<edge>/end          14.13
+POST /project  ·  POST /tick  ·  POST /retry   the loops, for a scheduler; guarded by a host key
 ```
 
 Every route runs through the store's access (14): the host adds nothing to what an edge allows, and a route

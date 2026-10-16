@@ -118,7 +118,8 @@ export class Host {
    */
   async whoSigned(owner: string, req: { method: string; url: string; body?: string; headers: { [h: string]: string | string[] | undefined } }): Promise<Caller | null> {
     const v = await verifyRequest({ ...req, publicX: async (keyid) => (await this.resolveKeys(keyid))[keyid]?.public, now: Math.floor(Date.parse(this.now()) / 1000) });
-    return v ? { owner, caller: v.keyid } : null;
+    // The signing owner acts as the caller `domain:owner`: a caller of that domain (14.1), never a bare ID here.
+    return v ? { owner, caller: `${v.keyid}:owner` } : null;
   }
 
   /** Who is calling: an API key, a token a verifier knows, or nobody. The store sees only the caller ID. */

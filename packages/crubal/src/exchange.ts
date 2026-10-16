@@ -171,6 +171,8 @@ export class Exchange {
   runs = 0;
   /** Records minted by arrivals (9.2a), likewise. */
   minted = 0;
+  /** The versions a run uses (7.4 step 7, 8.5): the package's, set by a store; the contract's is added per run. */
+  versions: JsonObject = {};
   /** The review queue the border writes to (a dead run, an answer naming no run); the journal's draft list. */
   review: JsonObject[] = [];
   /** Mapped-out payloads kept beside the log, by run (docs/design/runs.md): a store keeps them in outtake. */
@@ -363,7 +365,8 @@ export class Exchange {
     this.sent.add(key);
     this.outtake.set(log, payload);
     this.started.set(log, { contract: name, record: recordId, key, attempts: 0, ...(cause ? { cause } : {}) });
-    this.commit({ contract: name, run: log }, log, { contract: name, record: recordId, key, state: "started", payload: `sha256:${sha256(serialize(payload))}`, ...(cause ? { cause } : {}) });
+    const versions: JsonObject = { ...this.versions, ...(c.parts.version ? { contract: c.parts.version } : {}) };
+    this.commit({ contract: name, run: log }, log, { contract: name, record: recordId, key, state: "started", payload: `sha256:${sha256(serialize(payload))}`, ...(Object.keys(versions).length ? { versions } : {}), ...(cause ? { cause } : {}) });
     return { ...head, started: true, payload, key, log, ...(cause ? { cause } : {}) };
   }
 

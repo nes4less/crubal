@@ -54,6 +54,8 @@ unchanged, so what the database holds is what the border carries.
 | `cursors` | `owner`, `contract`, `view`, `version`, `audience`, `seq` | an index's acknowledged position (spec 12.6.2) |
 | `schedules` | `owner`, `contract`, `last_tick` | the last tick run (spec 7.11) |
 | `intake` | `owner`, `intake`, `contract`, `received`, `for`, `raw` (bytea), `sha256`, `type`, `outcomes`, `arrival`, `replays` | the bytes as received, forever (spec 9.1) |
+| `outtake` | `owner`, `run`, `contract`, `record`, `key`, `raw` (bytea), `sha256` | a send's mapped-out payload, beside the log; the run write holds its hash; erased with the record (runs.md) |
+| `bundles` | `owner`, `package`, `version`, `hash`, `json` | every installed version, whole; the install write names it by hash (publishing.md) |
 | `observations` | `owner`, `obs`, `on`, `supports`, `json` | evidence (spec 9.7) |
 | `reads` | `owner`, `log_id`, `record`, `who` | reads under an emergency edge (spec 14.13) |
 | `projections` | `owner`, `view`, `version`, `audience`, `record`, `row`, `buckets`, `marks`, `ancestors[]`, `seq` | one row per selected record (spec 12.6) |

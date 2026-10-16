@@ -19,12 +19,12 @@ import type { PgStore } from "./store.ts";
 /** What performs a run's act (7.4 step 4): the host's code for a system; never a package's. */
 export type Adapter = (contract: Contract, payload: JsonObject, run: string) => Promise<{ acted: true; body?: string } | { failed: string }>;
 
-export type BorderOptions = { dict: Dictionary; contracts: Contract[]; roles?: Role[]; rules?: Rule[]; perms?: Permissions; adapters?: { [contract: string]: Adapter } };
+export type BorderOptions = { dict: Dictionary; contracts: Contract[]; roles?: Role[]; rules?: Rule[]; perms?: Permissions; adapters?: { [contract: string]: Adapter }; versions?: JsonObject };
 
 /** The border's options from the store's own definitions (docs/design/publishing.md). */
 export async function borderOptions(store: PgStore): Promise<BorderOptions> {
   const p = await store.definitions();
-  return { dict: p.dict, contracts: p.contracts, rules: p.rules, perms: p.perms };
+  return { dict: p.dict, contracts: p.contracts, rules: p.rules, perms: p.perms, ...(p.info.version ? { versions: { package: `${p.info.name} /${p.info.version}` } } : {}) };
 }
 
 type Row = { [column: string]: unknown };
@@ -82,6 +82,7 @@ export class PgBorder {
       ex.records = draft.records;
       ex.bindings = draft.bindings;
       ex.review = draft.review;
+      if (this.o.versions) ex.versions = this.o.versions;
       ex.runs = runs;
       for (const k of sent) ex.sent.add(k);
       for (const [k, v] of known) ex.runsKnown.set(k, v);

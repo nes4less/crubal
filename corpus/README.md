@@ -109,7 +109,7 @@ follows edges and gates, an optional `arrival.json` (a held arrival whose candid
   `tick: CONTRACT` and `now: MOMENT`; the result lists the ticks run, the ticks skipped and each run.
 - **Partitions and the stream (12.6):** a `views/` case may add `access.crubal`; `callers:` are then served
   only the rows their edges match, and rows carry `ancestors`. A case with `write.crubal` and
-  `expected-stream.json` compares the stream entries of the first publish and of the publish after the
+  `expected-stream.json` (entries carry `buckets`, and `sort` and `pin` when the view orders or pins, 12.7) compares the stream entries of the first publish and of the publish after the
   write.
 
 ## Passing a case

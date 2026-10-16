@@ -14,8 +14,8 @@ its own tables.
   issuer, audience and expiry, and maps its subject through the host's identity links
   (`linkIdentity(provider, subject, owner, caller)`) to a caller. Supabase Auth is one such issuer. A
   request signed by another owner (RFC 9421 message signatures over the method, target, body digest and
-  date, with the domain's Ed25519 key) resolves to that domain as a caller, its key fetched from its
-  well-known file.
+  date, with the domain's Ed25519 key) resolves to the caller `<domain>:owner`, that owner acting as itself,
+  its key fetched from its well-known file.
 - **Owners and keys.** `createOwner(domain)` makes an owner with an Ed25519 key; every entry the owner's
   store writes is signed with it, and the public half is in the host's well-known file, so an export
   verifies anywhere. `issueKey(owner, caller)` issues an API key for a caller record (printed once, kept

@@ -139,8 +139,11 @@ Adopted values (chapter 8.2) are outside the trust order: they don't change unti
 
 ## 11.5 Publishing
 
-A package is published as a **bundle**: its files, in the text form or JSON, the members list, the recipes
-since the previous version, and the owner's signature over the bundle's hash.
+A package is published as a **bundle**: one JSON document (11.6) holding the header, the members list,
+every member in its JSON form, the recipes since the previous version, its reference records, the version
+it follows as `previous`, its `hash` (the SHA-256 of its canonical form without `hash` and `sig`) and the
+owner's `sig` over the hash. The text files are served beside it for people; a reader turns them into the
+same document, so they need no signature of their own.
 
 Publishing MUST run, and the bundle MUST pass, every well-formedness check:
 
@@ -212,8 +215,9 @@ https://<domain>/.well-known/crubal.json
 }
 ```
 
-- `keys` holds the owner's published signing keys (chapter 8.5), and MAY list keys of the people it hosts
-  by their IDs (chapter 14.1); a party with no published key has unsigned data, which readers MAY refuse.
+- `keys` holds the owner's published signing keys (chapter 8.5), each MAY carry `from` and `until` so a
+  rotated key still verifies what it signed, and MAY list keys of the people it hosts by their IDs (chapter
+  14.1); a party with no published key has unsigned data, which readers MAY refuse.
 - `emergency`, for a platform that hosts owners: its emergency-access terms (chapter 14.13), as
   `{"approvers": 2, "longest": "PT24H", "notify": "…", "keys": {…}}`, with the separate keys its approvers
   sign with. A platform without it can make no emergency edge.

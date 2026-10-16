@@ -122,7 +122,7 @@ Each write is one of these:
 | **run** | `run`, `contract`, its idempotency key, `state`: `started`, `acted`, `failed`, `closed`, and on `started` the versions of the contract, the package and the rules it uses (chapter 7.4) | the run's state (chapter 7.5) |
 | **define** | a member of the owner's working package (chapter 11.4) as it now stands: `facet`, `class`, `rule`, `contract`, `kind`, `view`, `shape`, `filter`, `migration`, `permissions` or `ownership`, in the JSON form, or its name and `"retired": true`; or `package`, the package's own settings (chapter 11.1: its trust order, prefixes, pins and thresholds) | the definition in force from this entry on; `by` is the person who changed it, in the same entry as the review write when a review decision did (chapter 9.5) |
 | **install** | the package identity and version | a package of another owner the store adopts; the restamp that follows is its own entries |
-| **read** | `record`, under an emergency edge only (chapter 14.13) | nothing; it is the record that a read happened |
+| **read** | `record` and the `edge` it was read under, under an emergency edge only (chapter 14.13) | nothing; it is the record that a read happened |
 
 Definitions are state like records: the owner's working package is what the `define` writes build, so a
 rebuild (8.5.3) recovers the definitions in force at any entry together with the data, and replay (chapter
