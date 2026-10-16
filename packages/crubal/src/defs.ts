@@ -4,6 +4,10 @@
 
 import { CrubalError, type Node, readTree } from "./tree.ts";
 import { readList, splitTop } from "./lex.ts";
+import { unitOf } from "./units.ts";
+
+/** The table's unit for a spelling (`hr` → `h`); a currency, `currency` or an unknown word as written. */
+const canonicalUnit = (u: string) => unitOf(u) ?? u;
 
 export const TYPES = ["text", "number", "date", "time", "yes-no", "choice", "link", "image", "compound"] as const;
 export type FacetType = (typeof TYPES)[number];
@@ -283,7 +287,7 @@ function parseLine(text: string, line: number): Parsed {
   } else if (mark === "#") {
     facet.type = "number";
     const unit = rest.slice(1).match(/^[A-Za-z%°µ/]+/);
-    if (unit) facet.unit = unit[0];
+    if (unit) facet.unit = canonicalUnit(unit[0]);
     rest = rest.slice(1 + (unit?.[0].length ?? 0));
   } else if (mark === "@") {
     // The letters run y, m, d, h, m, s: `@ymdhm` is a date with a time to the minute, `@hm` a time of day.
@@ -388,7 +392,8 @@ function applySetting(f: Facet, name: string, value: string, line: number) {
       f.ordered = yes(v);
       return;
     case "unit":
-      f.unit = v;
+      // A unit is a spelling (4.2); the definition keeps the table's unit so values convert and compare by it.
+      f.unit = canonicalUnit(v);
       return;
     case "identity":
       f.identity = v;
@@ -428,7 +433,7 @@ function applySetting(f: Facet, name: string, value: string, line: number) {
       f.qualifiers.push(...readList(v, line).map((p) => p.text));
       return;
     case "accepts":
-      f.accepts.push(...readList(v, line).map((p) => p.text));
+      f.accepts.push(...readList(v, line).map((p) => canonicalUnit(p.text)));
       return;
     case "length":
       f.length = Number(v);
