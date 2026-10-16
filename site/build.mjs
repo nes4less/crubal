@@ -259,7 +259,7 @@ if (existsSync(join(out, "404", "index.html"))) cpSync(join(out, "404", "index.h
 const crubal = await import(join(root, "packages", "crubal", "src", "index.ts"));
 // crubal.com's signing key (8.5, 11.7): the public half here and in the well-known file; the private half only in the build's environment.
 const SIGNING_PUBLIC = "ZdAEPbw_CMLYZIjYM-xXBRF2tSu0Wb5aO76ebEqi4Do";
-const STD = ["core", "units", "product", "service", "commerce", "media"];
+const STD = ["core", "units", "party", "product", "service", "commerce", "media"];
 const stdPackages = [];
 
 
@@ -351,7 +351,7 @@ page(
 <h2>Listed packages</h2>
 ${listed.length ? `<ul>${listed.map((p) => `<li><code>${esc(p.package)}</code></li>`).join("")}</ul>` : `<p>None yet. Add yours with a pull request to <a href="${REPO}/blob/main/registry/packages.json"><code>registry/packages.json</code></a>.</p>`}
 <p>As data: <a href="/registry/index.json"><code>/registry/index.json</code></a>.</p>`,
-  "The standard CRUBAL packages (core, units, product, service, commerce, media) and the registry of packages from any domain.",
+  "The standard CRUBAL packages (core, units, party, product, service, commerce, media) and the registry of packages from any domain.",
 );
 mkdirSync(join(out, ".well-known"), { recursive: true });
 writeFileSync(

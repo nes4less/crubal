@@ -59,4 +59,7 @@ file, dependencies first. What the gate names is now exercised by the host suite
 host: install by well-known, views projected and served by the index, a form run, a send acted and
 answered, a scheduled tick, an erasure, an offer taken across owners, a stream pushed. The runbook for the
 real thing is `docs/design/gate-runbook.md`. Step 8 waits on the operator's parked rulings (the standard
-vocabularies: party, media classes by format, the order kind; the ME package's triage).
+vocabularies: party, media classes by format, the order kind; the ME package's triage). Party was ruled and
+landed 2026-10-16 (`std/party`, docs/design/party.md): the three caller kinds, contact facets at staff, `connect`
+and `profile` forms; roles and relations stay the adopter's. Still parked: media classes by format, the order kind,
+the ME triage.

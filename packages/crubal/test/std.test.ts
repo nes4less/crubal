@@ -7,7 +7,7 @@ const std = (p: string) => readFileSync(new URL(`../../../std/${p}`, import.meta
 
 // A package is checked with the packages it extends in the dictionary (11.4), as a publish does.
 const EXTENDS: { [name: string]: string[] } = { commerce: ["product", "service"], media: ["product"] };
-for (const name of ["core", "units", "product", "service", "commerce", "media"]) {
+for (const name of ["core", "units", "party", "product", "service", "commerce", "media"]) {
   test(`the standard package ${name} passes its publish checks`, () => {
     const src = std(`${name}/package.crubal`);
     checkPackages(src);

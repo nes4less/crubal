@@ -1,7 +1,6 @@
 # The party package: proposal
 
-**Status:** proposal for the operator, 2026-10-16. Nothing here is published; `std/party` is written once the
-decisions at the end are ruled. Spec 11.7 names `crubal.com/party` as the package holding "the `person`,
+**Status:** ruled 2026-10-16, all seven recommendations as drafted ("go with reccs"); `std/party` is the package below, published through the engine's checks beside the other five. Spec 11.7 names `crubal.com/party` as the package holding "the `person`,
 `organization` and `system` kinds, their base classes, and the caller facets that edges, contracts and the trust
 order read (chapter 14)". Every other standard vocabulary leans on it: a caller is a record of one of these
 kinds (14.1), `who` conditions read its facets (7.6), audiences and roles sit on it (12.4), and the host writes
