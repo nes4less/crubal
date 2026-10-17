@@ -152,7 +152,11 @@ function test(e: Extract<Expr, { op: "test" }>, values: JsonObject, states?: Sta
     const set = e.arg.split(",").map((x) => unq(x.trim()));
     return items.some((x) => set.includes(x));
   }
-  const n = Number.parseFloat(items[0] ?? "");
+  // `over` and `under` compare numbers; on text they compare its length in characters, which is what the
+  // `length` shortcut's rule (`key under N+1`, 4.4) and a hand-written `title over 80` mean.
+  const first = items[0] ?? "";
+  const parsed = Number.parseFloat(first);
+  const n = Number.isNaN(parsed) || !/^-?\d/.test(first.trim()) ? [...first].length : parsed;
   const m = Number.parseFloat(e.arg);
   if (e.verb === "over") return n > m;
   if (e.verb === "under") return n < m;
