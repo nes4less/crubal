@@ -157,6 +157,12 @@ export class Exchange {
   bindings = new Map<string, string>();
   /** Set to make the border consult access: `run` needs the caller's `run` item, gated access suggests. */
   access?: Access;
+  /**
+   * How an arrival's new record is named (9.2a). A persistent store sets this to mint the next id of the
+   * owner (`P-2` after `P-1`), since an Exchange is built per run and its own counter would start again.
+   * Without it the memory border's `<L>-NEW<n>` stands.
+   */
+  mint?: (level: string) => string;
   /** Set to make every run a transaction (8.5): the border works on the journal's draft and commits each run. */
   journal?: Journal;
   /** Set to let stream contracts (12.6.2) carry the views' projection streams. */
@@ -561,7 +567,7 @@ export class Exchange {
     // A refusal by the rules puts everything back: the arrival never happened.
     const prevRecords = new Map(this.records);
     const prevBindings = new Map(this.bindings);
-    const { arrival, record } = arrive(c, body, level, this, this.dict, { mint: () => `${level.charAt(0).toUpperCase()}-NEW${++this.minted}`, owner, ...(of ? { of } : {}), intakeId: `I-${log.slice(2)}` });
+    const { arrival, record } = arrive(c, body, level, this, this.dict, { mint: () => (this.mint ? this.mint(level) : `${level.charAt(0).toUpperCase()}-NEW${++this.minted}`), owner, ...(of ? { of } : {}), intakeId: `I-${log.slice(2)}` });
     const out: RunResult = { contract: name, ...(callerId ? { caller: callerId } : {}), arrival: arrival as unknown as Json, log };
     if (record) {
       // 6. Rules, over what landed (everything, for a new record).

@@ -121,10 +121,27 @@ export class PgBorder {
    * keys; `fn` runs it; its changes and its run write become the entry. The function MUST be pure over the
    * draft (it may run more than once while the working set loads).
    */
+  /** The highest number behind each id prefix the owner has (`P-` → 3050), so an arrival mints the next (9.2a). */
+  private async idCounts(): Promise<{ [prefix: string]: number }> {
+    const { rows } = await this.store.pool.query(
+      "select split_part(id, '-', 1) as p, max(case when id ~ '^[A-Z]+-[0-9]+$' then split_part(id, '-', 2)::bigint else 0 end) as n from records where owner = $1 and id like '%-%' group by 1",
+      [this.owner],
+    );
+    return Object.fromEntries((rows as { p: string; n: string | number }[]).map((r) => [r.p, Number(r.n)]));
+  }
+
   async run<T extends RunResult>(fn: (ex: Exchange) => T, at?: string, seed: { observations?: JsonObject[]; review?: JsonObject[] } = {}): Promise<T> {
     const { runs, sent, known, open } = await this.past();
+    const counts = await this.idCounts();
     const { out } = await this.store.commitFrom((draft: Draft) => {
       const ex = new Exchange(this.o.dict, this.o.contracts, this.o.roles ?? [], this.o.rules ?? []);
+      // Ids are minted from the owner's highest per prefix, afresh each pass (the function may run more than once).
+      const next = { ...counts };
+      ex.mint = (level: string) => {
+        const p = level.charAt(0).toUpperCase();
+        next[p] = (next[p] ?? 0) + 1;
+        return `${p}-${next[p]}`;
+      };
       ex.records = draft.records;
       ex.bindings = draft.bindings;
       ex.review = draft.review;

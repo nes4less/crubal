@@ -500,6 +500,40 @@ export class Host {
     return j.keys ?? {};
   }
 
+  /**
+   * Install into one owner what another owner on this host already holds (brief 1: a person's chain takes
+   * the person package from the platform's own log): the bundle and what it extends, in order, each skipped
+   * when the target already has that version. The source's bundles were verified when it installed them.
+   */
+  async installFromOwner(target: string, source: string, pkg: string, version?: string, at = this.now()): Promise<JsonObject[]> {
+    const have = (await (await this.storeFor(target)).state()).installed.map((i) => `${i.package} /${i.version}`);
+    const rows = (await this.pool.query("select package, version, json from bundles where owner = $1", [source])).rows as { package: string; version: string; json: JsonObject }[];
+    const find = (id: string, v?: string) => {
+      const mine = rows.filter((r) => r.package === id || r.package === id.split("/").pop());
+      const pick = v ? mine.find((r) => r.version === v) : mine.sort((a, b) => (a.version < b.version ? 1 : -1))[0];
+      if (!pick) throw new Error(`${source} holds no ${id}${v ? ` /${v}` : ""} to install into ${target}`);
+      return pick;
+    };
+    const out: JsonObject[] = [];
+    const store = await this.storeFor(target);
+    const seen = new Set<string>();
+    const put = async (id: string, v?: string) => {
+      const b = find(id, v);
+      const key = `${b.json.id} /${b.version}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      for (const e of (b.json.extends as JsonObject[] | undefined) ?? []) {
+        const dep = String(e.package).includes("/") ? String(e.package) : `${b.json.owner}/${e.package}`;
+        await put(dep, String(e.version));
+      }
+      if (have.includes(key)) return;
+      const entry = await store.install(b.json, undefined, at);
+      out.push({ installed: String(b.json.id), version: b.version, entry: String(entry.log) });
+    };
+    await put(pkg, version);
+    return out;
+  }
+
   /** Install a published version for an owner: the publisher's keys from its well-known file, then the store. */
   async install(owner: string, bundle: JsonObject): Promise<JsonObject> {
     const store = await this.storeFor(owner);
