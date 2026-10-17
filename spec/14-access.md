@@ -340,3 +340,9 @@ other.
 
 A store MUST refuse an emergency edge that lacks the approvals its platform's published terms require,
 names the requester as an approver, carries `admin`, `grant` or an owner power, or outlasts the terms.
+
+**A hosted person's departure.** A platform that hosts persons (14.8) MAY lapse the edges a person holds in
+other owners' logs when that person deletes themselves. It writes only `until` on edges whose `who` is that
+person, each entry's `by` names the platform's action and the person, and nothing else of the owner's is
+touched. This is the person's right exercised through their host, not the platform's reach: it needs no
+emergency edge and no approval, and the owner sees it in their log like any other write.
