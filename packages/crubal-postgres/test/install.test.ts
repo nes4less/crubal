@@ -146,6 +146,23 @@ class: Root
     origin
 `, { date: "2026-10-01" }).bundle;
   await assert.rejects(store.install(clash, undefined, "2026-10-17T00:00:01Z"), /defines origin as link, but keys.example\/places defines it as yes-no/);
+  const sameTypeOtherList = publish(`package: sizes /2026-10-01
+  owner: keys.example
+  label: Sizes
+  crubal: 2
+
+kind: garment
+  levels: garment
+  base: Garment
+
+origin{here|there}
+
+class: Garment
+  for: garment
+  facets:
+    origin
+`, { date: "2026-10-01" }).bundle;
+  await assert.rejects(store.install(sameTypeOtherList, undefined, "2026-10-17T00:00:01Z"), /defines origin as choice/);
   const roots1 = publish(`package: roots /2026-10-01
   owner: keys.example
   label: Roots

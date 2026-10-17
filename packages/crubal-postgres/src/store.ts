@@ -11,7 +11,7 @@ import type { Json, JsonObject, Record } from "@cruba/crubal";
 import { entryHash, verifyChain, writeHash, type Keys } from "@cruba/crubal";
 import { type Client, type Pool, transaction } from "./db.ts";
 import { isObj, loadState, persist, wipeState, recordOf } from "./state.ts";
-import { type Parsed, readBundle, readBundleOnto, verifyBundle } from "@cruba/crubal";
+import { type Facet, type Parsed, readBundle, readBundleOnto, verifyBundle } from "@cruba/crubal";
 import { dryRun, restamp, type StepStats } from "@cruba/crubal";
 import { checkAll, definitionsOf, unitsExtensionOf, workingBundle } from "./definitions.ts";
 import { decideReview, type Decision, openItems } from "@cruba/crubal";
@@ -40,6 +40,13 @@ export type StoreOptions = {
   /** The signer for a person this owner hosts (14.1), made on their first write; the host holds the key. */
   hostedSigner?: (owner: string) => Promise<((hash: string) => string) | undefined>;
 };
+
+/** What two definitions of one key must agree on (11.4): the type, the unit, how many, the list of values. */
+function facetShape(f: Facet): string {
+  const values = Array.isArray(f.values) ? (f.values as { value: string }[]).map((v) => v.value).join("|") : "";
+  const pick = f.pick !== undefined && String(f.pick) !== "1" ? `pick ${String(f.pick)}` : "";
+  return [f.type, f.unit ?? "", pick, values].filter(Boolean).join(" ");
+}
 
 /** Is a record the package's own (10.4): of a kind it defines, or wearing a class it defines? */
 function ownRecord(own: Parsed, r: { kind: string; wears?: string[] }): boolean {
@@ -183,7 +190,9 @@ export class PgStore {
         const theirs = readBundle(o.json).dict.facets;
         for (const [key, f] of own.dict.facets) {
           const t = theirs.get(key);
-          if (t && t.type !== f.type && before.get(key)?.type !== f.type) throw new Error(`${bundle.id} /${bundle.version} defines ${key} as ${f.type}, but ${o.package} defines it as ${t.type}; one dictionary, one key`);
+          if (!t) continue;
+          const mine = facetShape(f);
+          if (mine !== facetShape(t) && (!before.get(key) || facetShape(before.get(key) as Facet) !== mine)) throw new Error(`${bundle.id} /${bundle.version} defines ${key} as ${mine}, but ${o.package} defines it as ${facetShape(t)}; one dictionary, one key`);
         }
       }
     }

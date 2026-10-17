@@ -72,6 +72,8 @@ export type HostOptions = {
   idPrefixes?: { [level: string]: string };
   /** The key connection material is sealed with at rest; `CRUBAL_SECRETS_KEY` in the environment otherwise. Without one no secret is stored. */
   secretsKey?: string;
+  /** The id of an owner's root record, which connections sit within and whose admin manages them; `ROOT` otherwise. */
+  rootRecord?: string;
 };
 
 export const hashKey = (key: string) => createHash("sha256").update(key).digest("hex");
@@ -138,7 +140,7 @@ export class Host {
   private async requireConnections(store: PgStore, owner: string, person: string): Promise<void> {
     const [p, state] = await Promise.all([store.definitions(), store.state()]);
     const access = new Access(p.dict, p.perms, state.records, [...state.edges.values()] as never[], owner);
-    const eff = access.effective(person, "ROOT");
+    const eff = access.effective(person, this.o.rootRecord ?? "ROOT");
     if (eff.mode !== "admin" && !eff.items.has("connections")) throw Object.assign(new Error(`${person} may not manage ${owner}'s connections`), { status: 403 });
   }
 
@@ -156,7 +158,8 @@ export class Host {
     await store.commit(
       { platform: "connection", ...(person ? { person } : {}) },
       (d) => {
-        const base: CrubalRecord = existing ?? { id, kind: "system", level: "system", owner, ...(state.records.get("ROOT") ? { within: "ROOT" } : {}), values: { name, systemKind: "partner" }, sources: { "*": { origin: "observed", via: "host" } } };
+        const root = this.o.rootRecord ?? "ROOT";
+        const base: CrubalRecord = existing ?? { id, kind: "system", level: "system", owner, ...(state.records.get(root) ? { within: root } : {}), values: { name, systemKind: "partner" }, sources: { "*": { origin: "observed", via: "host" } } };
         const sources = { ...(base.sources ?? {}) };
         for (const k of Object.keys(values)) if (!sources[k]) sources[k] = { origin: "observed", via: "host" };
         d.records.set(id, { ...base, values: { ...base.values, ...values }, sources });
