@@ -5,10 +5,10 @@
 // read under it is logged; the owner is told. The people and the policy are the platform's.
 
 import { createPublicKey, verify as edVerify } from "node:crypto";
-import { serialize } from "../../crubal/src/canonical.ts";
-import type { JsonObject } from "../../crubal/src/model.ts";
-import { sha256 } from "../../crubal/src/store.ts";
-import type { PgStore } from "../../crubal-postgres/src/store.ts";
+import { serialize } from "@cruba/crubal";
+import type { JsonObject } from "@cruba/crubal";
+import { sha256 } from "@cruba/crubal";
+import type { PgStore } from "@cruba/crubal-postgres";
 
 export type EmergencyTerms = {
   /** How many approvers an edge needs. */

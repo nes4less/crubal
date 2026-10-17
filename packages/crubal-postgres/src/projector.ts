@@ -3,12 +3,12 @@
 // outside any write transaction, rebuilds only the marked rows with the engine's Views, upserts the
 // projection and appends one stream entry per row that changed or left, numbered per view and audience.
 
-import { Access, type Permissions } from "../../crubal/src/access.ts";
-import { serialize } from "../../crubal/src/canonical.ts";
-import type { Dictionary } from "../../crubal/src/defs.ts";
-import type { State } from "../../crubal/src/log.ts";
-import type { Json, JsonObject, Record } from "../../crubal/src/model.ts";
-import { type StreamEntry, Views, type ViewSet } from "../../crubal/src/views.ts";
+import { Access, type Permissions } from "@cruba/crubal";
+import { serialize } from "@cruba/crubal";
+import type { Dictionary } from "@cruba/crubal";
+import type { State } from "@cruba/crubal";
+import type { Json, JsonObject, Record } from "@cruba/crubal";
+import { type StreamEntry, Views, type ViewSet } from "@cruba/crubal";
 import type { Client } from "./db.ts";
 import { Needs, settle, workingState, loadWhole } from "./working.ts";
 

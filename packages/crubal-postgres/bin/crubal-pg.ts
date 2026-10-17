@@ -12,10 +12,10 @@
 //   crubal-pg tick <owner> <contract> --now <moment> --defs <file>...   run a scheduled contract's due ticks
 
 import { readFileSync } from "node:fs";
-import { emptyDictionary, readDefinitions } from "../../crubal/src/defs.ts";
-import { readContracts } from "../../crubal/src/store.ts";
-import { readViews } from "../../crubal/src/views.ts";
-import { readAccess } from "../../crubal/src/access.ts";
+import { emptyDictionary, readDefinitions } from "@cruba/crubal";
+import { readContracts } from "@cruba/crubal";
+import { readViews } from "@cruba/crubal";
+import { readAccess } from "@cruba/crubal";
 import { PgBorder } from "../src/border.ts";
 import { connect, migrate, transaction } from "../src/db.ts";
 import { PgStore } from "../src/store.ts";

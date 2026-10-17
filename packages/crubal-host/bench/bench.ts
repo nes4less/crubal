@@ -2,11 +2,11 @@
 // (100,200 records), then the cost of: a commit attaching one unit, a receive on one product, a publish
 // of one view after one write, an index page with two picks, and a search. Targets: a commit under 50 ms,
 // a page under 100 ms. Run with CRUBAL_PG_URL set:  node bench/bench.ts [--products 200 --units 500]
-import { publish } from "../../crubal/src/publish.ts";
-import type { JsonObject } from "../../crubal/src/model.ts";
-import { PgBorder } from "../../crubal-postgres/src/border.ts";
-import { connect, testSchema } from "../../crubal-postgres/src/db.ts";
-import { PgStore } from "../../crubal-postgres/src/store.ts";
+import { publish } from "@cruba/crubal";
+import type { JsonObject } from "@cruba/crubal";
+import { PgBorder } from "@cruba/crubal-postgres";
+import { connect, testSchema } from "@cruba/crubal-postgres";
+import { PgStore } from "@cruba/crubal-postgres";
 import { Host } from "../src/host.ts";
 import { Index } from "../src/indexer.ts";
 

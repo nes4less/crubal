@@ -3,8 +3,8 @@
 // consent, or a pasted key), refreshed and rotated by the host, and never enters a package or the log. The
 // reference host keeps the material in its own table; a platform puts a vault behind the same interface.
 
-import type { JsonObject } from "../../crubal/src/model.ts";
-import type { Pool } from "../../crubal-postgres/src/db.ts";
+import type { JsonObject } from "@cruba/crubal";
+import type { Pool } from "@cruba/crubal-postgres";
 
 export type Connection = { owner: string; name: string; scheme: string; scopes: string[]; status: "connected" | "expired"; expires?: string; connected: string };
 

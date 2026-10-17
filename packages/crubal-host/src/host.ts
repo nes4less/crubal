@@ -4,14 +4,14 @@
 
 import { createHash, createPrivateKey, generateKeyPairSync, randomBytes, sign as edSign } from "node:crypto";
 import { ChainedSecrets, EnvSecrets, FunctionSecrets, type SecretStore } from "./secrets.ts";
-import { type Offer, verifyBorder } from "../../crubal/src/exchange.ts";
-import type { StreamEntry } from "../../crubal/src/views.ts";
+import { type Offer, verifyBorder } from "@cruba/crubal";
+import type { StreamEntry } from "@cruba/crubal";
 import { readFileSync } from "node:fs";
-import type { Json, JsonObject } from "../../crubal/src/model.ts";
-import { type Contract, type Keys, keyFor } from "../../crubal/src/store.ts";
-import { type Adapter, PgBorder, borderOptions } from "../../crubal-postgres/src/border.ts";
-import { type Client, migrate as migrateStore, type Pool, transaction } from "../../crubal-postgres/src/db.ts";
-import { PgStore } from "../../crubal-postgres/src/store.ts";
+import type { Json, JsonObject } from "@cruba/crubal";
+import { type Contract, type Keys, keyFor } from "@cruba/crubal";
+import { type Adapter, PgBorder, borderOptions } from "@cruba/crubal-postgres";
+import { type Client, migrate as migrateStore, type Pool, transaction } from "@cruba/crubal-postgres";
+import { PgStore } from "@cruba/crubal-postgres";
 import { Credentials, type OAuthProvider } from "./credentials.ts";
 import type { EmergencyTerms } from "./emergency.ts";
 import { verifyRequest, signRequest } from "./signatures.ts";

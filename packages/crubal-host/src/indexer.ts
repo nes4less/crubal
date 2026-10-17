@@ -3,11 +3,11 @@
 // pages, counts, partitions, role marks, search and indexability over the rows it holds. It is never the
 // truth: a contract checks the store, and the index can be dropped and rebuilt from the stream.
 
-import { Access } from "../../crubal/src/access.ts";
-import type { Json, JsonObject } from "../../crubal/src/model.ts";
-import { type Nested, partitionOf, type StreamEntry, type View } from "../../crubal/src/views.ts";
-import type { Pool } from "../../crubal-postgres/src/db.ts";
-import type { PgStore } from "../../crubal-postgres/src/store.ts";
+import { Access } from "@cruba/crubal";
+import type { Json, JsonObject } from "@cruba/crubal";
+import { type Nested, partitionOf, type StreamEntry, type View } from "@cruba/crubal";
+import type { Pool } from "@cruba/crubal-postgres";
+import type { PgStore } from "@cruba/crubal-postgres";
 
 type Row = { [column: string]: unknown };
 const isObj = (v: Json | undefined): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);

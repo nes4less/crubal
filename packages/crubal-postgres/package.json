@@ -1,24 +1,28 @@
 {
   "name": "@cruba/crubal-postgres",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "The persistent CRUBAL store on Postgres: the log as the truth, every other table a cache rebuilt from it.",
   "license": "Apache-2.0",
   "type": "module",
-  "private": true,
-  "engines": {
-    "node": ">=22"
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
   },
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "files": ["dist", "README.md"],
+  "engines": { "node": ">=22" },
   "scripts": {
     "test": "node --test test/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && cp src/schema.sql dist/src/",
+    "prepublishOnly": "npm run typecheck && npm run build"
   },
-  "dependencies": {
-    "pg": "^8.13.0"
-  },
-  "devDependencies": {
-    "@types/node": "^24.0.0",
-    "@types/pg": "^8.11.0",
-    "typescript": "^5.6.0"
-  },
+  "dependencies": { "@cruba/crubal": "0.1.2", "pg": "^8.13.0" },
+  "devDependencies": { "@types/node": "^24.0.0", "@types/pg": "^8.11.0", "typescript": "^5.6.0" },
+  "repository": { "type": "git", "url": "git+https://github.com/nes4less/crubal.git", "directory": "packages/crubal-postgres" },
+  "publishConfig": { "access": "public" },
   "author": "Chris Thompson"
 }

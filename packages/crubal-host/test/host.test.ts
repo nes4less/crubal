@@ -4,10 +4,10 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { after, before, test } from "node:test";
-import { publish } from "../../crubal/src/publish.ts";
-import { verifyChain } from "../../crubal/src/store.ts";
-import type { JsonObject } from "../../crubal/src/model.ts";
-import { connect, testSchema, type Pool } from "../../crubal-postgres/src/db.ts";
+import { publish } from "@cruba/crubal";
+import { verifyChain } from "@cruba/crubal";
+import type { JsonObject } from "@cruba/crubal";
+import { connect, testSchema, type Pool } from "@cruba/crubal-postgres";
 import { Host } from "../src/host.ts";
 import { serve } from "../src/server.ts";
 

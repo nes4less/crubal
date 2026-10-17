@@ -3,15 +3,15 @@
 // owner's working package, every `define` write as the member now stands. The publish checks run on the
 // result, so a definition that breaks the set is refused before it is written.
 
-import { checkPermissions } from "../../crubal/src/access.ts";
-import { emptyParsed, type Parsed, readBundleOnto } from "../../crubal/src/bundle.ts";
-import { checkPackage } from "../../crubal/src/dictionary.ts";
-import { checkContracts } from "../../crubal/src/exchange.ts";
-import type { JsonObject } from "../../crubal/src/model.ts";
-import { unitsExtensionText } from "../../crubal/src/review.ts";
-import { extendUnits, resetUnits } from "../../crubal/src/units.ts";
-import { checkRules } from "../../crubal/src/rules.ts";
-import { checkViews } from "../../crubal/src/views.ts";
+import { checkPermissions } from "@cruba/crubal";
+import { emptyParsed, type Parsed, readBundleOnto } from "@cruba/crubal";
+import { checkPackage } from "@cruba/crubal";
+import { checkContracts } from "@cruba/crubal";
+import type { JsonObject } from "@cruba/crubal";
+import { unitsExtensionText } from "@cruba/crubal";
+import { extendUnits, resetUnits } from "@cruba/crubal";
+import { checkRules } from "@cruba/crubal";
+import { checkViews } from "@cruba/crubal";
 import type { Client } from "./db.ts";
 
 type Row = { [column: string]: unknown };

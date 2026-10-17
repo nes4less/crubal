@@ -3,9 +3,9 @@
 // store's access. Nothing here decides anything a package could say.
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { Access } from "../../crubal/src/access.ts";
-import { formOf } from "../../crubal/src/forms.ts";
-import { type Json, type JsonObject, parseJson } from "../../crubal/src/model.ts";
+import { Access } from "@cruba/crubal";
+import { formOf } from "@cruba/crubal";
+import { type Json, type JsonObject, parseJson } from "@cruba/crubal";
 import type { Caller, Host } from "./host.ts";
 import { endEmergencyEdge, type EmergencyRequest, logEmergencyRead, makeEmergencyEdge } from "./emergency.ts";
 import { Index } from "./indexer.ts";

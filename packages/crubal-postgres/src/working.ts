@@ -4,10 +4,10 @@
 // A run that reaches the end with every question answered saw the same records a whole-state load would
 // have shown it, and touched only those.
 
-import { serialize } from "../../crubal/src/canonical.ts";
-import { emptyState, type State } from "../../crubal/src/log.ts";
-import type { Json, JsonObject, Record } from "../../crubal/src/model.ts";
-import { MemoryRecords } from "../../crubal/src/records.ts";
+import { serialize } from "@cruba/crubal";
+import { emptyState, type State } from "@cruba/crubal";
+import type { Json, JsonObject, Record } from "@cruba/crubal";
+import { MemoryRecords } from "@cruba/crubal";
 import type { Client } from "./db.ts";
 import { recordOf } from "./state.ts";
 

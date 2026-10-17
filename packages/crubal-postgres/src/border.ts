@@ -4,18 +4,18 @@
 // runs table, so a run never acts twice across restarts (7.5); stream contracts read the projection stream
 // and keep an index's cursor (12.6.2); scheduled contracts tick from the schedules table (7.11).
 
-import { Access, type Edge, type Permissions } from "../../crubal/src/access.ts";
-import type { Dictionary } from "../../crubal/src/defs.ts";
-import { Exchange, type Role, type RunResult } from "../../crubal/src/exchange.ts";
-import type { Draft, Journal } from "../../crubal/src/log.ts";
-import type { Json, JsonObject, Record } from "../../crubal/src/model.ts";
-import { MemoryRecords } from "../../crubal/src/records.ts";
-import type { Rule } from "../../crubal/src/rules.ts";
-import { isSchedule, readSchedule, ticksDue } from "../../crubal/src/schedule.ts";
-import { openItems } from "../../crubal/src/review.ts";
-import { type Contract, receive } from "../../crubal/src/store.ts";
-import type { Offer } from "../../crubal/src/exchange.ts";
-import type { StreamEntry } from "../../crubal/src/views.ts";
+import { Access, type Edge, type Permissions } from "@cruba/crubal";
+import type { Dictionary } from "@cruba/crubal";
+import { Exchange, type Role, type RunResult } from "@cruba/crubal";
+import type { Draft, Journal } from "@cruba/crubal";
+import type { Json, JsonObject, Record } from "@cruba/crubal";
+import { MemoryRecords } from "@cruba/crubal";
+import type { Rule } from "@cruba/crubal";
+import { isSchedule, readSchedule, ticksDue } from "@cruba/crubal";
+import { openItems } from "@cruba/crubal";
+import { type Contract, receive } from "@cruba/crubal";
+import type { Offer } from "@cruba/crubal";
+import type { StreamEntry } from "@cruba/crubal";
 import type { PgStore } from "./store.ts";
 
 /** What performs a run's act (7.4 step 4): the host's code for a system; never a package's. */
@@ -145,7 +145,7 @@ export class PgBorder {
         if (this.acting) this.cap(ex.access, this.acting);
       }
       // The rules engine knows every record the working set holds, as the memory border's does.
-      for (const [, r] of Map.prototype.entries.call(draft.records) as Iterable<[string, import("../../crubal/src/model.ts").Record]>) ex.engine.put(r);
+      for (const [, r] of Map.prototype.entries.call(draft.records) as Iterable<[string, import("@cruba/crubal").Record]>) ex.engine.put(r);
       let captured: { by: JsonObject; extra: JsonObject[] } = { by: { contract: "" }, extra: [] };
       ex.journal = { commit: (by: JsonObject, _m: unknown, _at: unknown, extra: JsonObject[] = []) => { captured = { by, extra }; return null; } } as unknown as Journal;
       const edgesBefore = new Set(draft.edges.keys());

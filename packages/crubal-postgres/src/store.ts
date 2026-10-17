@@ -2,23 +2,23 @@
 // chain, build the entry, apply it with the engine's applyEntry, persist the difference, append the log.
 // The log is the truth; `rebuild` gives every other table back from it.
 
-import { applyEntry, diffWrites, differs, type Draft, type Entry, type State } from "../../crubal/src/log.ts";
-import { CrubalError } from "../../crubal/src/tree.ts";
-import { Access, type Edge } from "../../crubal/src/access.ts";
-import type { View } from "../../crubal/src/views.ts";
-import { apply, pending, type Store as LifecycleStore } from "../../crubal/src/lifecycle.ts";
-import type { Json, JsonObject, Record } from "../../crubal/src/model.ts";
-import { entryHash, verifyChain, writeHash, type Keys } from "../../crubal/src/store.ts";
+import { applyEntry, diffWrites, differs, type Draft, type Entry, type State } from "@cruba/crubal";
+import { CrubalError } from "@cruba/crubal";
+import { Access, type Edge } from "@cruba/crubal";
+import type { View } from "@cruba/crubal";
+import { apply, pending, type Store as LifecycleStore } from "@cruba/crubal";
+import type { Json, JsonObject, Record } from "@cruba/crubal";
+import { entryHash, verifyChain, writeHash, type Keys } from "@cruba/crubal";
 import { type Client, type Pool, transaction } from "./db.ts";
 import { isObj, loadState, persist, wipeState, recordOf } from "./state.ts";
-import { type Parsed, readBundleOnto, verifyBundle } from "../../crubal/src/bundle.ts";
-import { dryRun, restamp, type StepStats } from "../../crubal/src/migrate.ts";
+import { type Parsed, readBundleOnto, verifyBundle } from "@cruba/crubal";
+import { dryRun, restamp, type StepStats } from "@cruba/crubal";
 import { checkAll, definitionsOf, unitsExtensionOf, workingBundle } from "./definitions.ts";
-import { decide as decideReview, type Decision, openItems } from "../../crubal/src/review.ts";
-import { land, receive, type IntakeOutcome } from "../../crubal/src/store.ts";
+import { decideReview, type Decision, openItems } from "@cruba/crubal";
+import { land, receive, type IntakeOutcome } from "@cruba/crubal";
 import { entriesSince, markStale, type Projecting, publish } from "./projector.ts";
 import { copyWorking, loadWhole, Needs, settle, type WorkingRecords, workingState } from "./working.ts";
-import type { StreamEntry } from "../../crubal/src/views.ts";
+import type { StreamEntry } from "@cruba/crubal";
 
 /** A state's maps copied, so a draft can be changed without touching what was loaded. */
 function draftOf(state: State): Draft {
