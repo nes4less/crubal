@@ -8,10 +8,20 @@ export type Client = pg.PoolClient;
 
 const SCHEMA_SQL = readFileSync(new URL("./schema.sql", import.meta.url), "utf8");
 
-/** A pool for a connection string, or the `CRUBAL_PG_URL` environment variable. */
-export function connect(url = process.env.CRUBAL_PG_URL): Pool {
+/**
+ * A pool for a connection string, or the `CRUBAL_PG_URL` environment variable. With a schema (the argument,
+ * or `CRUBAL_PG_SCHEMA`), every connection is pinned to it: on a shared database such as a Supabase
+ * project the store and host tables live in their own schema, never in `public`, which the database's own
+ * API serves to its anonymous role.
+ */
+export function connect(url = process.env.CRUBAL_PG_URL, schema = process.env.CRUBAL_PG_SCHEMA): Pool {
   if (!url) throw new Error("no Postgres URL: pass one or set CRUBAL_PG_URL");
-  return new pg.Pool({ connectionString: url });
+  const pool = new pg.Pool({ connectionString: url });
+  if (schema) {
+    if (!/^[a-z_][a-z0-9_]*$/.test(schema)) throw new Error(`a schema is a lower-case word: ${schema}`);
+    pool.on("connect", (c) => void c.query(`set search_path to "${schema}"`));
+  }
+  return pool;
 }
 
 /** Create or update the store's tables in the current search path. Idempotent. */
