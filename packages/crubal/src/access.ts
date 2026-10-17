@@ -168,6 +168,21 @@ function durationMs(d: string): number {
 export type Effective = { mode: Mode; items: Set<string>; relations: Set<string>; gated: boolean; edges: Edge[] };
 
 export class Access {
+  /** The package's `shown to` rules (12.4), facet → lowest audience, when the caller has them; without them every facet counts as public. */
+  shown?: Map<string, string>;
+
+  /**
+   * May the caller see a facet without an item: what the show rules give their audience, capped at member
+   * (12.4, default deny above member: a staff facet takes an item; admin and the owner see everything).
+   */
+  visible(callerId: string, facet: string): boolean {
+    if (!this.shown) return true;
+    const min = this.shown.get(facet.replace(/^\w+::/, ""));
+    if (!min) return true;
+    const order = ["public", "member", "staff", "owner"];
+    return Math.min(order.indexOf(this.audienceOf(callerId)), 1) >= order.indexOf(min);
+  }
+
   /** The edges; a store that journals (chapter 8.5) points this at its draft's edges. */
   edges = new Map<string, Edge>();
   readonly dict: Dictionary;
@@ -334,15 +349,18 @@ export class Access {
         if (!targets || !(targets.includes(target) || targets.includes("*"))) continue;
         if (this.scopeOk(item, callerId, recordId, eff)) return true;
       }
-      return false;
+      // Each mode includes the ones below it (14.4): what any admitted person may do stays theirs, and
+      // above member the default is deny (12.4): a staff facet needs an item.
+      if (verb === "see") return this.visible(callerId, target);
+      return verb === "run" && eff.edges.some((e) => e.mode === "consume" && e.on === recordId);
     }
     if (eff.mode === "consume") {
       // Take part: run what the package opens to consumers on their own part (the record the consume edge
-      // sits on directly), and see what the views show. Changing anything else is a contract's job.
-      if (verb === "see") return true;
+      // sits on directly), and see what the show rules let their audience see. Changing anything else is a contract's job.
+      if (verb === "see") return this.visible(callerId, target);
       return verb === "run" && eff.edges.some((e) => e.mode === "consume" && e.on === recordId);
     }
-    if (eff.mode === "view") return verb === "see";
+    if (eff.mode === "view") return verb === "see" && this.visible(callerId, target);
     return false;
   }
 

@@ -242,11 +242,12 @@ function segment(name: string): string {
 /** A value in one of chapter 3's object forms (`$link`, `$image`, `$qty`, `$money`, `$value`, `$empty`): a leaf, not a nesting. */
 const valueObject = (v: Json): boolean => isObj(v) && Object.keys(v).some((k) => k.startsWith("$"));
 
-function leaves(obj: Json, prefix = ""): [string, Json][] {
+function leaves(obj: Json, prefix = "", whole: (path: string) => boolean = () => false): [string, Json][] {
   if (!isObj(obj) || valueObject(obj)) return [[prefix, obj]];
   return Object.entries(obj).flatMap(([k, v]) => {
     const p = prefix ? `${prefix}.${segment(k)}` : segment(k);
-    return isObj(v) && !valueObject(v) ? leaves(v, p) : ([[p, v]] as [string, Json][]);
+    // An object at a path the contract maps as one field (a compound answer, chapter 3) is one leaf.
+    return isObj(v) && !valueObject(v) && !whole(p) ? leaves(v, p, whole) : ([[p, v]] as [string, Json][]);
   });
 }
 
@@ -273,6 +274,15 @@ function foldIn(f: Facet, raw: Json, map: MapLine | undefined, dict: Dictionary)
   // by item. Anything else is text, read under the facet (chapter 2) after the map's value map and the aliases.
   const one = (r: Json): Json => {
     if (valueObject(r) || (typeof r === "boolean" && f.type === "yes-no")) return r;
+    // A compound answer as an object (chapter 3): each child folded under its own facet.
+    if (f.type === "compound" && isObj(r)) {
+      const out: JsonObject = {};
+      for (const [k, v] of Object.entries(r)) {
+        const child = f.children?.get(k);
+        out[k] = child ? foldIn(child, v, undefined, dict).value : v;
+      }
+      return out;
+    }
     let text = typeof r === "string" ? r : serialize(r);
     const vm = map?.values.find(([theirs]) => theirs === text);
     if (vm) text = vm[1];
@@ -335,7 +345,12 @@ export function reviewByKey(intakes: { for: string; outcomes: IntakeOutcome[] }[
 export function receive(c: Contract, body: string, forRecord: string, dict: Dictionary, intakeId = "I-1"): IntakeRecord {
   const payload = JSON.parse(body) as Json;
   const outcomes: IntakeOutcome[] = [];
-  for (const [path, raw] of leaves(payload)) {
+  for (const [path, raw] of leaves(payload, "", (p) => c.reads.some((m) => samePath(m.from, p)))) {
+    // An empty string is no answer (chapter 3: what is absent stays absent); an empty is written as `$empty`.
+    if (raw === "") {
+      outcomes.push({ from: path, outcome: "ignored" });
+      continue;
+    }
     if (!c.absorb || c.ignore.some((i) => samePath(i, path))) {
       outcomes.push({ from: path, outcome: "ignored" });
       continue;

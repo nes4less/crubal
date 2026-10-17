@@ -11,7 +11,7 @@ import type { Json, JsonObject, Record } from "@cruba/crubal";
 import { entryHash, verifyChain, writeHash, type Keys } from "@cruba/crubal";
 import { type Client, type Pool, transaction } from "./db.ts";
 import { isObj, loadState, persist, wipeState, recordOf } from "./state.ts";
-import { type Parsed, readBundleOnto, verifyBundle } from "@cruba/crubal";
+import { type Parsed, readBundle, readBundleOnto, verifyBundle } from "@cruba/crubal";
 import { dryRun, restamp, type StepStats } from "@cruba/crubal";
 import { checkAll, definitionsOf, unitsExtensionOf, workingBundle } from "./definitions.ts";
 import { decideReview, type Decision, openItems } from "@cruba/crubal";
@@ -40,6 +40,14 @@ export type StoreOptions = {
   /** The signer for a person this owner hosts (14.1), made on their first write; the host holds the key. */
   hostedSigner?: (owner: string) => Promise<((hash: string) => string) | undefined>;
 };
+
+/** The recipes of a package that lie between two versions, oldest first (10.1): `from` at or after the installed version, `to` at or before the new one. */
+function recipesBetween<R extends { from: string; to: string }>(recipes: R[], pkg: string, installed: string, target: string): R[] {
+  const version = (s: string) => s.slice(s.lastIndexOf("/") + 1);
+  return recipes
+    .filter((r) => r.from.startsWith(`${pkg} /`) && version(r.from) >= installed && version(r.to) <= target)
+    .sort((a, b) => (version(a.from) < version(b.from) ? -1 : version(a.from) > version(b.from) ? 1 : 0));
+}
 
 export class PgStore {
   readonly pool: Pool;
@@ -154,18 +162,31 @@ export class PgStore {
     const previous = have(String(bundle.id)).at(-1);
     if (previous === bundle.version) throw new Error(`${bundle.id} /${bundle.version} is already installed`);
     // The definitions that would result must pass every publish check before anything is written.
-    const next = readBundleOnto(bundle, await this.definitions(true));
+    const current = await this.definitions(true);
+    const next = readBundleOnto(bundle, current);
     checkAll(next);
+    // A version may not take away a preset or item that live edges still grant (14.12): lapse or regrant first.
+    if (previous) {
+      const { rows: prevRows } = await this.pool.query("select json from bundles where owner = $1 and package = $2 and version = $3", [this.owner, bundle.id, previous]);
+      const was = prevRows[0] ? readBundle((prevRows[0] as { json: JsonObject }).json).perms : current.perms;
+      const own = readBundle(bundle).perms;
+      const gone = new Set([...was.presets.keys(), ...was.menu.keys()].filter((n) => !own.presets.has(n) && !own.menu.has(n)));
+      if (gone.size) {
+        const now = at ?? new Date().toISOString();
+        const holding = [...installed.length ? (await this.state()).edges.values() : []].filter((e) => (!e.until || String(e.until) > now) && (e.grants as string[] | undefined)?.some((g) => gone.has(g)));
+        if (holding.length) throw new Error(`${bundle.id} /${bundle.version} drops ${[...gone].join(", ")}, which ${holding.map((e) => String(e.edge)).join(", ")} still grant; lapse or regrant them first`);
+      }
+    }
     // The bundle goes in first: the entry's own transaction rebuilds definitions from it. A refused install takes it out again.
     await this.pool.query("insert into bundles (owner, package, version, hash, json) values ($1, $2, $3, $4, $5) on conflict (owner, package, version) do update set hash = excluded.hash, json = excluded.json", [this.owner, bundle.id, bundle.version, bundle.hash, bundle]);
     let result: { entry: Entry | null; out: null };
     try {
       result = await this.commitFrom((draft) => {
       const extra: JsonObject[] = [{ install: { package: String(bundle.id), version: String(bundle.version), hash: String(bundle.hash) } }];
-      // A pin move restamps through the bundle's recipes from the installed version (10.4), in order.
+      // A pin move restamps through every recipe between the installed version and this one (10.1, 10.4),
+      // in order: a store two versions behind takes both steps, never only the first.
       if (previous) {
-        const recipes = ((bundle.recipes as JsonObject[] | undefined) ?? []).filter((r) => r.migration && (r.migration as JsonObject).from === `${bundle.package} /${previous}`);
-        const parsedRecipes = next.recipes.filter((r) => recipes.some((j) => (j.migration as JsonObject).from === r.from));
+        const parsedRecipes = recipesBetween(next.recipes, String(bundle.package), previous, String(bundle.version));
         for (const recipe of parsedRecipes) {
           const records = draft.records.all();
           const { records: after, review } = restamp(records, recipe, next.dict);
@@ -304,7 +325,7 @@ export class PgStore {
     if (!previous) return { recipes: [], records: 0 };
     const next = readBundleOnto(bundle, await this.definitions(true));
     const records = (await this.state()).records.all();
-    const recipes = next.recipes.filter((r) => r.from === `${bundle.package} /${previous}`).map((r) => { const d = dryRun(records, r, next.dict); return { from: r.from, to: r.to, steps: d.steps, review: d.review }; });
+    const recipes = recipesBetween(next.recipes, String(bundle.package), previous, String(bundle.version)).map((r) => { const d = dryRun(records, r, next.dict); return { from: r.from, to: r.to, steps: d.steps, review: d.review }; });
     return { recipes, records: records.length };
   }
 

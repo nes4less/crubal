@@ -40,6 +40,7 @@ a new MUST or a new case updates this file.
 | 3.8 | a payload is never parsed and re-serialized for storage | store/015-raw-bytes |
 | 3.8 | a contradiction carries exactly one `cites`; a unit question cites the unit | dictionary/003-check-outcomes, store/027-unit-question |
 | 3.1 | chapter 3's forms arrive as values through a form body: a boolean, `$link`, `$image`, a list item by item | unit: intake-json-forms.test |
+| 3.1 | a compound answer as an object is one answer, folded child by child; an empty-string answer is no answer; a bare decimal under a unit facet is that number in the unit | unit: audit-forms-access.test |
 | 4.8 | a new `must … shown to` rule is visibility, never breaking; a new must rule over data still needs `review` | unit: publish-show-rule.test |
 | 3.10 | the same canonical JSON from a text and from its print | reader/001–013 |
 | 4.1 | a published version never changes | unit: publish.test (a version is a new bundle; the registry keeps each) |
@@ -91,6 +92,9 @@ a new MUST or a new case updates this file.
 | 13.6 | the same results whatever the store's choices | pg test: every corpus log rebuilds to the same state in Postgres as in memory |
 | 14.2 | `within` never cycles, never crosses owners; ancestors kept | exchange-errors/e11-within-cycle, e13-within-another-owner, views/009-partition (ancestors) |
 | 14.6 | an item naming nothing refused | exchange-errors/x02-undefined-facet |
+| 14.4 | each mode includes the ones below it; a `see` below admin is the audience's by the show rules (capped at member) or an item's | unit: audit-forms-access.test; host.test 14.8 |
+| 10.4 | an install two versions ahead restamps through every recipe between, in order; the dry run reports them all | crubal-postgres: install.test |
+| 14.12 | a version dropping a preset or item live edges grant is refused until they lapse | crubal-postgres: install.test |
 | 14.12 | a store refuses the listed writes | exchange-errors/e07-grant-above-held, e08-cross-owner-by-admin, e12-person-owns-item, e13-within-another-owner, e14-wears-not-for-kind; pg test: refused at the commit, nothing left behind |
 | 14.9 | a system acting for a person never exceeds the person's effective access, never grants onward, never acts under an emergency edge; every such write carries `for` | host test: "acting for a person (14.9)" (runs as the person, capped to the items chosen, suggestions while gated, the entry's `by` carries `caller` and `for`, refused without the person's permission or beyond it); the onward-grant and emergency refusals are in `PgBorder.refuseActing`, exercised by the Agents object's suite later |
 | 14.8, 14.12 | a platform-hosted caller is the owner's caller without signature; a grant to one never exceeds what the grantor could grant to anyone | host test: "platform-hosted callers (14.8)" (a person proven by identity served unsigned at another owner; an admin grants them within the chain; a grant above the grantor's mode refused; a person hosted elsewhere is nobody) |

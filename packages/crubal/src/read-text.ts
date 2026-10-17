@@ -45,7 +45,13 @@ function scalar(f: Facet, p: Piece): Json {
       return !p.quoted && t.startsWith("&") ? { $link: t.slice(1) } : t;
     case "number": {
       const unit = f.unit;
-      if (!unit) return NUMBER.test(t) ? t : t;
+      if (!unit) return t;
+      // A bare decimal under a facet with a unit is that number in the facet's unit (1.4.3, 1.4.4); a facet
+      // taking any currency can't guess one, so a bare amount stays text and contradicts.
+      if (NUMBER.test(t)) {
+        if (unit === "currency") return t;
+        return /^[A-Z]{3}$/.test(unit) ? { $money: t, currency: unit } : { $qty: t, unit };
+      }
       const m = t.match(/^(-?(?:0|[1-9]\d*)(?:\.\d+)?) ?(\S+)$/);
       if (m && (unit === "currency" || /^[A-Z]{3}$/.test(unit)) && /^[A-Z]{3}$/.test(m[2] ?? "")) {
         return { $money: m[1] as string, currency: m[2] as string };

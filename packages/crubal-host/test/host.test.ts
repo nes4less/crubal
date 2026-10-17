@@ -535,6 +535,11 @@ contract: fix
     !title
     notes
 
+rule: costIsForStaff
+  for: everywhere
+  strength: must
+  then: cost shown to staff
+
 permissions: dist
   menu:
     read: see title, see cost
@@ -561,7 +566,7 @@ permissions: dist
   }, "2026-10-16T12:00:00Z");
   const after1 = await call("GET", "/o/dist.example/records/D-1", "tok-S1");
   assert.equal(after1.status, 200, JSON.stringify(after1.body));
-  assert.deepEqual(Object.keys(after1.body.values as JsonObject).sort(), ["cost", "title"], "the helper sees exactly what read grants: title and cost, not format (14.6)");
+  assert.deepEqual(Object.keys(after1.body.values as JsonObject).sort(), ["cost", "format", "title"], "the helper sees what a member sees (title, format) and what read grants above it (cost, staff-only by rule) (12.4, 14.4, 14.6)");
   // The person runs a form the preset opens, unsigned, from another owner's identity.
   const ran = await call("POST", "/o/dist.example/run/fix", "tok-S1", { record: "D-1", answers: { title: "Gremlins 2" } });
   assert.equal(ran.status, 200, JSON.stringify(ran.body));
