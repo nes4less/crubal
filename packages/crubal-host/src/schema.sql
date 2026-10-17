@@ -103,6 +103,19 @@ create table if not exists host_acting_for (
 );
 create index if not exists host_acting_for_person on host_acting_for (person);
 
+-- Packages an owner publishes from this host (11.5, 11.7): each version's signed bundle and its text, listed in
+-- the well-known file and served at /packages/<owner>/<name>/<version>/. A published version never changes.
+create table if not exists host_published (
+  owner text not null,
+  package text not null,
+  version text not null,
+  hash text not null,
+  json jsonb not null,
+  text text not null,
+  published text not null,
+  primary key (owner, package, version)
+);
+
 -- When each view with a delay (12.6 fresh: 5m) was last published by the loop.
 create table if not exists host_publish (
   owner text not null,

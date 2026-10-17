@@ -733,3 +733,63 @@ ownership:
   assert.equal((await chain.definitions()).dict.levels.get("note"), "note");
   await assert.rejects(host.installFromOwner("platform.example:P-2", "platform.example", "pub.example/nothing"), /holds no pub.example\/nothing/);
 });
+
+test("publishing (11.5, 11.7): a package the host signs with the owner's key is listed in the well-known file, served, installed by name from it with its dependency first, and refused when tampered", { skip: !url }, async () => {
+  host.o.publicBase = base;
+  const GROUND = `package: ground /2026-10-17
+  owner: shop.example
+  crubal: 2
+notes$
+`;
+  const TOWER = `package: tower /2026-10-17
+  owner: shop.example
+  crubal: 2
+  extends: ground /2026-10-17
+kind: thing
+  levels: thing
+class: Noted
+  for: thing
+  facets:
+    notes
+`;
+  const g = await host.publishPackage("shop.example", GROUND);
+  const t = await host.publishPackage("shop.example", TOWER);
+  assert.equal(g.already, false);
+  assert.equal(typeof t.bundle.sig, "string", "signed with the owner's host-held key");
+  assert.deepEqual((await host.publishPackage("shop.example", TOWER)).already, true, "a version publishes once");
+  const wk = await call("GET", "/.well-known/crubal.json");
+  const listed = (wk.body.packages as JsonObject[]).find((p) => p.package === "shop.example/tower");
+  assert.ok(listed, JSON.stringify(wk.body.packages));
+  assert.equal(listed?.latest, "2026-10-17");
+  const where = String((listed?.versions as JsonObject)["2026-10-17"]);
+  assert.equal(where, `${base}/packages/shop.example/tower/2026-10-17/package.json`);
+  const served = await fetch(where);
+  assert.equal(served.status, 200);
+  assert.equal(served.headers.get("cache-control"), "public, max-age=31536000, immutable");
+  assert.equal(((await served.json()) as JsonObject).hash, t.bundle.hash);
+  const text = await fetch(where.replace("package.json", "package.crubal"));
+  assert.equal(await text.text(), TOWER);
+  // Install by name into a fresh owner, reading this host's own well-known file and bundles over HTTP.
+  const was = host.o.fetchJson;
+  host.o.fetchJson = async (u) => (u.startsWith(base) ? ((await (await fetch(u)).json()) as JsonObject) : (was as (u: string) => Promise<JsonObject>)(u));
+  try {
+    await host.createOwner("fresh.example");
+    const freshKey = await host.issueKey("fresh.example", "fresh.example", "owner");
+    const r = await call("POST", "/o/fresh.example/install", freshKey, { package: "shop.example/tower" });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual((r.body.installed as JsonObject[]).map((d) => d.installed), ["shop.example/ground", "shop.example/tower"], "the dependency first");
+    const defs = await (await host.storeFor("fresh.example")).definitions();
+    assert.equal(defs.dict.levels.get("thing"), "thing");
+    // Tampered on the wire: the signature doesn't verify against the published key, nothing installs.
+    const inner = host.o.fetchJson;
+    host.o.fetchJson = async (u) => { const d = await (inner as (u: string) => Promise<JsonObject>)(u); return u.endsWith("tower/2026-10-17/package.json") ? { ...d, label: "tampered" } : d; };
+    await host.createOwner("fresh2.example");
+    const k2 = await host.issueKey("fresh2.example", "fresh2.example", "owner");
+    const bad = await call("POST", "/o/fresh2.example/install", k2, { package: "shop.example/tower" });
+    assert.notEqual(bad.status, 200);
+    assert.match(String(bad.body.error), /doesn't verify/);
+  } finally {
+    host.o.fetchJson = was;
+    host.o.publicBase = undefined;
+  }
+});

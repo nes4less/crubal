@@ -8,7 +8,7 @@ import { type Offer, verifyBorder } from "@cruba/crubal";
 import type { StreamEntry } from "@cruba/crubal";
 import { readFileSync } from "node:fs";
 import type { Json, JsonObject } from "@cruba/crubal";
-import { type Contract, type Keys, keyFor } from "@cruba/crubal";
+import { type Contract, type Keys, keyFor, publish } from "@cruba/crubal";
 import { type Adapter, PgBorder, borderOptions } from "@cruba/crubal-postgres";
 import { type Client, migrate as migrateStore, type Pool, transaction } from "@cruba/crubal-postgres";
 import { PgStore } from "@cruba/crubal-postgres";
@@ -65,6 +65,8 @@ export type HostOptions = {
   hostOf?: (domain: string) => string;
   /** A JSON document by URL (a well-known file, a bundle); `fetch` otherwise. */
   fetchJson?: (url: string) => Promise<JsonObject>;
+  /** The public base URL this host serves its well-known file and published packages from; `https://<domain>` otherwise. */
+  publicBase?: string;
 };
 
 export const hashKey = (key: string) => createHash("sha256").update(key).digest("hex");
@@ -599,6 +601,60 @@ export class Host {
     return out;
   }
 
+  // ─── Publishing packages (11.5, 11.7) ─────────────────────────────────────
+
+  /** Where this host serves what it publishes: the public base URL (`https://<domain>` otherwise). */
+  publicBase(): string {
+    return (this.o.publicBase ?? `https://${this.o.domain}`).replace(/\/$/, "");
+  }
+
+  /** The URL of a published version's bundle; the text sits beside it as package.crubal. */
+  bundleUrl(owner: string, pkg: string, version: string): string {
+    return `${this.publicBase()}/packages/${owner}/${pkg}/${version}/package.json`;
+  }
+
+  /**
+   * Publish a package version for an owner this host holds the key of: the text becomes a bundle signed
+   * with that key, versioned against the owner's last published version of the package (so unchanged
+   * members keep their versions and a breaking change needs its recipe), kept here and listed in the
+   * well-known file. A version already published is returned as it is; a published version never changes.
+   */
+  async publishPackage(owner: string, source: string, o: { date?: string; records?: Json[] } = {}): Promise<{ bundle: JsonObject; changes: { member: string; kind: string }[]; already: boolean }> {
+    const key = await this.keyOf(owner);
+    if (!key) throw new Error(`${owner} has no key on this host to publish with`);
+    const head = source.match(/^package: (\S+) \/(\S+)/m);
+    if (!head) throw new Error("the text has no package: line");
+    const [, name, version] = head as unknown as [string, string, string];
+    const date = o.date ?? version.split(".")[0] ?? this.now().slice(0, 10);
+    const have = (await this.pool.query("select version, json from host_published where owner = $1 and package = $2 order by published desc", [owner, name])).rows as { version: string; json: JsonObject }[];
+    const same = have.find((r) => r.version === version || r.version.startsWith(`${date}`));
+    if (same) return { bundle: same.json, changes: [], already: true };
+    const previous = have[0]?.json;
+    const { bundle, changes } = publish(source, { date, ...(previous ? { previous } : {}), ...(o.records?.length ? { records: o.records } : {}), key: { d: key.private, x: key.public } });
+    await this.pool.query("insert into host_published (owner, package, version, hash, json, text, published) values ($1, $2, $3, $4, $5, $6, $7) on conflict (owner, package, version) do nothing", [owner, name, String(bundle.version), String(bundle.hash), bundle, source, this.now()]);
+    return { bundle, changes: changes.map((c) => ({ member: c.member, kind: c.kind })), already: false };
+  }
+
+  /** One published version: its signed bundle and its text, or null. */
+  async publishedBundle(owner: string, pkg: string, version: string): Promise<{ bundle: JsonObject; text: string } | null> {
+    const { rows } = await this.pool.query("select json, text from host_published where owner = $1 and package = $2 and version = $3", [owner, pkg, version]);
+    const r = rows[0] as { json: JsonObject; text: string } | undefined;
+    return r ? { bundle: r.json, text: r.text } : null;
+  }
+
+  /** What the well-known file lists: every published package with its versions and where each bundle is. */
+  async publishedPackages(owner?: string): Promise<JsonObject[]> {
+    const { rows } = await this.pool.query(owner ? "select owner, package, version from host_published where owner = $1 order by owner, package, version" : "select owner, package, version from host_published order by owner, package, version", owner ? [owner] : []);
+    const byId = new Map<string, { owner: string; pkg: string; versions: string[] }>();
+    for (const r of rows as { owner: string; package: string; version: string }[]) {
+      const id = `${r.owner}/${r.package}`;
+      const e = byId.get(id) ?? { owner: r.owner, pkg: r.package, versions: [] };
+      e.versions.push(r.version);
+      byId.set(id, e);
+    }
+    return [...byId.entries()].map(([id, e]) => ({ package: id, latest: e.versions[e.versions.length - 1] as string, versions: Object.fromEntries(e.versions.map((v) => [v, this.bundleUrl(e.owner, e.pkg, v)])) }));
+  }
+
   // ─── The well-known file ───────────────────────────────────────────────────
 
   async wellKnown(): Promise<JsonObject> {
@@ -609,7 +665,7 @@ export class Host {
       if (!old.length) keys[o.owner] = { alg: "Ed25519", public: o.public };
       else keys[o.owner] = [...old, { alg: "Ed25519", public: o.public, from: (old.at(-1) as JsonObject).until as Json }];
     }
-    return { crubal: "2", owner: this.o.domain, keys, packages: [], ...(this.o.emergency ? { emergency: this.o.emergency as unknown as JsonObject } : {}) };
+    return { crubal: "2", owner: this.o.domain, keys, packages: await this.publishedPackages(), ...(this.o.emergency ? { emergency: this.o.emergency as unknown as JsonObject } : {}) };
   }
 
   async notice(owner: string, notice: JsonObject): Promise<void> {

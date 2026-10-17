@@ -127,6 +127,21 @@ async function respond(host: Host, req: Req, res: Res, seen: Seen): Promise<void
       return json(res, h.ok ? 200 : 503, h);
     }
     if (url.pathname === "/.well-known/crubal.json") return json(res, 200, await host.wellKnown());
+    // Published packages (11.5, 11.7): /packages/<owner>/<name>/<version>/package.json, and the text beside it.
+    if (parts[0] === "packages" && parts.length === 5 && method === "GET") {
+      const [, owner, name, version, file] = parts as [string, string, string, string, string];
+      const p = await host.publishedBundle(decodeURIComponent(owner), decodeURIComponent(name), decodeURIComponent(version));
+      if (!p) throw new HttpError(404, `no published ${owner}/${name} /${version}`);
+      if (file === "package.json") {
+        res.setHeader("cache-control", "public, max-age=31536000, immutable");
+        return json(res, 200, p.bundle);
+      }
+      if (file === "package.crubal") {
+        res.writeHead(200, { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=31536000, immutable" });
+        return res.end(p.text);
+      }
+      throw new HttpError(404, "package.json or package.crubal");
+    }
     // OAuth's return leg: the code becomes the connection the state names.
     if (url.pathname === "/oauth/callback" && method === "GET") {
       const state = JSON.parse(Buffer.from(q("state") ?? "", "base64url").toString("utf8") || "{}") as { owner?: string; name?: string };
