@@ -22,6 +22,8 @@ The first pass (2026-10-17) read the paths the Cashierfu app drives against the 
 | D12 | brief 3 | 11.4 | Two installed packages could define one key with different types (the platform's `shippingOrigin` link beside the location package's `shippingOrigin` yes-no); the later silently won and the earlier's values became contradictions. | Install refuses a facet another installed package defines with a different type. The platform renames its key to `originLocation` with a `move` recipe. | postgres install |
 | D13 | brief 3 | 10.4 | A recipe restamped every record holding the key, not the package's own, so a `move` in one package would have moved another package's values of the same name. | Restamp and dry run cover records of the package's kinds and records wearing its classes. | postgres install |
 | D14 | brief 3 | 10.4 | A `move` step moved the value and dropped its source, so the restamped record disagreed with its own log entry. | The moved value keeps its source under the new address. | postgres install |
+| D15 | audit after brief 4 | 11.4 | The one-key-one-definition check compared types only; the product package's `image` (pick any) and the party package's `image` (one) collided unseen. | The check compares a facet's shape: type, unit, pick and values. The product package names its own key. | postgres install |
+| D16 | audit after brief 4 | 11.5 | `publishPackage` took the previous version as the most recently stamped row, so equal stamps (a fixed clock) could pick an older version and demand a recipe from it. | The highest version is the previous. | rehearsal |
 
 ## Gaps, filled 2026-10-17 (same day, on the operator's call)
 
