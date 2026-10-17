@@ -556,7 +556,8 @@ export class Exchange {
       this.put(ruled.record);
       summary = ruled.summary;
     }
-    this.commit({ contract: name, run: log }, log, { contract: name, record: recordId, state: "closed" });
+    // A form run by a caller is that person's entry (8.5), as an arrival's is; the run write still names the contract.
+    this.commit(callerId && c.kind === "form" ? { person: callerId } : { contract: name, run: log }, log, { contract: name, record: recordId, state: "closed" });
     return { ...head, outcomes: outcomes as unknown as Json, sources: { origin: c.origin }, log, landed: gate || c.lands === "suggestion" ? "suggestion" : "value", ...(gate ? { gated: gate.edge, reviewer: gate.reviewer ?? gate.by } : {}), ...(Object.keys(summary).length ? { rules: summary } : {}) };
   }
 
