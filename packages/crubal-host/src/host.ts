@@ -704,7 +704,7 @@ export class Host {
     if (!head) throw new Error("the text has no package: line");
     const [, name, version] = head as unknown as [string, string, string];
     const date = o.date ?? version.split(".")[0] ?? this.now().slice(0, 10);
-    const have = (await this.pool.query("select version, json from host_published where owner = $1 and package = $2 order by published desc", [owner, name])).rows as { version: string; json: JsonObject }[];
+    const have = (await this.pool.query("select version, json from host_published where owner = $1 and package = $2 order by version desc", [owner, name])).rows as { version: string; json: JsonObject }[];
     const same = have.find((r) => r.version === version || r.version.startsWith(`${date}`));
     if (same) return { bundle: same.json, changes: [], already: true };
     const previous = have[0]?.json;
