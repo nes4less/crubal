@@ -21,7 +21,7 @@ import type { PgStore } from "./store.ts";
 /** What performs a run's act (7.4 step 4): the host's code for a system; never a package's. */
 export type Adapter = (contract: Contract, payload: JsonObject, run: string) => Promise<{ acted: true; body?: string } | { failed: string }>;
 
-export type BorderOptions = { dict: Dictionary; contracts: Contract[]; roles?: Role[]; rules?: Rule[]; perms?: Permissions; adapters?: { [contract: string]: Adapter }; versions?: JsonObject; thresholds?: { confirm?: number; split?: number } };
+export type BorderOptions = { dict: Dictionary; contracts: Contract[]; roles?: Role[]; rules?: Rule[]; perms?: Permissions; adapters?: { [contract: string]: Adapter }; versions?: JsonObject; thresholds?: { confirm?: number; split?: number }; /** The id prefix an arrival takes per level (`organization: "Z"`); the level's first letter otherwise. */ idPrefixes?: { [level: string]: string } };
 
 /** The border's options from the store's own definitions (docs/design/publishing.md). */
 export async function borderOptions(store: PgStore): Promise<BorderOptions> {
@@ -138,7 +138,7 @@ export class PgBorder {
       // Ids are minted from the owner's highest per prefix, afresh each pass (the function may run more than once).
       const next = { ...counts };
       ex.mint = (level: string) => {
-        const p = level.charAt(0).toUpperCase();
+        const p = this.o.idPrefixes?.[level] ?? level.charAt(0).toUpperCase();
         next[p] = (next[p] ?? 0) + 1;
         return `${p}-${next[p]}`;
       };

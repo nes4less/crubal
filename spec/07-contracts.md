@@ -63,7 +63,7 @@ contract: ebayListing
 | `from` | the presenter, by domain (7.8) | take |
 | `mode` · `terms` | how shared data is held, and the presenter's terms for `controlled` (7.8) | offer, take · offer |
 | `who` | who may run it: a condition over the caller (7.6) | all |
-| `audience` | the lowest audience (chapter 12.4) that may run it: `public`, `member`, `staff` or `owner`; the menu (chapter 14.6) and `who` still apply | all; default `member` for a form, `public` otherwise |
+| `audience` | the lowest audience (chapter 12.4) that may run it: `public`, `member`, `staff` or `owner`; the menu (chapter 14.6) and `who` still apply | all; default `public` for a contract with a `relation` (it grants the consumer's edge, chapter 14.4), `member` for any other form, `public` otherwise |
 | `origin` | the origin of the values it brings in (chapter 1.9) | receive, form, take, store; default `reported` for systems and `declared` for forms |
 | `lands` | `value` (the default), `suggestion` (7.5) or `observation` (chapter 9.7) | receive, form, take |
 | `ref` | the field of their payload that is their own ID for the thing; arrivals are bound by it (chapter 9.2a) | receive, form, take |
@@ -116,7 +116,9 @@ anything that isn't a map, a value map or a literal is the other side's work.
 
 A run goes through seven steps, in order. Only step 4 has an effect.
 
-1. **Permission and trigger.** The caller holds `run` for the contract on the record (chapter 14.6), `who`
+1. **Permission and trigger.** The caller holds `run` for the contract on the record (chapter 14.6; for an
+   arrival, chapter 9.2a, on the record it is within, else anywhere by an admin or control edge, or as an
+   admitted member taking part, chapter 14.4), the contract's `audience` admits them, `who`
    holds for the caller when the contract has one, and `when` holds (or a caller asked).
 2. **Needs.** The record satisfies `needs` as a class: every `!` line has a value, and every value fits its
    narrowing. If not, the run stops before acting, naming what is missing.

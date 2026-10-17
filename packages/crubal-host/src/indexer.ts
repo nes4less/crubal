@@ -90,7 +90,7 @@ export class Index {
     const needsAccess = p.perms.menu.size || p.perms.relations.size;
     const state = needsAccess ? await store.state() : undefined;
     const access = state ? new Access(p.dict, p.perms, state.records, [...state.edges.values()] as never[], owner) : undefined;
-    if (access) access.shown = p.views.shown;
+    if (access) access.views = p.views;
     const rank = (a: string) => ["public", "member", "staff", "owner"].indexOf(a);
     const audience = o.caller ? (access ? access.audienceOf(o.caller) : "member") : "public";
     if (o.caller === owner) {

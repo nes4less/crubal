@@ -508,7 +508,7 @@ export function readBundleInto(b: JsonObject, into: Dictionary = emptyDictionary
 /** An empty Parsed to read packages onto, in order. */
 export function emptyParsed(): Parsed {
   const { perms } = readAccess("");
-  return { info: { name: "", version: "", owner: "", line: 0, crubal: 2, crubalLine: 0, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {}, utilities: [] }, dict: emptyDictionary(), rules: [], contracts: [], views: { shapes: new Map(), filters: new Map(), views: new Map(), roles: new Map(), shown: new Map() }, perms, edges: [], recipes: [] };
+  return { info: { name: "", version: "", owner: "", line: 0, crubal: 2, crubalLine: 0, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {}, utilities: [] }, dict: emptyDictionary(), rules: [], contracts: [], views: { shapes: new Map(), filters: new Map(), views: new Map(), roles: new Map(), shown: new Map(), shownFor: new Map() }, perms, edges: [], recipes: [] };
 }
 
 /**
@@ -524,7 +524,7 @@ export function readBundleOnto(bundle: JsonObject, base: Parsed): Parsed {
   base.rules = byName(base.rules, readRules(text));
   base.contracts = byName(base.contracts, readContracts(text));
   const views = readViews(text);
-  for (const k of ["shapes", "filters", "views", "roles", "shown"] as const) for (const [key, val] of views[k]) (base.views[k] as Map<string, unknown>).set(key, val);
+  for (const k of ["shapes", "filters", "views", "roles", "shown", "shownFor"] as const) for (const [key, val] of views[k]) (base.views[k] as Map<string, unknown>).set(key, val);
   const { perms, edges } = readAccess(text);
   if (perms.name) base.perms.name = perms.name;
   for (const [k, v] of perms.menu) base.perms.menu.set(k, v);

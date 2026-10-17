@@ -67,6 +67,8 @@ export type HostOptions = {
   fetchJson?: (url: string) => Promise<JsonObject>;
   /** The public base URL this host serves its well-known file and published packages from; `https://<domain>` otherwise. */
   publicBase?: string;
+  /** The id prefix an arrival takes per level (`organization: "Z"`, `location: "K"`); the level's first letter otherwise. */
+  idPrefixes?: { [level: string]: string };
 };
 
 export const hashKey = (key: string) => createHash("sha256").update(key).digest("hex");
@@ -497,7 +499,7 @@ export class Host {
   /** An owner's border over its own definitions, with the adapters. */
   async borderFor(owner: string, store?: PgStore): Promise<PgBorder> {
     const s = store ?? (await this.storeFor(owner));
-    const o = await borderOptions(s);
+    const o = { ...(await borderOptions(s)), ...(this.o.idPrefixes ? { idPrefixes: this.o.idPrefixes } : {}) };
     const http = this.httpAdapter(owner);
     const adapters: { [contract: string]: Adapter } = {};
     for (const c of o.contracts) if (c.kind === "send" || c.kind === "form") adapters[c.name] = this.o.adapters?.[c.name] ?? http;

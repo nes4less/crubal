@@ -132,7 +132,10 @@ filter: edition
 | named parties | other owners, by domain (chapter 7.8) |
 
 `show` rules (chapter 6, `then: key shown to member`) decide what each audience sees: per record, per facet,
-per value. A view's `show` says which audience its stored projection is built for.
+per value. A show rule's `for` scopes it: a rule for a class, kind or level decides for the records it
+covers, a class over a kind or level, and a rule for `everywhere` decides for the rest; so a package may
+show a location's phone to the public while a person's stays staff's. A view's `show` says which audience
+its stored projection is built for.
 
 Which callers belong to an audience is decided by edges (chapter 14.4).
 

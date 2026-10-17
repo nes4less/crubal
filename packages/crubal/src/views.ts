@@ -50,11 +50,13 @@ export type View = {
   version?: string;
 };
 export type RoleDef = { name: string; audience: string; see: string[]; seeLine: number; line: number };
-export type ViewSet = { shapes: Map<string, Shape>; filters: Map<string, Filter>; views: Map<string, View>; roles: Map<string, RoleDef>; shown: Map<string, string> };
+/** A show rule with a `for`: it decides for the records its class, kind or level covers (12.4). */
+export type ShownFor = { for: string; audience: string };
+export type ViewSet = { shapes: Map<string, Shape>; filters: Map<string, Filter>; views: Map<string, View>; roles: Map<string, RoleDef>; shown: Map<string, string>; shownFor: Map<string, ShownFor[]> };
 
 /** Read shapes, filters, views (with a body), roles and `shown to` rules. */
 export function readViews(source: string): ViewSet {
-  const set: ViewSet = { shapes: new Map(), filters: new Map(), views: new Map(), roles: new Map(), shown: new Map() };
+  const set: ViewSet = { shapes: new Map(), filters: new Map(), views: new Map(), roles: new Map(), shown: new Map(), shownFor: new Map() };
   for (const n of readTree(source)) {
     if (n.kind !== "pair" || !n.key) continue;
     const name = n.value.trim();
@@ -128,15 +130,35 @@ export function readViews(source: string): ViewSet {
     } else if (n.key === "rule") {
       const then = get("then")?.value ?? "";
       const m = then.match(/^(\S+) shown to (\S+)$/);
-      if (m) set.shown.set(m[1] as string, m[2] as string);
+      if (m) {
+        const scope = get("for")?.value.trim() ?? "everywhere";
+        if (scope === "everywhere") set.shown.set(m[1] as string, m[2] as string);
+        else set.shownFor.set(m[1] as string, [...(set.shownFor.get(m[1] as string) ?? []), { for: scope, audience: m[2] as string }]);
+      }
     }
   }
   return set;
 }
 
-/** Can an audience see a facet? (`shown to` names the lowest audience that may.) */
-function visibleTo(set: ViewSet, facet: string, audience: string): boolean {
-  const min = set.shown.get(facet.replace(/^\w+::/, ""));
+/**
+ * The lowest audience that may see a facet (12.4): a show rule whose `for` covers the record decides for it,
+ * a class over a kind or level, else the rule for everywhere; no rule, the public.
+ */
+export function shownAudience(set: Pick<ViewSet, "shown" | "shownFor">, facet: string, record?: Pick<Record, "kind" | "level" | "wears">): string | undefined {
+  const key = facet.replace(/^\w+::/, "");
+  if (record) {
+    const scoped = set.shownFor.get(key) ?? [];
+    const byClass = scoped.find((s) => (record.wears ?? []).includes(s.for));
+    if (byClass) return byClass.audience;
+    const byKind = scoped.find((s) => s.for === record.kind || s.for === record.level);
+    if (byKind) return byKind.audience;
+  }
+  return set.shown.get(key);
+}
+
+/** Can an audience see a facet, of this record when one is given? */
+export function visibleTo(set: Pick<ViewSet, "shown" | "shownFor">, facet: string, audience: string, record?: Pick<Record, "kind" | "level" | "wears">): boolean {
+  const min = shownAudience(set, facet, record);
   return !min || rankOf(audience) >= rankOf(min);
 }
 
@@ -292,11 +314,11 @@ export class Views {
     return true;
   }
 
-  private canSee(key: string, audience: string, caller?: Record): boolean {
-    if (!visibleTo(this.set, key, audience)) return false;
+  private canSee(key: string, audience: string, caller?: Record, record?: Record): boolean {
+    if (!visibleTo(this.set, key, audience, record)) return false;
     if (!caller || rankOf(audience) <= rankOf("member")) return true;
     // Above member, a person sees what members see plus what their roles grant (default deny).
-    if (visibleTo(this.set, key, "member")) return true;
+    if (visibleTo(this.set, key, "member", record)) return true;
     const held = caller.values.roles;
     const names = (Array.isArray(held) ? held : held ? [held] : []).map((x) => (isObj(x) && "$link" in x ? String(x.$link) : String(x)));
     return names.some((n) => {
@@ -307,7 +329,7 @@ export class Views {
 
   private slot(r: Record, s: Slot, audience: string, caller?: Record): Json | undefined {
     const keys = slotKeys(s.from);
-    if (!keys.every((k) => this.canSee(k, audience, caller))) return undefined;
+    if (!keys.every((k) => this.canSee(k, audience, caller, r))) return undefined;
     if (s.from.startsWith('"')) return this.engine.template(s.from, this.effective(r));
     const agg = s.from.match(/^(count|least|most|sum|best|worst|join) of (\S+)$/);
     if (agg) {
@@ -559,7 +581,7 @@ export class Views {
     const type = typeof kind?.schema === "string" ? kind.schema : kind?.schema?.[r.level];
     if (type) out["@type"] = type.replace(/^schema:/, "");
     for (const [key, v] of Object.entries(this.effective(r))) {
-      if (!this.canSee(key, "public")) continue;
+      if (!this.canSee(key, "public", undefined, r)) continue;
       const f = this.dict.facets.get(key);
       const same = f?.sameAs.find((s) => s.startsWith("schema:"));
       if (!same) continue;
@@ -661,7 +683,7 @@ export class Views {
     }
     for (const f of v.filters) keys.push(...(this.set.filters.get(f)?.dependent ?? []));
     for (const f of v.filters) keys.push(this.set.filters.get(f)?.facet ?? f);
-    for (const k of [...keys]) if (this.set.shown.has(k)) keys.push(k);
+    for (const k of [...keys]) if (this.set.shown.has(k) || this.set.shownFor.has(k)) keys.push(k);
     return new Set(keys.filter((k) => k !== "id"));
   }
 

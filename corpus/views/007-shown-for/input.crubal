@@ -1,0 +1,47 @@
+// A show rule's `for` scopes it (chapter 12.4): phone is staff's everywhere, but a product wearing Shop shows
+// its phone to the public. The public projection carries the shop's phone and not the other's; staff see both.
+view: phoned
+audiences: public, staff
+
+phone$
+
+class: Shop
+  for: product
+  facets:
+    title
+    phone
+
+rule: phoneIsStaff
+  for: everywhere
+  then: phone shown to staff
+  strength: must
+
+rule: shopPhoneIsPublic
+  for: Shop
+  then: phone shown to public
+  strength: must
+
+shape: phoned
+  slots:
+    !title -> heading
+    phone -> phone
+
+view: phoned
+  select:
+    level: product
+  order: title
+  shape: phoned
+  show: staff
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-40 [origin: declared, via: L-1]
+  crubal:wears: Shop
+  title: Corner Shop
+  phone: 555-0100
+
+product: P-41 [origin: declared, via: L-1]
+  title: Plain Listing
+  phone: 555-0199

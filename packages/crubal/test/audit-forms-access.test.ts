@@ -97,7 +97,7 @@ test("a see below admin is the audience's by the show rules, or an item's: a mem
     { edge: "E-o", who: "O", relation: "staff", mode: "control", on: "I-1", grants: ["other"], by: "owner", line: 0 },
   ];
   const a = new Access(dict, perms, records as never, edges as never, "s");
-  a.shown = new Map([["cost", "staff"], ["notes", "staff"]]);
+  a.views = { shown: new Map([["cost", "staff"], ["notes", "staff"]]), shownFor: new Map() };
   assert.equal(a.may("M", "see", "title", "I-1"), true);
   assert.equal(a.may("M", "see", "cost", "I-1"), false, "a member never sees a staff facet");
   assert.equal(a.may("H", "see", "cost", "I-1"), true, "the item grants it within the staff audience");

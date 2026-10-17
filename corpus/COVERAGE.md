@@ -68,6 +68,7 @@ a new MUST or a new case updates this file.
 | 7.6 | no secret in CRUBAL text or JSON | exchange/005-who (credentials by name); by construction: contracts name credentials, the host holds them |
 | 7.6 | `who: caller may edit X` is held by the caller's edges and the menu (14.6), beside roles on the caller's record; a hosted caller with no record is what its edges make it | unit: who-may.test |
 | 7.2 | `audience`: the lowest audience that may run a contract, member for a form and public otherwise; refused at publish when it isn't one | unit: contract-audience.test |
+| 7.4 | an arrival by a caller is permitted like a run: anywhere by an admin or control edge, or as an admitted member; a stranger starts only a contract that grants the consumer's edge | unit: shown-for-arrivals.test |
 | 7.10 | refused at publish | exchange-errors/* |
 | 8.5 | a record's writes all go to one chain | store/001-chain-valid; host test: a hosted person's chain holds only their records' writes |
 | 8.5 | a witnessed entry is never redacted | store/034-erasure-chain |
@@ -95,6 +96,7 @@ a new MUST or a new case updates this file.
 | 14.2 | `within` never cycles, never crosses owners; ancestors kept | exchange-errors/e11-within-cycle, e13-within-another-owner, views/009-partition (ancestors) |
 | 14.6 | an item naming nothing refused | exchange-errors/x02-undefined-facet |
 | 14.4 | each mode includes the ones below it; a `see` below admin is the audience's by the show rules (capped at member) or an item's | unit: audit-forms-access.test; host.test 14.8 |
+| 12.4 | a show rule's `for` scopes it: a class or kind rule decides for the records it covers, in access and in projections | unit: shown-for-arrivals.test; views/007-shown-for |
 | 10.4 | an install two versions ahead restamps through every recipe between, in order; the dry run reports them all | crubal-postgres: install.test |
 | 14.12 | a version dropping a preset or item live edges grant is refused until they lapse | crubal-postgres: install.test |
 | 14.12 | a store refuses the listed writes | exchange-errors/e07-grant-above-held, e08-cross-owner-by-admin, e12-person-owns-item, e13-within-another-owner, e14-wears-not-for-kind; pg test: refused at the commit, nothing left behind |

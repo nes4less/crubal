@@ -330,7 +330,7 @@ async function respond(host: Host, req: Req, res: Res, seen: Seen): Promise<void
       // What the caller may see (14.6): with a permission menu declared, a facet needs the caller's `see` item.
       const state = p.perms.menu.size ? await store.state() : undefined;
       const access = state ? new Access(p.dict, p.perms, state.records, [...state.edges.values()] as never[], owner) : undefined;
-      if (access) access.shown = p.views.shown;
+      if (access) access.views = p.views;
       const values: JsonObject = {};
       for (const [k, v] of Object.entries(r.values)) if (!access || isOwner || access.may(callerId, "see", k, r.id)) values[k] = v;
       const { sources, ...plain } = r as unknown as JsonObject;
@@ -344,7 +344,7 @@ async function respond(host: Host, req: Req, res: Res, seen: Seen): Promise<void
       const p = await store.definitions();
       const record = q("record") ? state.records.get(q("record") as string) : undefined;
       const access = p.perms.menu.size ? new Access(p.dict, p.perms, state.records, [...state.edges.values()] as never[], owner) : undefined;
-      if (access) access.shown = p.views.shown;
+      if (access) access.views = p.views;
       return json(res, 200, formOf(c, record, p.dict, { records: state.records, ...(callerId ? { caller: callerId } : {}), ...(access ? { access } : {}) }));
     }
     if (what === "stream" && name) {

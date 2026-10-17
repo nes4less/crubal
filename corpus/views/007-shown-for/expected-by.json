@@ -1,0 +1,10 @@
+{
+  "public": [
+    { "record": "P-40", "heading": "Corner Shop", "phone": "555-0100" },
+    { "record": "P-41", "heading": "Plain Listing" }
+  ],
+  "staff": [
+    { "record": "P-40", "heading": "Corner Shop", "phone": "555-0100" },
+    { "record": "P-41", "heading": "Plain Listing", "phone": "555-0199" }
+  ]
+}

@@ -68,8 +68,12 @@ const PARTS: { [kind: string]: string[] } = {
   take: ["needs", "from", "offer", "reads", "mode", "lands", "origin", "absorb", "ignore", "keep-raw", "prefix", "ref", "when", "who", "audience", "for", "label", "describe", "version"],
 };
 const AUDIENCES = ["public", "member", "staff", "owner"];
-/** The lowest audience that may run a contract (7.2): what it says, else member for a form and public otherwise. */
-const audienceOf = (c: Contract): string => c.parts.audience ?? (c.kind === "form" ? "member" : "public");
+/**
+ * The lowest audience that may run a contract (7.2): what it says; else public for one that grants the
+ * consumer's edge (a sign-up, a first order: how one becomes a member, 14.4), member for any other form,
+ * public otherwise.
+ */
+const audienceOf = (c: Contract): string => c.parts.audience ?? (c.kind === "form" && !c.parts.relation ? "member" : "public");
 
 function ourKey(address: string): string {
   return address.replace(/^\w+::/, "").split(/[.[]/)[0] as string;
@@ -281,15 +285,22 @@ export class Exchange {
   }
 
   /** Step 1 of a run (7.4): the menu is the permission (14.6); `who` only narrows. */
-  private permitted(c: Contract, recordId: string, callerId?: string): string | null {
-    if (this.access && callerId && !this.access.may(callerId, "run", c.name, recordId)) return "permission";
+  private permitted(c: Contract, recordId: string, callerId?: string, arrival = false): string | null {
+    // A run needs `run` on the record (14.6); an arrival has no record yet, so it needs `run` anywhere by an
+    // admin or control edge, or to be an admitted member taking part (14.4), on the parent when it has one.
+    const may = (verb: string, target: string): boolean => {
+      if (!this.access || !callerId) return true;
+      if (!arrival || recordId) return this.access.may(callerId, verb, target, recordId);
+      return this.access.mayAnywhere(callerId, verb, target) || (verb === "run" && (audienceOf(c) === "public" || this.access.audienceOf(callerId) !== "public"));
+    };
+    if (this.access && callerId && !may("run", c.name)) return "permission";
     // The contract's audience (7.2, 14.4): consume opens only what the package opens to consumers.
     if (this.access && callerId && AUDIENCES.indexOf(this.access.audienceOf(callerId)) < AUDIENCES.indexOf(audienceOf(c))) return "permission";
     if (c.who) {
       const caller = callerId ? this.records.get(callerId) : undefined;
       // `caller may edit Deployment`: held by the caller's edges and the menu on this record (14.6).
       const asked = [...c.who.matchAll(/\bcaller may (\w+) (\S+)/g)].map((m) => `${m[1]} ${m[2]}`);
-      const held = this.access && callerId ? (verb: string, target: string) => (this.access as Access).may(callerId, verb, target, recordId) : undefined;
+      const held = this.access && callerId ? (verb: string, target: string) => may(verb, target) : undefined;
       const ok = evaluate(parseCondition(c.who), caller ? { ...caller.values } : {}, callerStates(caller, this.roles, held, asked));
       if (ok !== true) return "who";
     }
@@ -578,6 +589,8 @@ export class Exchange {
     const domain = this.access?.owner ?? this.journal?.owner ?? this.records.all()[0]?.owner ?? "";
     // A person owns what the package lets a person own (14.1): the record is theirs, written as `domain:id`.
     const kind = this.dict.levels.get(level) ?? level;
+    const refused = this.permitted(c, of ?? "", callerId, true);
+    if (refused) return { contract: name, ...(callerId ? { caller: callerId } : {}), stopped: refused, log };
     const person = callerId && !callerId.includes(":") && (this.access?.perms.ownership.get("person") ?? []).includes(kind);
     const owner = person ? `${domain}:${callerId}` : domain;
     // A refusal by the rules puts everything back: the arrival never happened.

@@ -67,7 +67,7 @@ export async function publish(client: Client, owner: string, p: Projecting, name
   const { out: now } = await settle(client, owner, base, (s) => {
     const views = new Views(p.dict, p.views, s.records);
     const access = p.perms ? new Access(p.dict, p.perms, s.records, [...s.edges.values()] as never[], owner) : undefined;
-    if (access && p.views) access.shown = p.views.shown;
+    if (access && p.views) access.views = p.views;
     const rows = new Map<string, { row: JsonObject; buckets: JsonObject; sort: string[]; pin?: number }>();
     for (let page = 1; ; page++) {
       const pr = views.project(name, { audience: aud, page, ...(access ? { access } : {}), ...(only ? { only } : {}) });

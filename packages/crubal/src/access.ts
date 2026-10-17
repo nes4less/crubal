@@ -11,6 +11,7 @@ import { splitTop } from "./lex.ts";
 import type { Json, JsonObject, Record } from "./model.ts";
 import type { RecordSet } from "./records.ts";
 import { CrubalError, type Node, readTree } from "./tree.ts";
+import { shownAudience, type ViewSet } from "./views.ts";
 
 const isObj = (v: Json | undefined): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);
 
@@ -168,16 +169,17 @@ function durationMs(d: string): number {
 export type Effective = { mode: Mode; items: Set<string>; relations: Set<string>; gated: boolean; edges: Edge[] };
 
 export class Access {
-  /** The package's `shown to` rules (12.4), facet → lowest audience, when the caller has them; without them every facet counts as public. */
-  shown?: Map<string, string>;
+  /** The package's show rules (12.4), when the caller has them; without them every facet counts as public. */
+  views?: Pick<ViewSet, "shown" | "shownFor">;
 
   /**
-   * May the caller see a facet without an item: what the show rules give their audience, capped at member
-   * (12.4, default deny above member: a staff facet takes an item; admin and the owner see everything).
+   * May the caller see a facet of a record without an item: what the show rules give their audience,
+   * capped at member (12.4, default deny above member: a staff facet takes an item; admin and the owner see
+   * everything). A rule with a `for` covering the record decides over one for everywhere.
    */
-  visible(callerId: string, facet: string): boolean {
-    if (!this.shown) return true;
-    const min = this.shown.get(facet.replace(/^\w+::/, ""));
+  visible(callerId: string, facet: string, recordId?: string): boolean {
+    if (!this.views) return true;
+    const min = shownAudience(this.views, facet, recordId ? this.records.get(recordId) : undefined);
     if (!min) return true;
     const order = ["public", "member", "staff", "owner"];
     return Math.min(order.indexOf(this.audienceOf(callerId)), 1) >= order.indexOf(min);
@@ -351,16 +353,16 @@ export class Access {
       }
       // Each mode includes the ones below it (14.4): what any admitted person may do stays theirs, and
       // above member the default is deny (12.4): a staff facet needs an item.
-      if (verb === "see") return this.visible(callerId, target);
+      if (verb === "see") return this.visible(callerId, target, recordId);
       return verb === "run" && eff.edges.some((e) => e.mode === "consume" && e.on === recordId);
     }
     if (eff.mode === "consume") {
       // Take part: run what the package opens to consumers on their own part (the record the consume edge
       // sits on directly), and see what the show rules let their audience see. Changing anything else is a contract's job.
-      if (verb === "see") return this.visible(callerId, target);
+      if (verb === "see") return this.visible(callerId, target, recordId);
       return verb === "run" && eff.edges.some((e) => e.mode === "consume" && e.on === recordId);
     }
-    if (eff.mode === "view") return verb === "see" && this.visible(callerId, target);
+    if (eff.mode === "view") return verb === "see" && this.visible(callerId, target, recordId);
     return false;
   }
 

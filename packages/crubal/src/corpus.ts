@@ -919,7 +919,7 @@ function runViewsCase(folder: string, caseDir: string, name: string, shared: Dic
     checkPackage(dict);
     const set = readViews(sharedViews);
     const own = readViews(defs);
-    for (const k of ["shapes", "filters", "views", "roles", "shown"] as const) for (const [key, val] of own[k]) (set[k] as Map<string, unknown>).set(key, val);
+    for (const k of ["shapes", "filters", "views", "roles", "shown", "shownFor"] as const) for (const [key, val] of own[k]) (set[k] as Map<string, unknown>).set(key, val);
     checkViews(set, dict);
     const views = new Views(dict, set);
     const text = data.trim() ? data : readFileSync(join(root, "views", "_records.crubal"), "utf8");
