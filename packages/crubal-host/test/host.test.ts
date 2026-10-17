@@ -678,3 +678,58 @@ ownership:
   const health = await call("GET", "/health");
   assert.ok(Number((health.body.chains as JsonObject)["shop.example:S-1"]) >= 2, "the install is an entry in the person's chain");
 });
+
+test("installFromOwner copies a package and what it extends from one owner's log into another's; a persistent border mints an arrival's id as the owner's next number", { skip: !url }, async () => {
+  const key = (globalThis as { pubKey?: { d: string; x: string } }).pubKey as { d: string; x: string };
+  const BASE = `package: ground /2026-10-16
+  owner: pub.example
+  crubal: 2
+kind: person
+  levels: person
+  base: Person
+name$
+class: Person
+  for: person
+  facets:
+    !name
+contract: join
+  kind: form
+  origin: declared
+  needs:
+    !name
+`;
+  const TOP = `package: top /2026-10-16
+  owner: pub.example
+  crubal: 2
+  extends: ground /2026-10-16
+kind: note
+  levels: note
+body$
+class: Note
+  for: note
+  facets:
+    body
+ownership:
+  person: note
+`;
+  await host.createOwner("platform.example");
+  const platform = await host.storeFor("platform.example");
+  await platform.install(publish(BASE, { date: "2026-10-16", key }).bundle, { "pub.example": { alg: "Ed25519", public: key.x } }, "2026-10-16T12:00:00Z");
+  await platform.install(publish(TOP, { date: "2026-10-16", key }).bundle, { "pub.example": { alg: "Ed25519", public: key.x } }, "2026-10-16T12:00:01Z");
+  // Two arrivals through the border: the second is P-2, not a second P-NEW1.
+  const border = await host.borderFor("platform.example", platform);
+  const first = await border.arrive("join", JSON.stringify({ name: "One" }), "person", undefined, undefined, "2026-10-16T12:00:02Z");
+  const second = await border.arrive("join", JSON.stringify({ name: "Two" }), "person", undefined, undefined, "2026-10-16T12:00:03Z");
+  const idOf = (r: JsonObject) => String((r.arrival as JsonObject).record);
+  assert.equal(idOf(first), "P-1");
+  assert.equal(idOf(second), "P-2");
+  assert.equal((await platform.get("P-2"))?.values.name, "Two");
+  // The person's chain takes `top` from the platform: `ground` first, then `top`; again, nothing.
+  await host.createOwner("platform.example:P-2");
+  const done = await host.installFromOwner("platform.example:P-2", "platform.example", "pub.example/top");
+  assert.deepEqual(done.map((d) => d.installed), ["pub.example/ground", "pub.example/top"]);
+  assert.deepEqual(await host.installFromOwner("platform.example:P-2", "platform.example", "pub.example/top"), []);
+  const chain = await host.storeFor("platform.example:P-2");
+  assert.equal((await chain.definitions()).dict.levels.get("note"), "note");
+  await assert.rejects(host.installFromOwner("platform.example:P-2", "platform.example", "pub.example/nothing"), /holds no pub.example\/nothing/);
+});
