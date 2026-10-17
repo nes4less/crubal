@@ -154,6 +154,18 @@ export class Host {
     await this.pool.query("insert into host_identities (provider, subject, owner, caller) values ($1, $2, $3, $4) on conflict (provider, subject) do update set owner = excluded.owner, caller = excluded.caller", [provider, subject, owner, caller]);
   }
 
+  /** Remove an identity link (a person deleting themselves): the subject signs in as nobody from now on. */
+  async unlinkIdentity(provider: string, subject: string): Promise<boolean> {
+    const r = await this.pool.query("delete from host_identities where provider = $1 and subject = $2", [provider, subject]);
+    return (r.rowCount ?? 0) > 0;
+  }
+
+  /** Every identity link that names a caller, for export and delete. */
+  async identitiesOf(owner: string, caller: string): Promise<{ provider: string; subject: string }[]> {
+    const { rows } = await this.pool.query("select provider, subject from host_identities where owner = $1 and caller = $2", [owner, caller]);
+    return rows as { provider: string; subject: string }[];
+  }
+
   async identity(provider: string, subject: string): Promise<Caller | null> {
     const { rows } = await this.pool.query("select owner, caller from host_identities where provider = $1 and subject = $2", [provider, subject]);
     return (rows[0] as Caller | undefined) ?? null;
