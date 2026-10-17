@@ -16,12 +16,10 @@ const SCHEMA_SQL = readFileSync(new URL("./schema.sql", import.meta.url), "utf8"
  */
 export function connect(url = process.env.CRUBAL_PG_URL, schema = process.env.CRUBAL_PG_SCHEMA): Pool {
   if (!url) throw new Error("no Postgres URL: pass one or set CRUBAL_PG_URL");
-  const pool = new pg.Pool({ connectionString: url });
-  if (schema) {
-    if (!/^[a-z_][a-z0-9_]*$/.test(schema)) throw new Error(`a schema is a lower-case word: ${schema}`);
-    pool.on("connect", (c) => void c.query(`set search_path to "${schema}"`));
-  }
-  return pool;
+  if (schema && !/^[a-z_][a-z0-9_]*$/.test(schema)) throw new Error(`a schema is a lower-case word: ${schema}`);
+  // The schema rides as a startup parameter, which Postgres and the Supabase session pooler both honour; a
+  // query on each connection's open would race the first statement (pg warns, and will refuse).
+  return new pg.Pool({ connectionString: url, ...(schema ? { options: `-c search_path=${schema}` } : {}) });
 }
 
 /** Create or update the store's tables in the current search path. Idempotent. */
