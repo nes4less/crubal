@@ -3,8 +3,22 @@
 // consent, or a pasted key), refreshed and rotated by the host, and never enters a package or the log. The
 // reference host keeps the material in its own table; a platform puts a vault behind the same interface.
 
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import type { JsonObject } from "@cruba/crubal";
 import type { Pool } from "@cruba/crubal-postgres";
+
+/** The key material is sealed with (AES-256-GCM); a row that holds this shape is ciphertext. */
+type Sealed = { $sealed: 1; iv: string; tag: string; data: string };
+const isSealed = (v: unknown): v is Sealed => typeof v === "object" && v !== null && (v as Sealed).$sealed === 1;
+
+/** A 32-byte key from what the environment holds: 64 hex characters, 44 base64 characters, or any text hashed. */
+export function secretsKeyFrom(raw: string | undefined): Buffer | undefined {
+  if (!raw) return undefined;
+  const t = raw.trim();
+  if (/^[0-9a-fA-F]{64}$/.test(t)) return Buffer.from(t, "hex");
+  if (/^[A-Za-z0-9+/=_-]{43,44}$/.test(t)) return Buffer.from(t.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+  return createHash("sha256").update(t).digest();
+}
 
 export type Connection = { owner: string; name: string; scheme: string; scopes: string[]; status: "connected" | "expired"; expires?: string; connected: string };
 
@@ -22,18 +36,54 @@ type Row = { [column: string]: unknown };
 export class Credentials {
   readonly pool: Pool;
   readonly now: () => string;
+  /** The key the material is sealed with at rest; without one no secret is stored. */
+  readonly key?: Buffer;
 
-  constructor(pool: Pool, now: () => string) {
+  constructor(pool: Pool, now: () => string, key?: Buffer) {
     this.pool = pool;
     this.now = now;
+    const k = key ?? secretsKeyFrom(process.env.CRUBAL_SECRETS_KEY);
+    if (k) this.key = k;
   }
 
-  /** Connect a credential: the material under the name, with its scheme, scopes and expiry. */
+  /** Seal material for the table (AES-256-GCM, a fresh nonce each time). */
+  seal(material: JsonObject): Sealed {
+    if (!this.key) throw new Error("a secrets key is required to store a secret (CRUBAL_SECRETS_KEY); none is set");
+    const iv = randomBytes(12);
+    const cipher = createCipheriv("aes-256-gcm", this.key, iv);
+    const data = Buffer.concat([cipher.update(JSON.stringify(material), "utf8"), cipher.final()]);
+    return { $sealed: 1, iv: iv.toString("base64"), tag: cipher.getAuthTag().toString("base64"), data: data.toString("base64") };
+  }
+
+  /** The material back from the table: sealed rows opened with the key; a row from before sealing read as it is. */
+  open(stored: unknown): JsonObject {
+    if (!isSealed(stored)) return (stored ?? {}) as JsonObject;
+    if (!this.key) throw new Error("a secrets key is required to read a sealed secret (CRUBAL_SECRETS_KEY); none is set");
+    const decipher = createDecipheriv("aes-256-gcm", this.key, Buffer.from(stored.iv, "base64"));
+    decipher.setAuthTag(Buffer.from(stored.tag, "base64"));
+    const text = Buffer.concat([decipher.update(Buffer.from(stored.data, "base64")), decipher.final()]).toString("utf8");
+    return JSON.parse(text) as JsonObject;
+  }
+
+  /** Seal every row stored before sealing existed; run once at migration. Returns how many it sealed. */
+  async sealAll(): Promise<number> {
+    if (!this.key) return 0;
+    const { rows } = await this.pool.query("select owner, name, material from host_credentials");
+    let n = 0;
+    for (const r of rows as Row[]) {
+      if (isSealed(r.material)) continue;
+      await this.pool.query("update host_credentials set material = $3 where owner = $1 and name = $2", [r.owner, r.name, this.seal((r.material ?? {}) as JsonObject)]);
+      n++;
+    }
+    return n;
+  }
+
+  /** Connect a credential: the material under the name, sealed, with its scheme, scopes and expiry. */
   async connect(owner: string, name: string, scheme: string, material: JsonObject, scopes: string[] = [], expires?: string): Promise<Connection> {
     await this.pool.query(
       `insert into host_credentials (owner, name, scheme, material, scopes, expires, connected) values ($1, $2, $3, $4, $5, $6, $7)
        on conflict (owner, name) do update set scheme = excluded.scheme, material = excluded.material, scopes = excluded.scopes, expires = excluded.expires, connected = excluded.connected`,
-      [owner, name, scheme, material, scopes, expires ?? null, this.now()],
+      [owner, name, scheme, this.seal(material), scopes, expires ?? null, this.now()],
     );
     return (await this.connection(owner, name)) as Connection;
   }
@@ -69,7 +119,7 @@ export class Credentials {
     const { rows } = await this.pool.query("select scheme, material, expires from host_credentials where owner = $1 and name = $2", [owner, name]);
     const r = rows[0] as Row | undefined;
     if (!r) return undefined;
-    const material = (r.material ?? {}) as JsonObject;
+    const material = this.open(r.material);
     if (r.scheme === "oauth2") {
       const expired = r.expires ? String(r.expires) <= this.now() : false;
       if (expired && typeof material.refresh_token === "string" && provider) {
@@ -122,7 +172,7 @@ export class Credentials {
     const expires = tok.expires_in ? new Date(Date.parse(this.now()) + tok.expires_in * 1000).toISOString().replace(/\.\d{3}Z$/, "Z") : undefined;
     const { rows } = await this.pool.query("select material, scopes from host_credentials where owner = $1 and name = $2", [owner, name]);
     const was = (rows[0] as Row | undefined) ?? {};
-    await this.connect(owner, name, "oauth2", { ...((was.material as JsonObject) ?? {}), access_token: tok.access_token, ...(tok.refresh_token ? { refresh_token: tok.refresh_token } : {}) }, (was.scopes as string[]) ?? [], expires);
+    await this.connect(owner, name, "oauth2", { ...this.open(was.material), access_token: tok.access_token, ...(tok.refresh_token ? { refresh_token: tok.refresh_token } : {}) }, (was.scopes as string[]) ?? [], expires);
     return tok.access_token;
   }
 }

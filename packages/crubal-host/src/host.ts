@@ -5,6 +5,7 @@
 import { createHash, createPrivateKey, generateKeyPairSync, randomBytes, sign as edSign } from "node:crypto";
 import { ChainedSecrets, EnvSecrets, FunctionSecrets, type SecretStore } from "./secrets.ts";
 import { type Offer, verifyBorder } from "@cruba/crubal";
+import { Access, type Record as CrubalRecord } from "@cruba/crubal";
 import type { StreamEntry } from "@cruba/crubal";
 import { readFileSync } from "node:fs";
 import type { Json, JsonObject } from "@cruba/crubal";
@@ -12,7 +13,7 @@ import { type Contract, type Keys, keyFor, publish } from "@cruba/crubal";
 import { type Adapter, PgBorder, borderOptions } from "@cruba/crubal-postgres";
 import { type Client, migrate as migrateStore, type Pool, transaction } from "@cruba/crubal-postgres";
 import { PgStore } from "@cruba/crubal-postgres";
-import { Credentials, type OAuthProvider } from "./credentials.ts";
+import { type Connection, Credentials, type OAuthProvider, secretsKeyFrom } from "./credentials.ts";
 import type { EmergencyTerms } from "./emergency.ts";
 import { verifyRequest, signRequest } from "./signatures.ts";
 
@@ -69,6 +70,8 @@ export type HostOptions = {
   publicBase?: string;
   /** The id prefix an arrival takes per level (`organization: "Z"`, `location: "K"`); the level's first letter otherwise. */
   idPrefixes?: { [level: string]: string };
+  /** The key connection material is sealed with at rest; `CRUBAL_SECRETS_KEY` in the environment otherwise. Without one no secret is stored. */
+  secretsKey?: string;
 };
 
 export const hashKey = (key: string) => createHash("sha256").update(key).digest("hex");
@@ -81,7 +84,7 @@ export class Host {
   constructor(pool: Pool, o: HostOptions) {
     this.pool = pool;
     this.o = o;
-    this.credentials = new Credentials(pool, () => this.now());
+    this.credentials = new Credentials(pool, () => this.now(), secretsKeyFrom(o.secretsKey ?? process.env.CRUBAL_SECRETS_KEY));
   }
 
   now(): string {
@@ -94,6 +97,73 @@ export class Host {
       await migrateStore(c);
       await c.query(SCHEMA_SQL);
     });
+    // Rows stored before sealing existed are sealed once the key is at hand.
+    await this.credentials.sealAll();
+  }
+
+  // ─── Connections (docs/design/host.md, "Credentials"; Cashierfu brief 4) ────
+
+  /**
+   * Connect a service for an owner: the material sealed in the credentials store, and a `system` record of
+   * the fact within the owner's root record, written as the host's action naming the person. The person,
+   * when given, must hold admin on the root or the `connections` item; the owner's own key needs none.
+   */
+  async connect(owner: string, name: string, c: { scheme: string; material: JsonObject; scopes?: string[]; expires?: string; person?: string; values?: JsonObject }): Promise<{ connection: Connection; record: string }> {
+    const store = await this.storeFor(owner);
+    if (c.person) await this.requireConnections(store, owner, c.person);
+    const connection = await this.credentials.connect(owner, name, c.scheme, c.material, c.scopes ?? [], c.expires);
+    const record = await this.writeSystem(store, owner, name, { scheme: c.scheme, scopes: c.scopes ?? [], connection: "connected", connectedAt: this.now().slice(0, 16).replace("T", " "), ...(c.values ?? {}) }, c.person);
+    return { connection, record };
+  }
+
+  /** Revoke a connection: the material gone, the record marked revoked. */
+  async disconnect(owner: string, name: string, person?: string): Promise<{ record?: string }> {
+    const store = await this.storeFor(owner);
+    if (person) await this.requireConnections(store, owner, person);
+    await this.credentials.disconnect(owner, name);
+    const existing = await this.systemFor(store, name);
+    if (!existing) return {};
+    const record = await this.writeSystem(store, owner, name, { connection: "revoked" }, person);
+    return { record };
+  }
+
+  /** Is a service connected for the owner: material held and not expired, and the record not revoked? */
+  async connected(owner: string, name: string): Promise<boolean> {
+    const c = await this.credentials.connection(owner, name);
+    if (!c || c.status !== "connected") return false;
+    const r = await this.systemFor(await this.storeFor(owner), name);
+    return r?.values.connection !== "revoked";
+  }
+
+  private async requireConnections(store: PgStore, owner: string, person: string): Promise<void> {
+    const [p, state] = await Promise.all([store.definitions(), store.state()]);
+    const access = new Access(p.dict, p.perms, state.records, [...state.edges.values()] as never[], owner);
+    const eff = access.effective(person, "ROOT");
+    if (eff.mode !== "admin" && !eff.items.has("connections")) throw Object.assign(new Error(`${person} may not manage ${owner}'s connections`), { status: 403 });
+  }
+
+  private async systemFor(store: PgStore, name: string): Promise<CrubalRecord | undefined> {
+    return (await store.state()).records.all().find((r) => r.kind === "system" && r.values.name === name);
+  }
+
+  /** The system record for a service, within ROOT, made or updated; the host's action names the person. */
+  private async writeSystem(store: PgStore, owner: string, name: string, values: JsonObject, person?: string): Promise<string> {
+    const state = await store.state();
+    const existing = state.records.all().find((r) => r.kind === "system" && r.values.name === name);
+    const n = state.records.all().filter((r) => /^S-\d+$/.test(r.id)).map((r) => Number(r.id.slice(2))).reduce((a, b) => Math.max(a, b), 0);
+    const id = existing?.id ?? `S-${n + 1}`;
+    const at = this.now();
+    await store.commit(
+      { platform: "connection", ...(person ? { person } : {}) },
+      (d) => {
+        const base: CrubalRecord = existing ?? { id, kind: "system", level: "system", owner, ...(state.records.get("ROOT") ? { within: "ROOT" } : {}), values: { name, systemKind: "partner" }, sources: { "*": { origin: "observed", via: "host" } } };
+        const sources = { ...(base.sources ?? {}) };
+        for (const k of Object.keys(values)) if (!sources[k]) sources[k] = { origin: "observed", via: "host" };
+        d.records.set(id, { ...base, values: { ...base.values, ...values }, sources });
+      },
+      at,
+    );
+    return id;
   }
 
   // ─── Owners and keys ───────────────────────────────────────────────────────

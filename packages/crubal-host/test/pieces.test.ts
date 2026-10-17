@@ -17,6 +17,7 @@ import { oidcVerifier, verifyJwt } from "../src/oidc.ts";
 import { signRequest, verifyRequest } from "../src/signatures.ts";
 import { readTerms, robotsTxt, termsHeaders } from "../src/terms.ts";
 
+process.env.CRUBAL_SECRETS_KEY = process.env.CRUBAL_SECRETS_KEY ?? "a test secrets key, hashed to 32 bytes";
 const url = process.env.CRUBAL_PG_URL;
 const b64u = (b: Buffer | string) => Buffer.from(b).toString("base64url");
 const jwt = (header: object, claims: object, signer: (signed: Buffer) => Buffer) => {

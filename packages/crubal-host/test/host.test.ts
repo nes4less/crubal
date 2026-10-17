@@ -4,13 +4,14 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { after, before, test } from "node:test";
-import { publish } from "@cruba/crubal";
+import { publish, STANDARD_PACKAGES } from "@cruba/crubal";
 import { verifyChain } from "@cruba/crubal";
 import type { JsonObject } from "@cruba/crubal";
-import { connect, testSchema, type Pool } from "@cruba/crubal-postgres";
+import { connect, PgStore, testSchema, type Pool } from "@cruba/crubal-postgres";
 import { Host } from "../src/host.ts";
 import { serve } from "../src/server.ts";
 
+process.env.CRUBAL_SECRETS_KEY = process.env.CRUBAL_SECRETS_KEY ?? "a test secrets key, hashed to 32 bytes";
 const url = process.env.CRUBAL_PG_URL;
 const isObj = (v: unknown): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);
 let pool: Pool;
@@ -32,6 +33,7 @@ before(async () => {
   host = new Host(pool, {
     domain: "host.example",
     hostKey: "hk",
+    secretsKey: "a test secrets key, hashed to 32 bytes",
     now: () => clock,
     fresh: "write",
     resolveKeys: async (domain) => {
@@ -798,3 +800,80 @@ class: Noted
     host.o.publicBase = undefined;
   }
 });
+
+test("connections (brief 4): material is sealed at rest and never stored without a key; connect writes the system record within ROOT naming the person; revoke marks it and the adapter's secret is gone; the item or admin is required", { skip: !url }, async () => {
+  await host.createOwner("conn.example");
+  // The packages go in unsigned through a development store; the host's own store reads the same log.
+  const dev = new PgStore(pool, "conn.example", { allowUnsigned: true });
+  const store = await host.storeFor("conn.example");
+  for (const text of [STANDARD_PACKAGES.core, STANDARD_PACKAGES.units, STANDARD_PACKAGES.party])
+    await dev.install(publish(text, { date: text.match(/^package: \S+ \/(\S+)/m)?.[1] ?? "2026-10-16" }).bundle, undefined, clock);
+  const perms = `package: shopperms /2026-10-01
+  owner: conn.example
+  label: Perms
+  crubal: 2
+  extends: crubal.com/party /2026-10-16
+
+kind: shop
+  levels: shop
+  base: Shop
+
+shopName$
+
+class: Shop
+  for: shop
+  facets:
+    shopName
+
+permissions: shopperms
+  menu:
+    connections: run connect, edit System
+  presets:
+    keeper: connections   audience: staff
+  relations: operator, staff, customer
+`;
+  await dev.install(publish(perms, { date: "2026-10-01" }).bundle, undefined, clock);
+  await store.commit({ person: "conn.example" }, (d) => {
+    d.records.set("ROOT", { id: "ROOT", kind: "shop", level: "shop", owner: "conn.example", values: { shopName: "Conn" }, sources: { "*": { origin: "declared", via: "L-1" } } });
+    d.edges.set("E-a", { edge: "E-a", who: "person:cashierfu.com:P-1", relation: "operator", mode: "admin", on: "ROOT", grants: [], by: "owner" });
+    d.edges.set("E-k", { edge: "E-k", who: "person:cashierfu.com:P-2", relation: "staff", mode: "control", on: "ROOT", grants: ["keeper"], by: "E-a" });
+    d.edges.set("E-m", { edge: "E-m", who: "person:cashierfu.com:P-3", relation: "customer", mode: "consume", on: "ROOT", grants: [], by: "E-a" });
+  }, clock);
+  // The admin connects; the row is ciphertext; the record names the person and sits within ROOT.
+  const r = await host.connect("conn.example", "stripe", { scheme: "apikey", material: { key: "sk_test_SECRET123" }, person: "person:cashierfu.com:P-1", values: { accountLabel: "Conn Test" } });
+  assert.equal(r.record, "S-1");
+  const row = (await pool.query("select material from host_credentials where owner = $1 and name = $2", ["conn.example", "stripe"])).rows[0] as { material: JsonObject };
+  assert.equal(row.material.$sealed, 1);
+  assert.ok(!JSON.stringify(row.material).includes("SECRET123"), "the stored row holds no key material");
+  assert.equal(await host.secret("conn.example", "stripe"), "sk_test_SECRET123", "the host opens it for an adapter");
+  const rec = await store.get("S-1");
+  assert.equal(rec?.within, "ROOT");
+  assert.equal(rec?.values.connection, "connected");
+  assert.equal(rec?.values.scheme, "apikey");
+  assert.equal(rec?.values.accountLabel, "Conn Test");
+  const entries = (await store.entries()) as { by?: { platform?: string; person?: string } }[];
+  assert.ok(entries.some((e) => e.by?.platform === "connection" && e.by?.person === "person:cashierfu.com:P-1"));
+  assert.ok(!JSON.stringify(await store.entries()).includes("SECRET123"), "no secret in the log");
+  assert.equal(await host.connected("conn.example", "stripe"), true);
+  // The keeper may; the member may not.
+  await host.connect("conn.example", "shippo", { scheme: "apikey", material: { key: "shippo_test_1" }, person: "person:cashierfu.com:P-2" });
+  await assert.rejects(host.connect("conn.example", "resend", { scheme: "apikey", material: { key: "re_1" }, person: "person:cashierfu.com:P-3" }), /may not manage/);
+  await assert.rejects(host.disconnect("conn.example", "stripe", "person:cashierfu.com:P-3"), /may not manage/);
+  // Revoke: the material gone, the record marked, connected false.
+  await host.disconnect("conn.example", "stripe", "person:cashierfu.com:P-1");
+  assert.equal(await host.secret("conn.example", "stripe"), undefined);
+  assert.equal((await store.get("S-1"))?.values.connection, "revoked");
+  assert.equal(await host.connected("conn.example", "stripe"), false);
+  // Without a key nothing is stored; a row from before sealing is sealed by migrate.
+  const saved = process.env.CRUBAL_SECRETS_KEY;
+  process.env.CRUBAL_SECRETS_KEY = "";
+  const bare = new Host(pool, { domain: "cashierfu.com", hostKey: "hk", now: () => clock, log: false });
+  process.env.CRUBAL_SECRETS_KEY = saved;
+  await assert.rejects(bare.credentials.connect("conn.example", "resend", "apikey", { key: "re_2" }), /secrets key is required/);
+  await pool.query("insert into host_credentials (owner, name, scheme, material, scopes, expires, connected) values ($1, $2, $3, $4, $5, null, $6)", ["conn.example", "legacy", "apikey", { key: "plain_old_key" }, [], clock]);
+  await host.migrate();
+  const sealed = (await pool.query("select material from host_credentials where owner = $1 and name = $2", ["conn.example", "legacy"])).rows[0] as { material: JsonObject };
+  assert.equal(sealed.material.$sealed, 1);
+  assert.equal(await host.secret("conn.example", "legacy"), "plain_old_key");
+});
+

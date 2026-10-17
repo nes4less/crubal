@@ -250,10 +250,10 @@ async function respond(host: Host, req: Req, res: Res, seen: Seen): Promise<void
       if (method === "POST") {
         const b = parseJson(bodyOf() || "{}") as { scheme?: string; material?: JsonObject; scopes?: string[]; expires?: string };
         if (!b.scheme || !b.material) throw new HttpError(400, "scheme and material");
-        return json(res, 200, (await host.credentials.connect(owner, name, b.scheme, b.material, b.scopes ?? [], b.expires)) as unknown as Json);
+        return json(res, 200, (await host.connect(owner, name, { scheme: b.scheme, material: b.material, scopes: b.scopes ?? [], ...(b.expires ? { expires: b.expires } : {}) })).connection as unknown as Json);
       }
       if (method === "DELETE") {
-        await host.credentials.disconnect(owner, name);
+        await host.disconnect(owner, name);
         return json(res, 200, { disconnected: name });
       }
     }
