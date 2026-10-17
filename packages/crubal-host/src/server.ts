@@ -2,6 +2,7 @@
 // resolves the caller first and hands the store only the caller ID; every decision after that is the
 // store's access. Nothing here decides anything a package could say.
 
+import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { Access } from "@cruba/crubal";
 import { formOf } from "@cruba/crubal";
@@ -67,6 +68,14 @@ async function readBody(req: IncomingMessage, limit: number): Promise<string> {
 
 const isObj = (v: Json | undefined): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);
 
+/** Compare a presented secret with the kept one in constant time, so a guess learns nothing from the clock. */
+function sameSecret(presented: string | undefined, kept: string): boolean {
+  if (!presented) return false;
+  const a = Buffer.from(presented, "utf8");
+  const b = Buffer.from(kept, "utf8");
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 /**
  * Answer one request. Every route is here, owner-scoped, the same for every owner; errors become a JSON
  * body with their status. Transports call this: `serve` for node, an app's route for in-process hosting.
@@ -128,7 +137,7 @@ async function respond(host: Host, req: Req, res: Res, seen: Seen): Promise<void
     }
 
     // The loops, for a scheduler, behind the host key.
-    const hostKeyOk = !host.o.hostKey || req.headers["x-host-key"] === host.o.hostKey;
+    const hostKeyOk = !host.o.hostKey || sameSecret(header("x-host-key"), host.o.hostKey);
     if (parts[0] === "project" || parts[0] === "tick" || parts[0] === "retry" || parts[0] === "push" || parts[0] === "expire" || parts[0] === "drain") {
       if (method !== "POST") throw new HttpError(405, "POST");
       if (!hostKeyOk) throw new HttpError(403, "the host key");
