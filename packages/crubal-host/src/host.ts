@@ -576,6 +576,9 @@ export class Host {
    */
   async installFrom(owner: string, pkg: string, version?: string, seen = new Set<string>()): Promise<JsonObject[]> {
     const store = await this.storeFor(owner);
+    // A dependency pinned to a version the owner already holds needs no publisher at all (the standard
+    // packages a deployment took at provisioning, for one).
+    if (version && (await store.state()).installed.some((i) => i.package === pkg && String(i.version) === version)) return [];
     const domain = pkg.split("/")[0] as string;
     const wk = await this.wellKnownOf(domain);
     const listed = ((wk.packages as JsonObject[] | undefined) ?? []).find((p) => p.package === pkg);
