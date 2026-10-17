@@ -37,14 +37,19 @@ export function readRoles(source: string): Role[] {
   return out;
 }
 
-/** What a caller is, for `who` (7.6): its values, the classes it wears, and its roles' grants. */
-function callerStates(caller: Record | undefined, roles: Role[]): StateOf {
+/**
+ * What a caller is, for `who` (7.6): the classes it wears, its roles' grants, and the menu items it holds
+ * on the record by its edges (14.6) when the run has access to consult. A caller with no record of its own
+ * here (a hosted person, 14.8) is still what its edges make it.
+ */
+function callerStates(caller: Record | undefined, roles: Role[], held?: (verb: string, target: string) => boolean, asked: string[] = []): StateOf {
   return (path) => {
     const s = new Set<string>();
-    if (path !== "caller" || !caller) return s;
+    if (path !== "caller") return s;
+    if (held) for (const q of asked) if (held(q.slice(0, q.indexOf(" ")), q.slice(q.indexOf(" ") + 1))) s.add(`may:${q}`);
+    if (!caller) return s;
     for (const w of caller.wears ?? []) s.add(`wears:${w}`);
-    const held = caller.values.roles;
-    const names = (Array.isArray(held) ? held : held ? [held] : []).map((r) => (isObj(r) && "$link" in r ? String(r.$link) : String(r)));
+    const names = (Array.isArray(caller.values.roles) ? caller.values.roles : caller.values.roles ? [caller.values.roles] : []).map((r) => (isObj(r) && "$link" in r ? String(r.$link) : String(r)));
     for (const r of roles.filter((x) => names.includes(x.name))) {
       for (const [verb, targets] of Object.entries(r.may)) for (const t of targets) s.add(`may:${verb} ${t}`);
     }
@@ -276,7 +281,10 @@ export class Exchange {
     if (this.access && callerId && !this.access.may(callerId, "run", c.name, recordId)) return "permission";
     if (c.who) {
       const caller = callerId ? this.records.get(callerId) : undefined;
-      const ok = evaluate(parseCondition(c.who), caller ? { ...caller.values } : {}, callerStates(caller, this.roles));
+      // `caller may edit Deployment`: held by the caller's edges and the menu on this record (14.6).
+      const asked = [...c.who.matchAll(/\bcaller may (\w+) (\S+)/g)].map((m) => `${m[1]} ${m[2]}`);
+      const held = this.access && callerId ? (verb: string, target: string) => (this.access as Access).may(callerId, verb, target, recordId) : undefined;
+      const ok = evaluate(parseCondition(c.who), caller ? { ...caller.values } : {}, callerStates(caller, this.roles, held, asked));
       if (ok !== true) return "who";
     }
     return null;

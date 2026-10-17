@@ -239,11 +239,14 @@ function segment(name: string): string {
   return /^[A-Za-z_]\w*$/.test(name) ? name : JSON.stringify(name);
 }
 
+/** A value in one of chapter 3's object forms (`$link`, `$image`, `$qty`, `$money`, `$value`, `$empty`): a leaf, not a nesting. */
+const valueObject = (v: Json): boolean => isObj(v) && Object.keys(v).some((k) => k.startsWith("$"));
+
 function leaves(obj: Json, prefix = ""): [string, Json][] {
-  if (!isObj(obj)) return [[prefix, obj]];
+  if (!isObj(obj) || valueObject(obj)) return [[prefix, obj]];
   return Object.entries(obj).flatMap(([k, v]) => {
     const p = prefix ? `${prefix}.${segment(k)}` : segment(k);
-    return isObj(v) ? leaves(v, p) : ([[p, v]] as [string, Json][]);
+    return isObj(v) && !valueObject(v) ? leaves(v, p) : ([[p, v]] as [string, Json][]);
   });
 }
 
@@ -266,10 +269,21 @@ export type IntakeRecord = {
 
 /** Fold one raw value through the map's value map, the aliases and the shapes, then check it (9.2). */
 function foldIn(f: Facet, raw: Json, map: MapLine | undefined, dict: Dictionary): { value: Json; outcome: string; cites?: JsonObject } {
-  let text = typeof raw === "string" ? raw : serialize(raw);
-  const vm = map?.values.find(([theirs]) => theirs === text);
-  if (vm) text = vm[1];
-  const read = readUnder(f, text, dict) ?? text;
+  // Chapter 3's forms arrive as values: a boolean for a yes-no, an object with a `$` key, and a list read item
+  // by item. Anything else is text, read under the facet (chapter 2) after the map's value map and the aliases.
+  const one = (r: Json): Json => {
+    if (valueObject(r) || (typeof r === "boolean" && f.type === "yes-no")) return r;
+    let text = typeof r === "string" ? r : serialize(r);
+    const vm = map?.values.find(([theirs]) => theirs === text);
+    if (vm) text = vm[1];
+    return readUnder(f, text, dict) ?? text;
+  };
+  const read = Array.isArray(raw)
+    ? raw.flatMap((r) => {
+        const x = one(r);
+        return Array.isArray(x) ? x : [x];
+      })
+    : one(raw);
   const value = foldValue(f, read, dict);
   const items = Array.isArray(value) ? value : [value];
   const checks = items.map((i) => checkScalar(f, i));
