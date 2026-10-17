@@ -385,13 +385,13 @@ function sourceAt(r: Record, address: string): Source | undefined {
  */
 export function land(
   r: Record,
-  intake: { outcomes: IntakeOutcome[]; contract?: string },
+  intake: { outcomes: IntakeOutcome[]; contract?: string; /** a person's write through a form (11.3): ranks as `person` */ person?: boolean },
   source: Source,
   trust: string[] = DEFAULT_TRUST,
   facetTrust: Map<string, string[]> = new Map(),
 ): Record {
   const order = trust.length ? trust : DEFAULT_TRUST;
-  const incoming: Who = { source, ...(intake.contract ? { contract: intake.contract } : {}) };
+  const incoming: Who = { source, ...(intake.contract ? { contract: intake.contract } : {}), ...(intake.person ? { person: true } : {}) };
   const out: Record & { alternatives?: { [a: string]: JsonObject[] } } = {
     ...r,
     values: { ...r.values },
