@@ -65,7 +65,9 @@ key is `move`.
 
 ## 10.4 Restamping
 
-Restamping applies a recipe to everything a store holds for the package:
+Restamping applies a recipe to everything a store holds **for the package**: records of the kinds it defines
+and records wearing the classes it defines, never another package's records that happen to hold a key of the
+same name. It covers:
 
 - record values, at every level and in every part;
 - `alternatives` and `suggestions`;

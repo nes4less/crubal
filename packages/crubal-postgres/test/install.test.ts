@@ -109,3 +109,93 @@ test("a version that drops a preset live edges grant is refused; lapsed edges do
   const installed = (await store.state()).installed.map((i) => String(i.version));
   assert.deepEqual(installed, ["2026-10-01", "2026-10-02"]);
 });
+
+test("one key, one definition: a package defining another's key with a different type is refused; a recipe restamps only the package's own records", { skip: !url }, async () => {
+  const store = new PgStore(pool, "keys.example", { allowUnsigned: true });
+  const a1 = publish(`package: places /2026-10-01
+  owner: keys.example
+  label: Places
+  crubal: 2
+
+kind: place
+  levels: place
+  base: Place
+
+origin?
+
+class: Place
+  for: place
+  facets:
+    origin
+`, { date: "2026-10-01" }).bundle;
+  await store.install(a1, undefined, "2026-10-17T00:00:00Z");
+  const clash = publish(`package: roots /2026-10-01
+  owner: keys.example
+  label: Roots
+  crubal: 2
+
+kind: root
+  levels: root
+  base: Root
+
+origin&place
+
+class: Root
+  for: root
+  facets:
+    origin
+`, { date: "2026-10-01" }).bundle;
+  await assert.rejects(store.install(clash, undefined, "2026-10-17T00:00:01Z"), /defines origin as link, but keys.example\/places defines it as yes-no/);
+  const roots1 = publish(`package: roots /2026-10-01
+  owner: keys.example
+  label: Roots
+  crubal: 2
+
+kind: root
+  levels: root
+  base: Root
+
+from$
+
+class: Root
+  for: root
+  facets:
+    from
+`, { date: "2026-10-01" }).bundle;
+  await store.install(roots1, undefined, "2026-10-17T00:00:02Z");
+  await store.commit(
+    { person: "keys.example" },
+    (d) => {
+      d.records.set("R-1", { id: "R-1", kind: "root", level: "root", owner: "keys.example", values: { from: "K-1" }, sources: { "*": { origin: "declared", via: "L-1" } } });
+      d.records.set("K-1", { id: "K-1", kind: "place", level: "place", owner: "keys.example", values: { origin: true, from: "here" }, sources: { "*": { origin: "declared", via: "L-1" } } });
+    },
+    "2026-10-17T00:00:03Z",
+  );
+  const roots2 = publish(`package: roots /2026-10-02
+  owner: keys.example
+  label: Roots
+  crubal: 2
+
+kind: root
+  levels: root
+  base: Root
+
+source$
+
+class: Root
+  for: root
+  facets:
+    source
+
+migration: roots /2026-10-01 -> roots /2026-10-02
+  facet: from
+    move: -> source
+`, { date: "2026-10-02", previous: roots1 }).bundle;
+  const dry = await store.dryRun(roots2);
+  assert.equal(dry.records, 1, "the dry run counts the package's own records");
+  await store.install(roots2, undefined, "2026-10-17T00:00:04Z");
+  const s = await store.state();
+  assert.equal(s.records.get("R-1")?.values.source, "K-1", "the root's value moved");
+  assert.equal(s.records.get("K-1")?.values.from, "here", "the place's value, another package's record, stayed");
+});
+

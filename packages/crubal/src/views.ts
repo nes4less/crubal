@@ -144,11 +144,13 @@ export function readViews(source: string): ViewSet {
  * The lowest audience that may see a facet (12.4): a show rule whose `for` covers the record decides for it,
  * a class over a kind or level, else the rule for everywhere; no rule, the public.
  */
-export function shownAudience(set: Pick<ViewSet, "shown" | "shownFor">, facet: string, record?: Pick<Record, "kind" | "level" | "wears">): string | undefined {
+export function shownAudience(set: Pick<ViewSet, "shown" | "shownFor">, facet: string, record?: Pick<Record, "kind" | "level" | "wears">, dict?: Pick<Dictionary, "kinds">): string | undefined {
   const key = facet.replace(/^\w+::/, "");
   if (record) {
     const scoped = set.shownFor.get(key) ?? [];
-    const byClass = scoped.find((s) => (record.wears ?? []).includes(s.for));
+    // A record wears its kind's base class without saying so (chapter 5).
+    const base = dict?.kinds.get(record.kind)?.base;
+    const byClass = scoped.find((s) => (record.wears ?? []).includes(s.for) || s.for === base);
     if (byClass) return byClass.audience;
     const byKind = scoped.find((s) => s.for === record.kind || s.for === record.level);
     if (byKind) return byKind.audience;
@@ -157,8 +159,8 @@ export function shownAudience(set: Pick<ViewSet, "shown" | "shownFor">, facet: s
 }
 
 /** Can an audience see a facet, of this record when one is given? */
-export function visibleTo(set: Pick<ViewSet, "shown" | "shownFor">, facet: string, audience: string, record?: Pick<Record, "kind" | "level" | "wears">): boolean {
-  const min = shownAudience(set, facet, record);
+export function visibleTo(set: Pick<ViewSet, "shown" | "shownFor">, facet: string, audience: string, record?: Pick<Record, "kind" | "level" | "wears">, dict?: Pick<Dictionary, "kinds">): boolean {
+  const min = shownAudience(set, facet, record, dict);
   return !min || rankOf(audience) >= rankOf(min);
 }
 
@@ -315,10 +317,10 @@ export class Views {
   }
 
   private canSee(key: string, audience: string, caller?: Record, record?: Record): boolean {
-    if (!visibleTo(this.set, key, audience, record)) return false;
+    if (!visibleTo(this.set, key, audience, record, this.dict)) return false;
     if (!caller || rankOf(audience) <= rankOf("member")) return true;
     // Above member, a person sees what members see plus what their roles grant (default deny).
-    if (visibleTo(this.set, key, "member", record)) return true;
+    if (visibleTo(this.set, key, "member", record, this.dict)) return true;
     const held = caller.values.roles;
     const names = (Array.isArray(held) ? held : held ? [held] : []).map((x) => (isObj(x) && "$link" in x ? String(x.$link) : String(x)));
     return names.some((n) => {

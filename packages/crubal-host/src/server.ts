@@ -319,7 +319,7 @@ async function respond(host: Host, req: Req, res: Res, seen: Seen): Promise<void
       const actor = acted?.actor ?? callerId;
       if (acted) border.acting = acted.acting;
       if (record) return json(res, 200, await border.receive(name, record, payload, actor, at, run));
-      return json(res, 200, await border.arrive(name, payload, q("level") ?? "product", actor, q("of"), at));
+      return json(res, 200, await border.arrive(name, payload, q("level") ?? "product", actor, q("of"), at, q("within")));
     }
     if (what === "records" && name && method === "GET") {
       if (!callerId) throw new HttpError(401, "sign in");

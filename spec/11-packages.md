@@ -155,6 +155,10 @@ Adopted values (chapter 8.2) are outside the trust order: they don't change unti
   member is a `define` write in the owner's log (chapter 8.5), made by a person or by a review decision
   (chapter 9.5), so the working package is rebuilt from the log like the data is. Publishing cuts a version
   from it (11.5); nothing else does.
+- **One key, one definition.** A package MUST NOT define a facet another package in the same dictionary
+  defines with a different type; a store refuses the install, since the later definition would silently
+  change what the earlier package's records mean. A package that needs the same idea on its own records
+  names its own key.
 - **Outside, adopters pin.** `extends: commerce /2026-10-01` uses exactly that version until the package
   moves its pin, which is itself a new version of the package.
 - **Extending** (UCP's word, kept for packages and contracts) lets a package add facets, classes, rules,

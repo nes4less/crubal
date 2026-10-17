@@ -179,7 +179,7 @@ export class Access {
    */
   visible(callerId: string, facet: string, recordId?: string): boolean {
     if (!this.views) return true;
-    const min = shownAudience(this.views, facet, recordId ? this.records.get(recordId) : undefined);
+    const min = shownAudience(this.views, facet, recordId ? this.records.get(recordId) : undefined, this.dict);
     if (!min) return true;
     const order = ["public", "member", "staff", "owner"];
     return Math.min(order.indexOf(this.audienceOf(callerId)), 1) >= order.indexOf(min);

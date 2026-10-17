@@ -57,7 +57,7 @@ export function arrive(
   level: string,
   store: ArrivalStore,
   dict: Dictionary,
-  opts: { mint: () => string; owner: string; of?: string; source?: Source; intakeId?: string },
+  opts: { mint: () => string; owner: string; of?: string; within?: string; source?: Source; intakeId?: string },
 ): { arrival: Arrival; intake: IntakeRecord; record?: Record } {
   const intake = receive(c, body, "", dict, opts.intakeId);
   const payload = JSON.parse(body) as Json;
@@ -112,6 +112,7 @@ export function arrive(
   const id = opts.mint();
   const rec: Record = { id, kind: dict.levels.get(level) ?? level, level, owner: opts.owner, values: {} };
   if (opts.of) rec.of = opts.of;
+  if (opts.within) rec.within = opts.within;
   return finish({ outcome: "new" }, rec);
 }
 
@@ -122,7 +123,7 @@ export function decide(
   choice: { record: string } | { new: true },
   store: ArrivalStore,
   dict: Dictionary,
-  opts: { mint: () => string; owner: string; level: string; of?: string; source?: Source },
+  opts: { mint: () => string; owner: string; level: string; of?: string; within?: string; source?: Source },
 ): { arrival: Arrival; record: Record } {
   const source: Source = opts.source ?? { origin: c.origin, via: held.intake.intake };
   let target: Record;
@@ -133,6 +134,7 @@ export function decide(
   } else {
     target = { id: opts.mint(), kind: dict.levels.get(opts.level) ?? opts.level, level: opts.level, owner: opts.owner, values: {} };
     if (opts.of) target.of = opts.of;
+    if (opts.within) target.within = opts.within;
   }
   const landed = land(target, { outcomes: held.intake.outcomes, contract: c.name }, source, dict.trust, dict.facetTrust);
   store.records.set(landed.id, landed);

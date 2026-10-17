@@ -41,6 +41,11 @@ export type StoreOptions = {
   hostedSigner?: (owner: string) => Promise<((hash: string) => string) | undefined>;
 };
 
+/** Is a record the package's own (10.4): of a kind it defines, or wearing a class it defines? */
+function ownRecord(own: Parsed, r: { kind: string; wears?: string[] }): boolean {
+  return own.dict.kinds.has(r.kind) || (r.wears ?? []).some((w) => own.dict.classes.has(w));
+}
+
 /** The recipes of a package that lie between two versions, oldest first (10.1): `from` at or after the installed version, `to` at or before the new one. */
 function recipesBetween<R extends { from: string; to: string }>(recipes: R[], pkg: string, installed: string, target: string): R[] {
   const version = (s: string) => s.slice(s.lastIndexOf("/") + 1);
@@ -165,6 +170,19 @@ export class PgStore {
     const current = await this.definitions(true);
     const next = readBundleOnto(bundle, current);
     checkAll(next);
+    // One dictionary (11.4): a facet another installed package defines with a different type is a collision,
+    // refused here rather than letting the later definition silently win.
+    const own = readBundle(bundle);
+    {
+      const { rows: others } = await this.pool.query("select package, json from bundles where owner = $1 and package <> $2", [this.owner, bundle.id]);
+      for (const o of others as { package: string; json: JsonObject }[]) {
+        const theirs = readBundle(o.json).dict.facets;
+        for (const [key, f] of own.dict.facets) {
+          const t = theirs.get(key);
+          if (t && t.type !== f.type) throw new Error(`${bundle.id} /${bundle.version} defines ${key} as ${f.type}, but ${o.package} defines it as ${t.type}; one dictionary, one key`);
+        }
+      }
+    }
     // A version may not take away a preset or item that live edges still grant (14.12): lapse or regrant first.
     if (previous) {
       const { rows: prevRows } = await this.pool.query("select json from bundles where owner = $1 and package = $2 and version = $3", [this.owner, bundle.id, previous]);
@@ -188,7 +206,8 @@ export class PgStore {
       if (previous) {
         const parsedRecipes = recipesBetween(next.recipes, String(bundle.package), previous, String(bundle.version));
         for (const recipe of parsedRecipes) {
-          const records = draft.records.all();
+          // A recipe restamps what the store holds for the package (10.4): records of its kinds and records wearing its classes.
+          const records = draft.records.all().filter((r) => ownRecord(own, r));
           const { records: after, review } = restamp(records, recipe, next.dict);
           for (const r of after) draft.records.set(r.id, r);
           for (const item of review) draft.review.push({ ...item, step: item.step, migration: `${recipe.from} -> ${recipe.to}` });
@@ -324,7 +343,8 @@ export class PgStore {
     const previous = installed.filter((i) => i.package === bundle.id).map((i) => String(i.version)).at(-1);
     if (!previous) return { recipes: [], records: 0 };
     const next = readBundleOnto(bundle, await this.definitions(true));
-    const records = (await this.state()).records.all();
+    const own = readBundle(bundle);
+    const records = (await this.state()).records.all().filter((r) => ownRecord(own, r));
     const recipes = recipesBetween(next.recipes, String(bundle.package), previous, String(bundle.version)).map((r) => { const d = dryRun(records, r, next.dict); return { from: r.from, to: r.to, steps: d.steps, review: d.review }; });
     return { recipes, records: records.length };
   }

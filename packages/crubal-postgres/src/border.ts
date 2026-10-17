@@ -200,10 +200,10 @@ export class PgBorder {
   }
 
   /** An arrival (9.2a): the payload finds or makes its record; its intake kept. */
-  async arrive(name: string, body: string, level: string, callerId?: string, of?: string, at?: string): Promise<RunResult> {
+  async arrive(name: string, body: string, level: string, callerId?: string, of?: string, at?: string, within?: string): Promise<RunResult> {
     const c = this.contracts.get(name);
     if (!c) throw new Error(`no contract ${name}`);
-    const r = await this.run((ex) => ex.arriveRun(name, body, level, callerId, of), at);
+    const r = await this.run((ex) => ex.arriveRun(name, body, level, callerId, of, within), at);
     const record = (r.arrival as JsonObject | undefined)?.record;
     if (typeof r.log === "string") await this.keepIntake(c, body, typeof record === "string" ? record : "", r.log, at);
     return r;

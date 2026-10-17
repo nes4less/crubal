@@ -582,21 +582,22 @@ export class Exchange {
    * An arrival through a contract (9.2a): the payload finds or makes its record; a new record made for a
    * caller gets their consumer edge (14.4).
    */
-  arriveRun(name: string, body: string, level: string, callerId?: string, of?: string): RunResult {
+  arriveRun(name: string, body: string, level: string, callerId?: string, of?: string, within?: string): RunResult {
     const c = this.contracts.get(name);
     if (!c) throw new Error(`no contract ${name}`);
     const log = this.nextLog();
     const domain = this.access?.owner ?? this.journal?.owner ?? this.records.all()[0]?.owner ?? "";
     // A person owns what the package lets a person own (14.1): the record is theirs, written as `domain:id`.
     const kind = this.dict.levels.get(level) ?? level;
-    const refused = this.permitted(c, of ?? "", callerId, true);
+    // Permitted on the record the new one sits under or within (14.2), else anywhere (7.4 step 1).
+    const refused = this.permitted(c, of ?? within ?? "", callerId, true);
     if (refused) return { contract: name, ...(callerId ? { caller: callerId } : {}), stopped: refused, log };
     const person = callerId && !callerId.includes(":") && (this.access?.perms.ownership.get("person") ?? []).includes(kind);
     const owner = person ? `${domain}:${callerId}` : domain;
     // A refusal by the rules puts everything back: the arrival never happened.
     const prevRecords = new Map(this.records);
     const prevBindings = new Map(this.bindings);
-    const { arrival, record } = arrive(c, body, level, this, this.dict, { mint: () => (this.mint ? this.mint(level) : `${level.charAt(0).toUpperCase()}-NEW${++this.minted}`), owner, ...(of ? { of } : {}), intakeId: `I-${log.slice(2)}` });
+    const { arrival, record } = arrive(c, body, level, this, this.dict, { mint: () => (this.mint ? this.mint(level) : `${level.charAt(0).toUpperCase()}-NEW${++this.minted}`), owner, ...(of ? { of } : {}), ...(within ? { within } : {}), intakeId: `I-${log.slice(2)}` });
     const out: RunResult = { contract: name, ...(callerId ? { caller: callerId } : {}), arrival: arrival as unknown as Json, log };
     if (record) {
       // 6. Rules, over what landed (everything, for a new record).

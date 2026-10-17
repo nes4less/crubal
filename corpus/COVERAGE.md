@@ -98,6 +98,8 @@ a new MUST or a new case updates this file.
 | 14.4 | each mode includes the ones below it; a `see` below admin is the audience's by the show rules (capped at member) or an item's | unit: audit-forms-access.test; host.test 14.8 |
 | 12.4 | a show rule's `for` scopes it: a class or kind rule decides for the records it covers, in access and in projections | unit: shown-for-arrivals.test; views/007-shown-for |
 | 10.4 | an install two versions ahead restamps through every recipe between, in order; the dry run reports them all | crubal-postgres: install.test |
+| 10.4 | a recipe restamps the package's own records (its kinds, its classes) and no other package's holding the same key; a moved value keeps its source | crubal-postgres: install.test |
+| 11.4 | one key, one definition: a facet another installed package defines with a different type is refused at install | crubal-postgres: install.test |
 | 14.12 | a version dropping a preset or item live edges grant is refused until they lapse | crubal-postgres: install.test |
 | 14.12 | a store refuses the listed writes | exchange-errors/e07-grant-above-held, e08-cross-owner-by-admin, e12-person-owns-item, e13-within-another-owner, e14-wears-not-for-kind; pg test: refused at the commit, nothing left behind |
 | 14.9 | a system acting for a person never exceeds the person's effective access, never grants onward, never acts under an emergency edge; every such write carries `for` | host test: "acting for a person (14.9)" (runs as the person, capped to the items chosen, suggestions while gated, the entry's `by` carries `caller` and `for`, refused without the person's permission or beyond it); the onward-grant and emergency refusals are in `PgBorder.refuseActing`, exercised by the Agents object's suite later |

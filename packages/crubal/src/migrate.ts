@@ -8,7 +8,7 @@ import { checkScalar } from "./dictionary.ts";
 import { readUnder } from "./read-text.ts";
 import type { Dictionary } from "./defs.ts";
 import { splitTop } from "./lex.ts";
-import type { Json, JsonObject, Record } from "./model.ts";
+import type { Json, JsonObject, Record, Source } from "./model.ts";
 import { CrubalError, readTree } from "./tree.ts";
 import { convert, unitOf } from "./units.ts";
 
@@ -153,6 +153,8 @@ export function restamp(records: Record[], recipe: Recipe, dict: Dictionary, sta
   if (stats) for (const s of recipe.steps) stats.push({ step: s.text, facet: s.facet, verb: s.verb, changed: 0, review: 0 });
   const out = records.map((rec) => {
     const values: JsonObject = { ...rec.values };
+    // A moved value keeps its source under its new address (10.4): the record's own, else its default.
+    const sources: { [address: string]: Source } = { ...(rec.sources ?? {}) };
     recipe.steps.forEach((s, si) => {
       const v = values[s.facet];
       if (v === undefined && s.verb !== "review") return;
@@ -198,6 +200,11 @@ export function restamp(records: Record[], recipe: Recipe, dict: Dictionary, sta
           }
           values[s.to] = v as Json;
           delete values[s.facet];
+          {
+            const src = sources[s.facet] ?? sources["*"];
+            if (src) sources[s.to] = src;
+            delete sources[s.facet];
+          }
           break;
         case "review":
           if (evaluate(parseCondition(s.cond, s.line), values) === true) review.push({ record: rec.id, address: s.facet, step: s.text, held: true });
@@ -221,7 +228,7 @@ export function restamp(records: Record[], recipe: Recipe, dict: Dictionary, sta
         st.review += review.length - reviewsBefore;
       }
     });
-    return { ...rec, values };
+    return { ...rec, values, ...(Object.keys(sources).length ? { sources } : {}) };
   });
   return { records: out, review };
 }
