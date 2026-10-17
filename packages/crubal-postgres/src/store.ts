@@ -174,12 +174,16 @@ export class PgStore {
     // refused here rather than letting the later definition silently win.
     const own = readBundle(bundle);
     {
-      const { rows: others } = await this.pool.query("select package, json from bundles where owner = $1 and package <> $2", [this.owner, bundle.id]);
+      // Against each other package's version in force; a key this package's installed version already
+      // defined the same way is no new collision (so two packages can unwind one, each in its turn).
+      const { rows: others } = await this.pool.query("select distinct on (package) package, json from bundles where owner = $1 and package <> $2 order by package, version desc", [this.owner, bundle.id]);
+      const { rows: mine } = previous ? await this.pool.query("select json from bundles where owner = $1 and package = $2 and version = $3", [this.owner, bundle.id, previous]) : { rows: [] };
+      const before = mine[0] ? readBundle((mine[0] as { json: JsonObject }).json).dict.facets : new Map<string, { type: string }>();
       for (const o of others as { package: string; json: JsonObject }[]) {
         const theirs = readBundle(o.json).dict.facets;
         for (const [key, f] of own.dict.facets) {
           const t = theirs.get(key);
-          if (t && t.type !== f.type) throw new Error(`${bundle.id} /${bundle.version} defines ${key} as ${f.type}, but ${o.package} defines it as ${t.type}; one dictionary, one key`);
+          if (t && t.type !== f.type && before.get(key)?.type !== f.type) throw new Error(`${bundle.id} /${bundle.version} defines ${key} as ${f.type}, but ${o.package} defines it as ${t.type}; one dictionary, one key`);
         }
       }
     }
