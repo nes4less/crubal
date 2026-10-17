@@ -116,6 +116,10 @@ holder to staff views and shows them that league only, and an emergency responde
 what their edge covers. A `view` edge admits to `member` and no higher: what it opens is a member view
 partitioned by its relation (a season's stats for `relation subscriber`, 14.10), never a staff projection.
 
+**Which contracts a consumer may run** is each contract's `audience` (chapter 7.2): `member` for a form
+unless it says otherwise, so a form for staff says `audience: staff` or narrows with `who`. A relation-only
+edge (`mode: none`, 14.10) admits its holder to `member` too: the owner made the edge.
+
 **A contract grants the consumer's edge.** A contract that creates a record for a caller (an order, a
 booking, a submission) also writes that caller's edge on it, `mode: consume` with the contract's relation,
 under the running system's own edge as `by`. The owner owns the record; the consumer holds their part, and

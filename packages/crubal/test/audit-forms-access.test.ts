@@ -46,6 +46,13 @@ test("a compound answer as an object lands whole, its children folded under thei
   assert.deepEqual(ex.get("O-1")?.values.shipTo, { name: "Sam", street: "1 Main", sealed: true });
 });
 
+test("a compound answer with a child that contradicts its facet is a contradiction naming the child; nothing lands", () => {
+  const ex = fresh();
+  const r = ex.receiveRun("checkout", "O-1", JSON.stringify({ shipTo: { name: "Sam", sealed: "maybe" } }), "P-1");
+  assert.deepEqual((r.outcomes as { to?: string; outcome: string; cites?: { type?: string } }[]).map((o) => [o.to, o.outcome, o.cites?.type]), [["shipTo", "contradiction", "sealed"]]);
+  assert.equal(ex.get("O-1")?.values.shipTo, undefined);
+});
+
 test("a bare decimal under a facet with a unit is that number in the unit; a JSON number too; a unit spelling still converts", () => {
   const ex = fresh();
   ex.receiveRun("checkout", "O-1", JSON.stringify({ total: 12.5, weight: "2.25" }), "P-1");

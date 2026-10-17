@@ -60,13 +60,16 @@ function callerStates(caller: Record | undefined, roles: Role[], held?: (verb: s
 // ─── Publish checks (7.10) ───────────────────────────────────────────────────
 
 const PARTS: { [kind: string]: string[] } = {
-  send: ["needs", "gives", "writes", "reads", "stream", "to", "when", "missed", "who", "auth", "scope", "credential", "retry", "undo", "for", "label", "describe", "version"],
-  receive: ["needs", "gives", "reads", "when", "missed", "who", "origin", "lands", "evidence", "absorb", "ignore", "keep-raw", "prefix", "ref", "relation", "auth", "scope", "credential", "retry", "undo", "for", "label", "describe", "version"],
-  store: ["needs", "stores", "origin", "when", "who", "for", "label", "describe", "version"],
-  form: ["needs", "gives", "writes", "reads", "when", "who", "origin", "lands", "ref", "relation", "for", "label", "describe", "version"],
-  offer: ["needs", "gives", "to", "mode", "terms", "for", "when", "who", "label", "describe", "version"],
-  take: ["needs", "from", "offer", "reads", "mode", "lands", "origin", "absorb", "ignore", "keep-raw", "prefix", "ref", "when", "who", "for", "label", "describe", "version"],
+  send: ["needs", "gives", "writes", "reads", "stream", "to", "when", "missed", "who", "audience", "auth", "scope", "credential", "retry", "undo", "for", "label", "describe", "version"],
+  receive: ["needs", "gives", "reads", "when", "missed", "who", "audience", "origin", "lands", "evidence", "absorb", "ignore", "keep-raw", "prefix", "ref", "relation", "auth", "scope", "credential", "retry", "undo", "for", "label", "describe", "version"],
+  store: ["needs", "stores", "origin", "when", "who", "audience", "for", "label", "describe", "version"],
+  form: ["needs", "gives", "writes", "reads", "when", "who", "audience", "origin", "lands", "ref", "relation", "for", "label", "describe", "version"],
+  offer: ["needs", "gives", "to", "mode", "terms", "for", "when", "who", "audience", "label", "describe", "version"],
+  take: ["needs", "from", "offer", "reads", "mode", "lands", "origin", "absorb", "ignore", "keep-raw", "prefix", "ref", "when", "who", "audience", "for", "label", "describe", "version"],
 };
+const AUDIENCES = ["public", "member", "staff", "owner"];
+/** The lowest audience that may run a contract (7.2): what it says, else member for a form and public otherwise. */
+const audienceOf = (c: Contract): string => c.parts.audience ?? (c.kind === "form" ? "member" : "public");
 
 function ourKey(address: string): string {
   return address.replace(/^\w+::/, "").split(/[.[]/)[0] as string;
@@ -78,6 +81,7 @@ export function checkContracts(contracts: Contract[], dict: Dictionary, ownPrefi
   for (const c of contracts) {
     const allowed = PARTS[c.kind];
     if (!allowed) throw new CrubalError(`unknown contract kind ${c.kind}`, c.line);
+    if (c.parts.audience && !AUDIENCES.includes(c.parts.audience)) throw new CrubalError(`${c.name}: audience is public, member, staff or owner, not ${c.parts.audience}`, c.partLines.audience ?? c.line);
     for (const [part, line] of Object.entries(c.partLines)) {
       if (part === "kind" || part.includes(":")) continue;
       if (!allowed.includes(part)) throw new CrubalError(`a ${c.kind} contract has no part ${part}`, line);
@@ -279,6 +283,8 @@ export class Exchange {
   /** Step 1 of a run (7.4): the menu is the permission (14.6); `who` only narrows. */
   private permitted(c: Contract, recordId: string, callerId?: string): string | null {
     if (this.access && callerId && !this.access.may(callerId, "run", c.name, recordId)) return "permission";
+    // The contract's audience (7.2, 14.4): consume opens only what the package opens to consumers.
+    if (this.access && callerId && AUDIENCES.indexOf(this.access.audienceOf(callerId)) < AUDIENCES.indexOf(audienceOf(c))) return "permission";
     if (c.who) {
       const caller = callerId ? this.records.get(callerId) : undefined;
       // `caller may edit Deployment`: held by the caller's edges and the menu on this record (14.6).

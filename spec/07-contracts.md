@@ -63,6 +63,7 @@ contract: ebayListing
 | `from` | the presenter, by domain (7.8) | take |
 | `mode` · `terms` | how shared data is held, and the presenter's terms for `controlled` (7.8) | offer, take · offer |
 | `who` | who may run it: a condition over the caller (7.6) | all |
+| `audience` | the lowest audience (chapter 12.4) that may run it: `public`, `member`, `staff` or `owner`; the menu (chapter 14.6) and `who` still apply | all; default `member` for a form, `public` otherwise |
 | `origin` | the origin of the values it brings in (chapter 1.9) | receive, form, take, store; default `reported` for systems and `declared` for forms |
 | `lands` | `value` (the default), `suggestion` (7.5) or `observation` (chapter 9.7) | receive, form, take |
 | `ref` | the field of their payload that is their own ID for the thing; arrivals are bound by it (chapter 9.2a) | receive, form, take |
@@ -163,7 +164,10 @@ Every run has a **run ID** (`R-118`), and the log entry for its writes names it 
 by the caller's edges and the package's permission menu (chapter 14): that is the one spelling of
 permission. `who` is a further condition (chapter 6.3) over the **caller**, which is a record: a person, an
 organization or a system. Its values are read with the `caller` prefix (`caller.role is staff`), and
-`caller wears Staff` tests its classes. `who` narrows what the menu allows and never widens it. What a caller
+`caller wears Staff` tests its classes. `who` narrows what the menu allows and never widens it. A `who` over
+the caller's values or classes reads the caller's record in this owner's log; a caller hosted elsewhere
+(chapter 14.8) has none here, so for them only `caller may …` (what their edges hold, chapter 14.6) can hold,
+and `audience` is the usual gate. What a caller
 sees is decided by `show` rules (chapter 12) and the view's partition (chapter 12.6).
 
 **Authentication is the host's job.** Sign-in, OAuth flows and API keys belong to whatever runs the

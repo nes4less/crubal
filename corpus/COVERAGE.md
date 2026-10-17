@@ -41,6 +41,7 @@ a new MUST or a new case updates this file.
 | 3.8 | a contradiction carries exactly one `cites`; a unit question cites the unit | dictionary/003-check-outcomes, store/027-unit-question |
 | 3.1 | chapter 3's forms arrive as values through a form body: a boolean, `$link`, `$image`, a list item by item | unit: intake-json-forms.test |
 | 3.1 | a compound answer as an object is one answer, folded child by child; an empty-string answer is no answer; a bare decimal under a unit facet is that number in the unit | unit: audit-forms-access.test |
+| 9.2 | a compound answer whose child contradicts its facet is a contradiction naming the child | unit: audit-forms-access.test |
 | 4.8 | a new `must … shown to` rule is visibility, never breaking; a new must rule over data still needs `review` | unit: publish-show-rule.test |
 | 3.10 | the same canonical JSON from a text and from its print | reader/001–013 |
 | 4.1 | a published version never changes | unit: publish.test (a version is a new bundle; the registry keeps each) |
@@ -66,6 +67,7 @@ a new MUST or a new case updates this file.
 | 7.5 | never act twice for one key | exchange/006-idempotency, exchange/020-send-restart-once |
 | 7.6 | no secret in CRUBAL text or JSON | exchange/005-who (credentials by name); by construction: contracts name credentials, the host holds them |
 | 7.6 | `who: caller may edit X` is held by the caller's edges and the menu (14.6), beside roles on the caller's record; a hosted caller with no record is what its edges make it | unit: who-may.test |
+| 7.2 | `audience`: the lowest audience that may run a contract, member for a form and public otherwise; refused at publish when it isn't one | unit: contract-audience.test |
 | 7.10 | refused at publish | exchange-errors/* |
 | 8.5 | a record's writes all go to one chain | store/001-chain-valid; host test: a hosted person's chain holds only their records' writes |
 | 8.5 | a witnessed entry is never redacted | store/034-erasure-chain |
