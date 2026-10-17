@@ -123,6 +123,9 @@ function classChange(was: JsonObject, now: JsonObject): Change {
   return { member: `class:${now.class}`, kind: st.kind, why, ...(st.kind === "breaking" ? { recipe: ["review"] } : {}) };
 }
 
+/** A show rule: its `then` is `key shown to audience` (12.4), visibility and never a test of data. */
+const isShow = (rule: JsonObject): boolean => / shown to /.test(String(rule.then ?? ""));
+
 /** Classify every member against the previous bundle. */
 export function classify(previous: JsonObject | undefined, next: JsonObject): Change[] {
   const was = previous ? membersOf(previous) : new Map<string, JsonObject>();
@@ -131,8 +134,10 @@ export function classify(previous: JsonObject | undefined, next: JsonObject): Ch
   for (const [key, n] of now) {
     const w = was.get(key);
     if (!w) {
-      // A new must rule breaks data that breaks it (4.8); every other new member is safe.
-      out.push({ member: key, kind: key.startsWith("rule:") && n.strength === "must" && previous ? "breaking" : "new", why: ["new"], ...(key.startsWith("rule:") && n.strength === "must" && previous ? { recipe: ["review"] } : {}) });
+      // A new must rule breaks data that breaks it (4.8); every other new member is safe. A show rule
+      // (`shown to`, 12.4) decides who sees a value and tests no data, so it never breaks any.
+      const hard = key.startsWith("rule:") && n.strength === "must" && !isShow(n) && !!previous;
+      out.push({ member: key, kind: hard ? "breaking" : "new", why: ["new"], ...(hard ? { recipe: ["review"] } : {}) });
       continue;
     }
     if (same(withoutVersion(w), withoutVersion(n))) {
@@ -141,7 +146,10 @@ export function classify(previous: JsonObject | undefined, next: JsonObject): Ch
     }
     if (key.startsWith("facet:")) out.push(facetChange(w, n));
     else if (key.startsWith("class:")) out.push(classChange(w, n));
-    else if (key.startsWith("rule:")) out.push({ member: key, kind: n.strength === "must" && w.strength !== "must" ? "breaking" : "safe", why: ["changed"], ...(n.strength === "must" && w.strength !== "must" ? { recipe: ["review"] } : {}) });
+    else if (key.startsWith("rule:")) {
+      const hard = n.strength === "must" && w.strength !== "must" && !isShow(n);
+      out.push({ member: key, kind: hard ? "breaking" : "safe", why: ["changed"], ...(hard ? { recipe: ["review"] } : {}) });
+    }
     else out.push({ member: key, kind: "safe", why: ["changed"] });
   }
   for (const key of was.keys()) if (!now.has(key)) out.push({ member: key, kind: "retired", why: ["removed"], recipe: ["review or move"] });

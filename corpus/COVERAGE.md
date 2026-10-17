@@ -40,6 +40,7 @@ a new MUST or a new case updates this file.
 | 3.8 | a payload is never parsed and re-serialized for storage | store/015-raw-bytes |
 | 3.8 | a contradiction carries exactly one `cites`; a unit question cites the unit | dictionary/003-check-outcomes, store/027-unit-question |
 | 3.1 | chapter 3's forms arrive as values through a form body: a boolean, `$link`, `$image`, a list item by item | unit: intake-json-forms.test |
+| 4.8 | a new `must … shown to` rule is visibility, never breaking; a new must rule over data still needs `review` | unit: publish-show-rule.test |
 | 3.10 | the same canonical JSON from a text and from its print | reader/001–013 |
 | 4.1 | a published version never changes | unit: publish.test (a version is a new bundle; the registry keeps each) |
 | 4.2 | the identity child is a link | dictionary-errors/d03-identity-not-link |
