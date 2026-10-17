@@ -1,5 +1,5 @@
 export { type Caller, hashKey, Host, type HostOptions } from "./host.ts";
-export { serve } from "./server.ts";
+export { handle, logLine, serve, type HostReply, type HostRequest, type Seen } from "./server.ts";
 export { Index, type Page, type Serve } from "./indexer.ts";
 export { oidcVerifier, verifyJwt, type OidcOptions } from "./oidc.ts";
 export { contentDigest, signRequest, verifyRequest } from "./signatures.ts";

@@ -2,7 +2,7 @@
 // resolves the caller first and hands the store only the caller ID; every decision after that is the
 // store's access. Nothing here decides anything a package could say.
 
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type Server } from "node:http";
 import { Access } from "@cruba/crubal";
 import { formOf } from "@cruba/crubal";
 import { type Json, type JsonObject, parseJson } from "@cruba/crubal";
@@ -11,8 +11,34 @@ import { endEmergencyEdge, type EmergencyRequest, logEmergencyRead, makeEmergenc
 import { Index } from "./indexer.ts";
 import { readTerms, robotsTxt, termsHeaders, termsJson } from "./terms.ts";
 
-type Req = IncomingMessage;
-type Res = ServerResponse;
+/**
+ * A request as the host sees it, whatever carried it: the node server below, or a route in an app that runs
+ * the host in process. `url` is the path and query as node gives it; the origin a signature covers comes
+ * from the `host` and `x-forwarded-proto` headers; the body is already read, once, so a digest can cover it.
+ */
+export type HostRequest = { method: string; url: string; headers: { [h: string]: string | string[] | undefined }; body: string };
+/** What a request's log line and CORS need, set as the request is understood. */
+export type Seen = { owner?: string; caller?: string; route?: string };
+export type HostReply = { status: number; headers: { [h: string]: string }; body: string; seen: Seen };
+
+/** The reply as it is built: the few verbs the handler uses, kept in memory and handed to whatever transport asked. */
+class Reply {
+  status = 200;
+  headers: { [h: string]: string } = {};
+  body = "";
+  setHeader(k: string, v: string) {
+    this.headers[k] = v;
+  }
+  writeHead(status: number, headers?: { [h: string]: string }) {
+    this.status = status;
+    if (headers) Object.assign(this.headers, headers);
+  }
+  end(chunk?: string) {
+    if (chunk !== undefined) this.body = chunk;
+  }
+}
+type Req = HostRequest;
+type Res = Reply;
 
 class HttpError extends Error {
   status: number;
@@ -27,7 +53,8 @@ const json = (res: Res, status: number, body: Json) => {
   res.end(`${JSON.stringify(body)}\n`);
 };
 
-async function body(req: Req, limit: number): Promise<string> {
+/** Read a node request's body, refusing one over the limit before anything else reads it. */
+async function readBody(req: IncomingMessage, limit: number): Promise<string> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const c of req) {
@@ -40,10 +67,24 @@ async function body(req: Req, limit: number): Promise<string> {
 
 const isObj = (v: Json | undefined): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);
 
-export function serve(host: Host): Server {
-  /** What a request's log line and CORS need, set as the request is understood. */
-  type Seen = { owner?: string; caller?: string; route?: string };
-  const handle = async (req: Req, res: Res, seen: Seen) => {
+/**
+ * Answer one request. Every route is here, owner-scoped, the same for every owner; errors become a JSON
+ * body with their status. Transports call this: `serve` for node, an app's route for in-process hosting.
+ */
+export async function handle(host: Host, req: HostRequest): Promise<HostReply> {
+  const res = new Reply();
+  const seen: Seen = {};
+  try {
+    await respond(host, req, res, seen);
+  } catch (e: unknown) {
+    const status = e instanceof HttpError ? e.status : typeof (e as { status?: number }).status === "number" ? (e as { status: number }).status : 400;
+    json(res, status, { error: e instanceof Error ? e.message : String(e) });
+  }
+  return { status: res.status, headers: res.headers, body: res.body, seen };
+}
+
+async function respond(host: Host, req: Req, res: Res, seen: Seen): Promise<void> {
+  {
     const url = new URL(req.url ?? "/", "http://host");
     const method = req.method ?? "GET";
     // Browsers: the allowlisted origin gets its headers; a preflight is answered here.
@@ -59,11 +100,17 @@ export function serve(host: Host): Server {
       res.end();
       return;
     }
-    // The body is read once, up front: a signed request's digest covers it.
-    const raw = await body(req, host.o.bodyLimit ?? 1_048_576);
+    // The body was read once, up front: a signed request's digest covers it. The limit holds here too.
+    const raw = req.body;
+    if (Buffer.byteLength(raw, "utf8") > (host.o.bodyLimit ?? 1_048_576)) throw new HttpError(413, `the body is over ${host.o.bodyLimit ?? 1_048_576} bytes`);
     const bodyOf = () => raw;
     const parts = url.pathname.split("/").filter(Boolean);
     const q = (k: string) => url.searchParams.get(k) ?? undefined;
+    /** One header's value; a repeated header gives its first value. */
+    const header = (k: string): string | undefined => {
+      const v = req.headers[k];
+      return Array.isArray(v) ? v[0] : v;
+    };
     seen.route = parts.slice(0, 3).join("/");
 
     if (url.pathname === "/health" && method === "GET") {
@@ -99,7 +146,7 @@ export function serve(host: Host): Server {
     // The platform index (14.8, 14.10): who the caller is to every owner on this host, and the rows they
     // stand in a relation to. A bearer token only; the host vouches, so no owner's signature is involved.
     if (parts[0] === "whoami" && method === "GET") {
-      const me = await host.whoIs(req.headers.authorization);
+      const me = await host.whoIs(header("authorization"));
       if (!me) throw new HttpError(401, "sign in");
       seen.caller = `${me.owner}:${me.caller}`;
       if (parts[1] === "rows") {
@@ -113,8 +160,8 @@ export function serve(host: Host): Server {
     if (parts[0] !== "o" || !parts[1]) throw new HttpError(404, "not found");
     const owner = decodeURIComponent(parts[1]);
     // A signed request from another owner (RFC 9421) names its signer; a bearer token names a caller.
-    const target = `${(req.headers["x-forwarded-proto"] as string | undefined) ?? "http"}://${req.headers.host ?? "host"}${req.url ?? "/"}`;
-    const who: Caller | null = req.headers.signature ? await host.whoSigned(owner, { method, url: target, body: raw, headers: req.headers }) : await host.whoIs(req.headers.authorization);
+    const target = `${header("x-forwarded-proto") ?? "http"}://${header("host") ?? "host"}${req.url ?? "/"}`;
+    const who: Caller | null = req.headers.signature ? await host.whoSigned(owner, { method, url: target, body: raw, headers: req.headers }) : await host.whoIs(header("authorization"));
     // A hosted person (14.1) is the owner `domain:id`: the person signed in to the domain as that caller.
     // At another owner on this host they are `person:<domain:id>`, vouched for without a signature (14.8).
     const hostedAt = owner.indexOf(":");
@@ -377,21 +424,34 @@ export function serve(host: Host): Server {
       return json(res, 200, (await host.rotateKey(owner, at)) as unknown as Json);
     }
     throw new HttpError(404, "not found");
-  };
+  }
+}
 
+/** One structured line per request, when it has been answered. */
+export function logLine(host: Host, req: { method: string; url: string }, reply: HostReply, started: number): void {
+  if (host.o.log === false) return;
+  const line: JsonObject = { at: host.now(), method: req.method, route: reply.seen.route ?? req.url, status: reply.status, ms: Date.now() - started, ...(reply.seen.owner ? { owner: reply.seen.owner } : {}), ...(reply.seen.caller ? { caller: reply.seen.caller } : {}) };
+  if (host.o.log) host.o.log(line);
+  else console.log(JSON.stringify(line));
+}
+
+/** The node server: reads each request, hands it to `handle`, writes the reply, logs the line. */
+export function serve(host: Host): Server {
   return createServer((req, res) => {
     const started = Date.now();
-    const seen: Seen = {};
-    // One structured line per request, when it has been answered.
-    res.on("finish", () => {
-      if (host.o.log === false) return;
-      const line: JsonObject = { at: host.now(), method: req.method ?? "", route: seen.route ?? req.url ?? "", status: res.statusCode, ms: Date.now() - started, ...(seen.owner ? { owner: seen.owner } : {}), ...(seen.caller ? { caller: seen.caller } : {}) };
-      if (host.o.log) host.o.log(line);
-      else console.log(JSON.stringify(line));
-    });
-    handle(req, res, seen).catch((e: unknown) => {
-      const status = e instanceof HttpError ? e.status : typeof (e as { status?: number }).status === "number" ? ((e as { status: number }).status) : 400;
-      json(res, status, { error: e instanceof Error ? e.message : String(e) });
-    });
+    const method = req.method ?? "GET";
+    const url = req.url ?? "/";
+    const done = (reply: HostReply) => {
+      res.writeHead(reply.status, reply.headers);
+      res.end(reply.body);
+      logLine(host, { method, url }, reply, started);
+    };
+    readBody(req, host.o.bodyLimit ?? 1_048_576)
+      .then((body) => handle(host, { method, url, headers: req.headers, body }))
+      .then(done)
+      .catch((e: unknown) => {
+        const status = e instanceof HttpError ? e.status : 400;
+        done({ status, headers: { "content-type": "application/json; charset=utf-8" }, body: `${JSON.stringify({ error: e instanceof Error ? e.message : String(e) })}\n`, seen: {} });
+      });
   });
 }
