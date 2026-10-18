@@ -247,6 +247,24 @@ export class PgStore {
    * owner's own commit. Derived values land in the draft with their rule as source, so the entry's writes
    * carry them like any other value; a person's value is never overwritten.
    */
+  /** Records a `rederive` asks for, derived whether or not the operation changed them. */
+  private alsoDerive?: Set<string>;
+
+  /**
+   * Run the productions over records as they stand (6.4), for records written before a rule existed: one
+   * entry per call, holding only the derived values that changed. The ids are loaded into the working set
+   * and derived with their ancestors; nothing else is written.
+   */
+  async rederive(ids: string[], by: JsonObject = { platform: "rederive" }, at?: string): Promise<Entry | null> {
+    if (!ids.length) return null;
+    this.alsoDerive = new Set(ids);
+    try {
+      return (await this.commitFrom((d) => { for (const id of ids) d.records.get(id); return { by, extra: [], out: null }; }, at)).entry;
+    } finally {
+      this.alsoDerive = undefined;
+    }
+  }
+
   private derive(p: Parsed, before: State, draft: Draft): void {
     if (!p.rules.some((r) => r.produces)) return;
     const changed: string[] = [];
@@ -254,6 +272,7 @@ export class PgStore {
       const was = before.records.get(id);
       if (!was || serialize(was.values) !== serialize(r.values) || serialize(was.status ?? {}) !== serialize(r.status ?? {})) changed.push(id);
     }
+    for (const id of this.alsoDerive ?? []) if (!changed.includes(id)) changed.push(id);
     if (!changed.length) return;
     const engine = new Engine(p.dict, p.rules, () => draft.records);
     for (const [, r] of draft.records) engine.put(r);

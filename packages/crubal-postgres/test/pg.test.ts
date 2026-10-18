@@ -713,3 +713,47 @@ rule: unitStock
   assert.equal(st.records.get("P-1")?.values.unitCount, "9", "adopted, never overwritten");
   assert.equal(st.records.get("U-2")?.values.stock, undefined, "no offers, nothing produced");
 });
+
+test("rederive runs the productions over records written before the rule: one entry with the derived values, nothing else; a second pass writes nothing", { skip: !url }, async () => {
+  const owner = "rederive.example";
+  const store = new PgStore(pool, owner, { allowUnsigned: true });
+  const v1 = `package: shop /2026-10-01
+  owner: rederive.example
+  crubal: 2
+
+kind: item
+  levels: product, unit
+  base: Item
+  vary:
+    unit: cashierfuId
+title$
+unitCount#
+cashierfuId$
+class: Item
+  for: item
+  facets:
+    title
+    unitCount
+    unit::cashierfuId
+`;
+  await store.install(publish(v1, { date: "2026-10-01" }).bundle, undefined, "2026-10-19T09:00:00Z");
+  const src = { "*": { origin: "declared", via: "L-1" } };
+  const put = (r: Record, at: string) => store.commit({ person: owner }, (d) => { d.records.set(r.id, { ...r, sources: src }); }, at);
+  await put({ id: "P-1", kind: "item", level: "product", owner, values: { title: "Die Hard" } }, "2026-10-19T09:01:00Z");
+  await put({ id: "U-1", kind: "item", level: "unit", of: "P-1", owner, values: { cashierfuId: "AAA" } }, "2026-10-19T09:02:00Z");
+  await put({ id: "U-2", kind: "item", level: "unit", of: "P-1", owner, values: { cashierfuId: "BBB" } }, "2026-10-19T09:03:00Z");
+  assert.equal((await store.state()).records.get("P-1")?.values.unitCount, undefined, "no rule yet");
+  const v2 = `${v1}
+rule: unitsCounted
+  for: product::
+  then: unitCount is count of unit::cashierfuId
+  strength: should
+`;
+  await store.install(publish(v2.replace("shop /2026-10-01", "shop /2026-10-02"), { date: "2026-10-02" }).bundle, undefined, "2026-10-19T09:04:00Z");
+  const e = await store.rederive(["P-1", "U-1", "U-2"], { platform: "rederive" }, "2026-10-19T09:05:00Z");
+  assert.ok(e, "one entry");
+  const writes = (e?.writes ?? []) as JsonObject[];
+  assert.deepEqual(writes.map((w) => [w.record, w.address, w.value]), [["P-1", "unitCount", "2"]], "only the derived value");
+  assert.equal((await store.state()).records.get("P-1")?.values.unitCount, "2");
+  assert.equal(await store.rederive(["P-1", "U-1", "U-2"], { platform: "rederive" }, "2026-10-19T09:06:00Z"), null, "nothing to write twice");
+});
