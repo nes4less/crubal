@@ -649,3 +649,67 @@ ownership:
   await put({ id: "C-1", kind: "collection", level: "collection", owner: `${owner}:S-1`, values: { title: "mine" } });
   assert.equal((await store.state()).records.size, 2, "the refused writes left nothing behind");
 });
+
+test("a plain commit runs the productions (6.4): a product counts its units, a unit reads the best of its offers, each landing in the same entry with its rule as source; a later sale follows", { skip: !url }, async () => {
+  const owner = "derive.example";
+  const store = new PgStore(pool, owner, { allowUnsigned: true });
+  const text = `package: shop /2026-10-01
+  owner: derive.example
+  crubal: 2
+
+kind: item
+  levels: product, unit, offer
+  base: Item
+  vary:
+    unit: cashierfuId, stock
+    offer: availability
+title$
+unitCount#
+cashierfuId$
+stock{available|held|sold|withdrawn|none}
+availability{available|held|sold|withdrawn}
+class: Item
+  for: item
+  facets:
+    title
+    unitCount
+    unit::cashierfuId
+    unit::stock
+    offer::availability
+
+rule: unitsCounted
+  then: unitCount is count of unit::cashierfuId
+  strength: should
+rule: unitStock
+  for: unit::
+  then: stock is best of offer::availability
+  strength: should
+`;
+  await store.install(publish(text, { date: "2026-10-01" }).bundle, undefined, "2026-10-19T09:00:00Z");
+  const src = { "*": { origin: "declared", via: "L-1" } };
+  const put = (r: Record, at: string) => store.commit({ person: owner }, (d) => { d.records.set(r.id, { ...r, sources: src }); }, at);
+  await put({ id: "P-1", kind: "item", level: "product", owner, values: { title: "Die Hard" } }, "2026-10-19T09:01:00Z");
+  let st = await store.state();
+  assert.equal(st.records.get("P-1")?.values.unitCount, "0", "a product with no units counts none");
+  const e1 = await put({ id: "U-1", kind: "item", level: "unit", of: "P-1", owner, values: { cashierfuId: "AAA" } }, "2026-10-19T09:02:00Z");
+  st = await store.state();
+  assert.equal(st.records.get("P-1")?.values.unitCount, "1", "the product counts the unit a plain write made");
+  assert.deepEqual(st.records.get("P-1")?.sources?.unitCount, { origin: "derived", via: "unitsCounted" });
+  const writes = (e1?.writes ?? []) as JsonObject[];
+  assert.ok(writes.some((w) => w.record === "P-1" && w.address === "unitCount" && w.value === "1" && (w.source as JsonObject | undefined)?.origin === "derived"), "the derived value rides in the same entry");
+  await put({ id: "F-1", kind: "item", level: "offer", of: "U-1", owner, values: { availability: "available" } }, "2026-10-19T09:03:00Z");
+  st = await store.state();
+  assert.equal(st.records.get("U-1")?.values.stock, "available", "the unit reads the best of its offers");
+  assert.equal(st.records.get("P-1")?.values.unitCount, "1");
+  const offer = st.records.get("F-1") as Record;
+  await store.commit({ person: owner }, (d) => { d.records.set("F-1", { ...offer, values: { ...offer.values, availability: "sold" } }); }, "2026-10-19T09:04:00Z");
+  st = await store.state();
+  assert.equal(st.records.get("U-1")?.values.stock, "sold", "and follows the sale");
+  // A person's own value is adopted and left alone.
+  const p1 = st.records.get("P-1") as Record;
+  await store.commit({ person: owner }, (d) => { d.records.set("P-1", { ...p1, values: { ...p1.values, unitCount: "9" }, sources: { ...(p1.sources ?? {}), unitCount: { origin: "declared", via: "L-9" } } }); }, "2026-10-19T09:05:00Z");
+  await put({ id: "U-2", kind: "item", level: "unit", of: "P-1", owner, values: { cashierfuId: "BBB" } }, "2026-10-19T09:06:00Z");
+  st = await store.state();
+  assert.equal(st.records.get("P-1")?.values.unitCount, "9", "adopted, never overwritten");
+  assert.equal(st.records.get("U-2")?.values.stock, undefined, "no offers, nothing produced");
+});

@@ -3,6 +3,7 @@
 // The log is the truth; `rebuild` gives every other table back from it.
 
 import { applyEntry, diffWrites, differs, type Draft, type Entry, type State } from "@cruba/crubal";
+import { Engine, serialize } from "@cruba/crubal";
 import { CrubalError } from "@cruba/crubal";
 import { Access, type Edge } from "@cruba/crubal";
 import type { View } from "@cruba/crubal";
@@ -240,6 +241,49 @@ export class PgStore {
   }
 
   /** Well-formed access (14.12) on what an entry changed: ownership, wearing, within, and every edge written. */
+  /**
+   * What the rules produce for the records an operation changed, and for their ancestors (6.4): a plain
+   * write runs the productions as a border run does, so a rollup over units follows a unit written by the
+   * owner's own commit. Derived values land in the draft with their rule as source, so the entry's writes
+   * carry them like any other value; a person's value is never overwritten.
+   */
+  private derive(p: Parsed, before: State, draft: Draft): void {
+    if (!p.rules.some((r) => r.produces)) return;
+    const changed: string[] = [];
+    for (const [id, r] of draft.records) {
+      const was = before.records.get(id);
+      if (!was || serialize(was.values) !== serialize(r.values) || serialize(was.status ?? {}) !== serialize(r.status ?? {})) changed.push(id);
+    }
+    if (!changed.length) return;
+    const engine = new Engine(p.dict, p.rules, () => draft.records);
+    for (const [, r] of draft.records) engine.put(r);
+    const land = (id: string): boolean => {
+      const rec = draft.records.get(id);
+      if (!rec || rec.status?.state === "archived") return false;
+      engine.put(rec);
+      const derived = engine.reproduce(id).filter((x) => (x.result === "derived" || x.result === "filled") && x.address && x.value !== undefined && x.rule);
+      let moved = false;
+      const values = { ...rec.values };
+      const sources = { ...(rec.sources ?? {}) };
+      for (const x of derived) {
+        const address = x.address as string;
+        if (serialize(values[address] ?? "∅") === serialize(x.value as Json)) continue;
+        values[address] = x.value as Json;
+        sources[address] = { origin: "derived", via: x.rule as string };
+        moved = true;
+      }
+      if (!moved) return false;
+      const next = { ...rec, values, sources } as Record;
+      draft.records.set(id, next);
+      engine.put(next);
+      return true;
+    };
+    for (const id of changed) {
+      land(id);
+      if (engine.readsLowerLevels) for (const up of engine.ancestorsOf(id)) land(up);
+    }
+  }
+
   private checkWrites(p: Parsed, entry: Entry, after: State): void {
     const writes = (Array.isArray(entry.writes) ? entry.writes : []) as JsonObject[];
     const touched = new Set(writes.map((w) => (typeof w.record === "string" ? w.record : "")).filter(Boolean));
@@ -499,7 +543,7 @@ export class PgStore {
       const p = await this.definitionsFrom(client, false);
       for (;;) {
         const had = needs.needs.loaded.size;
-        ({ draft, result } = (await settle(client, this.owner, before, (s) => { const d = draftOf(s); const r = run(d); return { draft: d, result: r }; })).out);
+        ({ draft, result } = (await settle(client, this.owner, before, (s) => { const d = draftOf(s); const r = run(d); this.derive(p, before, d); return { draft: d, result: r }; })).out);
         const writes = [...diffWrites(before, draft), ...(result.extra ?? [])];
         if (!writes.length) return { entry: null, out: result.out };
         entry = { log: `L-${head.seq + 1}`, owner: this.owner, at: at ?? new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), by: result.by, writes, ...(mark.witnessed ? { witnessed: true } : {}) };

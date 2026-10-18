@@ -226,9 +226,61 @@ export class Engine {
 
   private applies(r: Rule, rec: Record): boolean {
     if (r.for === "everywhere") return true;
-    if (this.dict.classes.has(r.for)) return (rec.wears ?? []).some((w) => w === r.for || resolveUses(this.dict, w).includes(r.for));
-    if (this.dict.levels.has(r.for)) return rec.level === r.for;
-    return rec.kind === r.for;
+    // A level is written with its prefix (`unit::`, 6.1), the same spelling conditions use.
+    const scope = r.for.replace(/::$/, "");
+    if (this.dict.classes.has(scope)) return (rec.wears ?? []).some((w) => w === scope || resolveUses(this.dict, w).includes(scope));
+    if (this.dict.levels.has(scope)) return rec.level === scope;
+    return rec.kind === scope;
+  }
+
+  /** Whether any rollup here reads a lower level (`count of unit::…`): then a child's write concerns its ancestors. */
+  get readsLowerLevels(): boolean {
+    return this.rules.some((r) => r.produces?.kind === "rollup" && /\b\w+::/.test(r.produces.right));
+  }
+
+  /** The chain up from a record along `of`, nearest first. */
+  ancestorsOf(id: string): string[] {
+    const out: string[] = [];
+    const seen = new Set<string>([id]);
+    let cur = this.recordOf(id)?.of;
+    while (cur && !seen.has(cur)) {
+      out.push(cur);
+      seen.add(cur);
+      cur = this.recordOf(cur)?.of;
+    }
+    return out;
+  }
+
+  private recordOf(id: string): Record | undefined {
+    return this.store.get(id)?.rec ?? this.records?.().get(id);
+  }
+
+  /** The records at a lower level under a record, along `of`, merged ones left out. */
+  private descendants(rec: Record, level: string): Record[] {
+    const set = this.records?.();
+    const out: Record[] = [];
+    const walk = (id: string, depth: number) => {
+      if (depth > 8) return;
+      const kids = set ? set.childrenOf(id, "of") : [...this.store.values()].map((s) => s.rec).filter((r) => r.of === id);
+      for (const k of kids) {
+        if (k.status?.reason === "merged") continue;
+        if (k.level === level) out.push(this.store.get(k.id)?.rec ?? k);
+        else walk(k.id, depth + 1);
+      }
+    };
+    walk(rec.id, 0);
+    return out;
+  }
+
+  /**
+   * Run the productions again for a record as it stands (6.4: recomputed whenever what it reads changes):
+   * what a store calls on the ancestors of a changed record, and on a record a plain write touched.
+   */
+  reproduce(id: string): Result[] {
+    const rec = this.recordOf(id);
+    if (!rec) return [];
+    if (!this.store.has(id)) this.put(rec);
+    return this.write({ ...rec, values: {} });
   }
 
   /** Where a produced key may be stored: the top of its chain, or a level where it varies. */
@@ -384,7 +436,10 @@ export class Engine {
         results.push({ record: rec.id, result: "filled", address: key, value: v, rule: r.name });
         continue;
       }
-      if (!emptyOf(current) && !mine) continue; // a person's value: adopted, not overwritten
+      // A value the rules produced keeps following them, whichever engine produced it (its source says so);
+      // a person's value is adopted and never overwritten.
+      const derivedBefore = rec.sources?.[key]?.origin === "derived" && !rec.sources?.[key]?.adopted;
+      if (!emptyOf(current) && !mine && !derivedBefore) continue;
       const v = kind === "template" ? this.template(right, vals) : this.rollup(right, rec);
       if (v === undefined) continue;
       rec.values[key] = v;
@@ -482,15 +537,18 @@ export class Engine {
     return out;
   }
 
-  /** A rollup over parts: `worst of parts[*].condition`. */
+  /** A rollup over parts (`worst of parts[*].condition`) or over a lower level (`count of unit::cashierfuId`). */
   rollup(right: string, rec: Record): Json | undefined {
     const m = right.match(AGG);
     if (!m) return undefined;
     const how = m[1] as string;
-    const key = (m[2] as string).replace(/^parts\[\*\]\./, "");
-    const items = (rec.parts ?? [])
-      .map((p) => (isObj(p) && isObj(p.values) ? p.values[key] : undefined))
-      .filter((v): v is Json => v !== undefined && !(isObj(v) && "$empty" in v));
+    const address = m[2] as string;
+    const lower = address.match(/^(\w+)::(.+)$/);
+    const key = lower ? (lower[2] as string) : address.replace(/^parts\[\*\]\./, "");
+    const raw: (Json | undefined)[] = lower
+      ? this.descendants(rec, lower[1] as string).map((d) => d.values[key])
+      : (rec.parts ?? []).map((p) => (isObj(p) && isObj(p.values) ? p.values[key] : undefined));
+    const items = raw.filter((v): v is Json => v !== undefined && !(isObj(v) && "$empty" in v));
     if (how === "count") return String(items.length);
     if (!items.length) return undefined;
     const f = this.dict.facets.get(key);
