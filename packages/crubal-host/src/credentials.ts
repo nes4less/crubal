@@ -158,10 +158,13 @@ export class Credentials {
   }
 
   private async refresh(owner: string, name: string, refreshToken: string, provider: OAuthProvider, fetchFn: typeof fetch = fetch): Promise<string | undefined> {
+    // The scopes the connection was granted ride along: some providers (eBay) require them on a refresh.
+    const { rows: held } = await this.pool.query("select scopes from host_credentials where owner = $1 and name = $2", [owner, name]);
+    const scopes = ((held[0] as Row | undefined)?.scopes as string[] | undefined) ?? [];
     const res = await fetchFn(provider.tokenUrl, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded", authorization: `Basic ${Buffer.from(`${provider.clientId}:${provider.clientSecret}`).toString("base64")}` },
-      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }).toString(),
+      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken, ...(scopes.length ? { scope: scopes.join(" ") } : {}) }).toString(),
     });
     if (!res.ok) {
       // A connection that can't be refreshed is expired: the fact is visible, the secret gone.

@@ -110,9 +110,11 @@ test("credentials: connected, expired, refreshed through the provider; the retry
   const clock = { now: "2026-10-15T23:00:00Z" };
   const notices: JsonObject[] = [];
   let tokenCalls = 0;
+  let refreshScope: string | null = null;
   const fetchFake = (async (_u: string | URL | Request, init?: RequestInit) => {
     tokenCalls += 1;
     const p = new URLSearchParams(String(init?.body));
+    if (p.get("grant_type") === "refresh_token") refreshScope = p.get("scope");
     return new Response(JSON.stringify({ access_token: `tok-${p.get("grant_type")}-${tokenCalls}`, refresh_token: "r-2", expires_in: 3600 }), { status: 200, headers: { "content-type": "application/json" } });
   }) as typeof fetch;
   const host = new Host(pool, { domain: "host.example", now: () => clock.now, notify: (_o, n) => { notices.push(n); }, oauth: { market: { authorizeUrl: "https://auth.example/authorize", tokenUrl: "https://auth.example/token", clientId: "cid", clientSecret: "csec", redirectUri: "https://host.example/oauth/callback" } } });
@@ -132,6 +134,7 @@ test("credentials: connected, expired, refreshed through the provider; the retry
   const creds = new Credentials(pool, () => clock.now);
   const refreshed = await (creds as unknown as { refresh: (o: string, n: string, r: string, p: unknown, f: typeof fetch) => Promise<string | undefined> }).refresh("shop.example", "market", "r-1", host.o.oauth?.market, fetchFake);
   assert.equal(refreshed, "tok-refresh_token-2");
+  assert.equal(refreshScope, "sell", "the granted scopes ride on a refresh (eBay requires them)");
   assert.equal((await host.credentials.connection("shop.example", "market"))?.status, "connected");
   assert.match(host.credentials.authorizeUrl("shop.example", "market", host.o.oauth?.market as never, ["sell"]), /^https:\/\/auth\.example\/authorize\?response_type=code&client_id=cid/);
 
