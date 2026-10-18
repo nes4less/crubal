@@ -75,12 +75,15 @@ export class MemoryRecords extends Map<string, Record> implements RecordSet {
     return level === undefined ? [...list] : list.filter((r) => r.level === level);
   }
 
+  // Scans read the map's own rows, never `all()`: a working set (crubal-postgres) notes the narrow question
+  // it was asked and answers it from the rows it loaded for it; going through `all()` would ask for every
+  // record of the catalog on each `is unique` check.
   forTarget(name: string): Record[] {
-    return this.all().filter((r) => (r.wears ?? []).includes(name) || r.level === name || r.kind === name);
+    return [...this.values()].filter((r) => (r.wears ?? []).includes(name) || r.level === name || r.kind === name);
   }
 
   byKey(key: string, value: Json, level?: string): Record[] {
     const want = serialize(value);
-    return this.all().filter((r) => (level === undefined || r.level === level) && r.values[key] !== undefined && serialize(r.values[key] as Json) === want);
+    return [...this.values()].filter((r) => (level === undefined || r.level === level) && r.values[key] !== undefined && serialize(r.values[key] as Json) === want);
   }
 }

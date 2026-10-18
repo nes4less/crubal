@@ -279,6 +279,13 @@ export class PgStore {
     const land = (id: string): boolean => {
       const rec = draft.records.get(id);
       if (!rec || rec.status?.state === "archived") return false;
+      // What the record reads from above (1.7) must be in the engine: the chain up along `of`, asked for by
+      // id so a working set loads just those, never the catalog.
+      const seen = new Set<string>([id]);
+      for (let up = rec.of ? draft.records.get(rec.of) : undefined; up && !seen.has(up.id); up = up.of ? draft.records.get(up.of) : undefined) {
+        seen.add(up.id);
+        engine.put(up);
+      }
       engine.put(rec);
       const derived = engine.reproduce(id).filter((x) => (x.result === "derived" || x.result === "filled") && x.address && x.value !== undefined && x.rule);
       let moved = false;

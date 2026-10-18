@@ -12,7 +12,7 @@ import { emptyDictionary, readDefinitions } from "@cruba/crubal";
 import { archive, attach, merge, type Store } from "@cruba/crubal";
 import { type Draft, Journal, rebuild, stateJson, type Entry } from "@cruba/crubal";
 import type { Json, JsonObject, Record } from "@cruba/crubal";
-import { serialize } from "@cruba/crubal";
+import { MemoryRecords, serialize } from "@cruba/crubal";
 import { readContracts, sha256, verifyChain } from "@cruba/crubal";
 import { foldRecord } from "@cruba/crubal";
 import { readText } from "@cruba/crubal";
@@ -20,6 +20,7 @@ import { readViews, type StreamEntry, Views } from "@cruba/crubal";
 import { connect, testSchema, type Pool } from "../src/db.ts";
 import { publish } from "@cruba/crubal";
 import { PgBorder } from "../src/border.ts";
+import { Needs, WorkingRecords } from "../src/working.ts";
 import { PgStore } from "../src/store.ts";
 
 const url = process.env.CRUBAL_PG_URL;
@@ -138,6 +139,18 @@ test("an operation loads only what it touches", { skip: !url }, async () => {
   assert.ok(loaded.includes("U-1") && loaded.includes("P-7"));
   assert.equal((await store.state()).records.get("U-1")?.of, "P-7");
   assert.deepEqual((await store.state()).records.get("U-1")?.values, {}, "the shared title folded up and is read through");
+});
+
+test("a working set answers a narrow question from what it loaded for it, never by asking for the catalog", () => {
+  // `is unique` asks byKey on every write; through `all()` that meant every record of the deployment per
+  // commit (ME: 22k rows, seconds). The map scans its own rows; the question noted is the narrow one.
+  const needs = new Needs();
+  const set = new WorkingRecords(needs);
+  MemoryRecords.prototype.set.call(set, "U-1", { id: "U-1", kind: "item", level: "unit", owner: "x", values: { sku: "A1" } } as Record);
+  assert.deepEqual(set.byKey("sku", "A1", "unit").map((r) => r.id), ["U-1"]);
+  assert.deepEqual(set.forTarget("unit").map((r) => r.id), ["U-1"]);
+  assert.deepEqual([...needs.pending], ['key:unit:sku:"A1"', "for:unit"]);
+  assert.ok(!needs.pending.has("all"));
 });
 
 test("owners never see each other", { skip: !url }, async () => {
