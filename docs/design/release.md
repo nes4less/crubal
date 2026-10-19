@@ -23,6 +23,30 @@ because the handoffs it names are unproven.
 5. The **freeze rule** starts (11.8): a dated revision of 2 only adds; a change that breaks what readers
    hold is CRUBAL 3, with its form recipe. The corpus is tagged with each revision.
 
+## The gate, run 2026-10-19 (brief 17 item 9)
+
+The reference host was brought up locally over its own schema (`gate_2026_10_19`, owner `gate.example`),
+with `CRUBAL_HOST_OF` pointing cashierfu.com and mediaencyclopedia.com at the Cashierfu app's host on the
+development machine, which had just published the 2026-11-11 package set. crubal.com answered its
+well-known file with core 2026-10-14, units 2026-10-15 and party 2026-10-16 (step 1). The host migrated,
+made its owner and issued a key; `/health` answered (step 2). The install by name of
+`cashierfu.com/product` fetched the adopter's well-known file, resolved what it extends, and **stopped at
+crubal.com/party: the bundle crubal.com serves carries no signature**, and a conforming store refuses an
+unsigned bundle (step 3). The site build signs only when `CRUBAL_SIGNING_KEY` is in its environment, and
+the first pair's private half had never reached it. The steward rotated the key that afternoon (public half
+in the well-known file from 2026-10-19), set the private half in the deployment and redeployed; the install
+by name then went through, party verified from crubal.com and the adopter's packages from its host, and
+steps 4, 5, 7 and 8 passed on them (the gate log has each answer). Step 6 against the adopter's own
+packages has no `http` send to run (its sends are adapter-bound: eBay, Stripe mail, the bench printer, the
+marketplace stream); the host suite shows it with a test contract. **The gate is passed.**
+
+The claim was re-run the same day against the corpus dated 2026-10-19, which gained cases for the
+revisions of the day: a state facet moving under `transitions` (exchange/032), a member's form on a record
+they don't own (exchange/033), a class nothing wears (dictionary/010). Reader 25, Dictionary 48, Rules 61,
+Store 110, Exchange 172, Views 198. The spec's status line carries the date; the tag `corpus/2026-10-19`
+and the npm publish (`@cruba/crubal` 0.2.0, the store and the host 0.1.0) follow the steward's merge and
+the signed site.
+
 ## After the gate
 
 - **The steward.** The operator approves every spec change, as sole steward, by merging it; the rule is

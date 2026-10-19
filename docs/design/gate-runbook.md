@@ -5,10 +5,14 @@ command against the reference host over a Postgres store; nothing here is new ma
 
 1. **Publish the standard packages** from `std/` with the crubal.com key (the site build does this:
    `site/build.mjs` signs each bundle and writes the well-known file with `packages` and their version
-   URLs). Confirm `https://crubal.com/.well-known/crubal.json` lists every package the adopter extends.
+   URLs). Confirm `https://crubal.com/.well-known/crubal.json` lists every package the adopter extends, and
+   that each bundle at its version URL carries `sig`: the build signs only when `CRUBAL_SIGNING_KEY` is in
+   its environment, and a conforming store refuses an unsigned bundle (the run of 2026-10-19 stopped here).
 2. **Bring a host up**: `cd packages/crubal-host && ./smoke.sh` (Docker), or locally
    `node bin/crubal-host.ts migrate`, `owner create <adopter domain>`, `key issue <owner> <owner>`, `serve`.
-   `GET /health` answers `ok: true`.
+   `GET /health` answers `ok: true`. `CRUBAL_PG_SCHEMA` gives the run its own schema; `CRUBAL_HOST_OF`
+   (`domain=url,…`) maps a publisher whose host isn't at `https://<domain>` yet, such as the adopter's app on
+   a development machine.
 3. **Install by name**: `POST /o/<owner>/install { "package": "<publisher>/<name>" }` as the owner. The
    host fetches the publisher's well-known file, the bundle at the version URL, installs what it extends
    first from their publishers, and verifies each against the published keys. A tampered bundle is refused.

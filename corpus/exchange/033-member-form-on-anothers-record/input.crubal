@@ -1,0 +1,39 @@
+// A form a consumer runs on a record they do not own (7.2): `audience: member` admits a caller whose edge
+// covers the record, here the buyer's edge the order's own contract granted (14.4); a member with no edge
+// on it is stopped. Nothing in the run reads who owns the order.
+kind: person
+  levels: person
+kind: order
+  levels: order
+name$
+item&Item
+qty#
+facet: orderState
+  type: choice
+  values: placed, cancelled
+  transitions: yes
+
+contract: placeOrder
+  kind: form
+  ref: cart
+  relation: buyer
+  reads:
+    item -> item
+    qty -> qty
+
+contract: cancelOrder
+  kind: form
+  audience: member
+  needs:
+    orderState
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+person: C-BUY [origin: declared, via: L-1]
+  name: Buyer
+person: C-OTHER [origin: declared, via: L-1]
+  name: Someone else
+product: P-1 [origin: declared, via: L-1]
+  title: Christmas Vacation

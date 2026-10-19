@@ -1,0 +1,3 @@
+run: ship
+on: O-1
+answer: ship.json

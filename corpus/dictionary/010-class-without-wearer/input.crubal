@@ -1,0 +1,2 @@
+// A class no record wears (5.3.3) resolves like any other: a class is a definition, wearing is data.
+resolve: Unworn
