@@ -103,7 +103,10 @@ Placement says where and when a facet is collected. It never changes a value.
 | frame | `frame: front` on an image facet's line | which photo slot the image fills |
 
 The level prefix names a level of the wearer's kind. It declares a vary step in addition to the kind's own
-`vary` declarations; it never stops a facet from varying where the kind says it does.
+`vary` declarations; it never stops a facet from varying where the kind says it does. A class is a
+definition and needs no wearer to be in force: its level lines declare where their facets vary for the
+kinds it is `for` whether or not any record wears it yet, so a package may declare the class before the
+first record does.
 
 ## 5.4 Composition with `uses`
 
