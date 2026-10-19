@@ -75,7 +75,7 @@ The intake record carries the arrival's outcome and the binding it used, as `arr
 |---|---|---|
 | **absorbed** | it fits | it lands, with its source |
 | **new** | a choice value the list doesn't hold yet (open or closed list) | it lands, marked new, and goes to vocabulary review |
-| **conflict** | it fits, and disagrees with the current value from another source | the trust order picks the current value; the other is kept as an alternative (chapter 8.4) |
+| **conflict** | it fits, and disagrees with the current value from another source | the trust order picks the current value; the other is kept as an alternative (chapter 8.4). On a facet declared `transitions` (chapter 4.2) a later value of equal or higher trust is not a conflict: it is **absorbed** and replaces the current one |
 | **contradiction** | it can be shown impossible | it is parked beside the facet with its citation; the record doesn't change |
 | **unknown** | no facet for the field | it stays on the intake record, or is carried under a prefix (9.4) |
 | **ignored** | the contract says skip it | it stays on the intake record only |
