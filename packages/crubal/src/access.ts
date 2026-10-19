@@ -45,7 +45,8 @@ export type Edge = {
   reviewer?: string;
   by: string;
   emergency?: JsonObject;
-  line: number;
+  /** The package line an edge was declared on; an edge written to the log has none. */
+  line?: number;
 };
 
 export function emptyPermissions(): Permissions {

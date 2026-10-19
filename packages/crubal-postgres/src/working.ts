@@ -1,3 +1,4 @@
+import type { Edge } from "@cruba/crubal";
 // working.ts: the working set an operation runs over, loaded as it is needed. The engine is synchronous
 // and pure, so an operation runs on a set that answers what it has and notes what it lacks; the store then
 // loads what was lacking and runs the operation again on a fresh draft, until a run asks for nothing new.
@@ -166,7 +167,7 @@ type Row = { [column: string]: unknown };
 /** Load the small, whole tables an operation always needs: edges, instructions and definitions. */
 export async function loadWhole(client: Client, owner: string, into: State): Promise<void> {
   const q = async (sql: string) => (await client.query(sql, [owner])).rows as Row[];
-  for (const row of await q("select edge, json from edges where owner = $1 order by ord")) into.edges.set(String(row.edge), row.json as JsonObject);
+  for (const row of await q("select edge, json from edges where owner = $1 order by ord")) into.edges.set(String(row.edge), row.json as unknown as Edge);
   for (const row of await q("select issuer, json from instructions where owner = $1 order by issuer, n")) {
     const issuer = String(row.issuer);
     into.instructions.set(issuer, [...(into.instructions.get(issuer) ?? []), row.json as JsonObject]);

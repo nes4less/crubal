@@ -83,7 +83,7 @@ const empty = (v: Json | undefined) => v === undefined || (isObj(v) && "$empty" 
  * `edit` on the record above, what would move up lands there as a suggestion and the lower record keeps
  * its value.
  */
-export function foldUp(store: Store, lowerId: string, dict: Dictionary, mayEditUpper = true): void {
+export function foldUp(store: Records, lowerId: string, dict: Dictionary, mayEditUpper = true): void {
   const lower = store.records.get(lowerId) as Extra | undefined;
   const upper = lower?.of ? (store.records.get(lower.of) as Extra | undefined) : undefined;
   if (!lower || !upper) return;
@@ -125,7 +125,7 @@ export function attach(store: Store, lowerId: string, upperId: string, dict: Dic
 }
 
 /** Copy every folded value onto the record, with its source, then clear `of`. */
-function copyDown(store: Store, r: Extra, dict: Dictionary): Extra {
+function copyDown(store: Records, r: Extra, dict: Dictionary): Extra {
   const up = r.of ? store.records.get(r.of) : undefined;
   if (!up) return r;
   const owned = ownedKeys(dict, store.records, r);
@@ -140,7 +140,7 @@ function copyDown(store: Store, r: Extra, dict: Dictionary): Extra {
   return out;
 }
 
-function sourceAbove(store: Store, r: Record, key: string): Source | undefined {
+function sourceAbove(store: Records, r: Record, key: string): Source | undefined {
   if (r.values[key] !== undefined) return sourceFor(r, key);
   const up = r.of ? store.records.get(r.of) : undefined;
   return up ? sourceAbove(store, up, key) : undefined;
@@ -155,7 +155,7 @@ export function detach(store: Store, lowerId: string, dict: Dictionary): void {
   store.records.set(lowerId, copied);
 }
 
-function childrenOf(store: Store, id: string, along: "of" | "within"): Record[] {
+function childrenOf(store: Records, id: string, along: "of" | "within"): Record[] {
   return store.records.childrenOf(id, along);
 }
 
@@ -237,7 +237,10 @@ export function clone(store: Store, fromId: string, newId: string, owner: string
 }
 
 /** Archive (1.12): snapshot folded values, set the status, cascade as the package says. */
-export function archive(store: Store, id: string, reason: string, dict: Dictionary, into?: string): void {
+/** What the lifecycle operations touch: the record set. A store's draft and a commit's draft both qualify. */
+export type Records = Pick<Store, "records">;
+
+export function archive(store: Records, id: string, reason: string, dict: Dictionary, into?: string): void {
   const r = store.records.get(id) as Extra | undefined;
   if (!r) throw new Error(`no record ${id}`);
   const snap: Extra = { ...copyDown(store, r, dict) };
@@ -249,7 +252,7 @@ export function archive(store: Store, id: string, reason: string, dict: Dictiona
 }
 
 /** Unarchive: back to active; an attached record's copied values fold up again; the cascade is undone. */
-export function unarchive(store: Store, id: string, dict: Dictionary): void {
+export function unarchive(store: Records, id: string, dict: Dictionary): void {
   const r = store.records.get(id) as Extra | undefined;
   if (!r?.status) return;
   const { status: _s, ...rest } = r;

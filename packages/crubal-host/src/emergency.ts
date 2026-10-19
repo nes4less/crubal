@@ -1,3 +1,4 @@
+import type { Edge } from "@cruba/crubal";
 // emergency.ts: emergency access (spec 14.13), the mechanics a platform enforces. An emergency edge is
 // created only under published terms, with the approvals they require, each a signature with a key kept
 // for this alone, none by the requester; it is view or a narrow control, never admin, never grant, never an
@@ -86,7 +87,7 @@ export async function makeEmergencyEdge(store: PgStore, r: EmergencyRequest, ter
     edge: r.edge, who: r.who, relation: "emergency", mode: r.mode, on: r.on, grants: r.grants ?? [], until: r.until, by: "platform",
     emergency: { kind: r.kind, reason: r.reason, reference: r.reference, approvals: r.approvals as unknown as JsonObject[], notify: (r.notify ?? "now") as unknown as JsonObject, at: now },
   };
-  const out = await store.commitFrom((d) => { d.edges.set(r.edge, edge); return { by: { person: r.who }, out: null }; }, now, { witnessed: true });
+  const out = await store.commitFrom((d) => { d.edges.set(r.edge, edge as unknown as Edge); return { by: { person: r.who }, out: null }; }, now, { witnessed: true });
   if (!out.entry) throw new Error("the edge wrote nothing");
   return { edge, entry: String(out.entry.log) };
 }

@@ -5,7 +5,7 @@ export { readDefinitions, emptyDictionary, type ClassDef, type Dictionary, type 
 export { readText } from "./read-text.ts";
 export { printText, type PrintMode } from "./print-text.ts";
 export { canonical, serialize } from "./canonical.ts";
-export { checkWrapper, parseJson, type Wrapper, type Record, type Json, type JsonObject } from "./model.ts";
+export { checkWrapper, parseJson, type Wrapper, type Record, type Json, type JsonObject, type Source } from "./model.ts";
 export { decide as decideReview, openItems, unitsExtensionText, type Decision } from "./review.ts";
 export { extendUnits, resetUnits } from "./units.ts";
 export { runCorpus, type CaseResult } from "./corpus.ts";
@@ -18,10 +18,10 @@ export { checkContracts, Exchange, readRoles, verifyBorder, type Role, type RunR
 export { checkPackages, readPackages, type PackageInfo, type Utility } from "./packages.ts";
 export { STANDARD_PACKAGES, standardDefinitions } from "./std-packages.ts";
 export { AUDIENCES, checkViews, partitionOf, readViews, shownAudience, Views, visibleTo, type Nested, type Projection, type ProjectOptions, type ShownFor, type StreamEntry, type View, type ViewSet } from "./views.ts";
-export { applyEntry, diffWrites, differs, emptyState, Journal, rebuild, redactable, redactableWrite, redactWrite, stateJson, type Draft, type Entry, type State } from "./log.ts";
+export { applyEntry, diffWrites, differs, emptyState, Journal, rebuild, redactable, redactableWrite, redactWrite, stateJson, type Draft, type Entry, type State, type Write } from "./log.ts";
 export { MemoryRecords, type RecordSet } from "./records.ts";
 export { arrive, decide, surviving, type Arrival, type ArrivalStore } from "./arrival.ts";
-export { apply, archive, attach, detach, effective, emptyStore, foldUp, issue, issuersFor, merge, ownedKeys, pending, readInstructionBlocks, unarchive, type Instruction, type Store } from "./lifecycle.ts";
+export { apply, archive, attach, detach, effective, emptyStore, foldUp, issue, issuersFor, merge, ownedKeys, pending, readInstructionBlocks, unarchive, type Instruction, type Records, type Store } from "./lifecycle.ts";
 export { Access, checkPermissions, foreign, MODES, readAccess, VERBS, type Edge, type Effective, type MenuItem, type Mode, type Permissions, type Preset } from "./access.ts";
 export { isSchedule, nextTick, readSchedule, ticksDue, type Schedule } from "./schedule.ts";
 export { bundleHash, bundleOf, classJson, contractJson, emptyParsed, kindJson, parsePackage, printBundle, readBundle, readBundleInto, readBundleOnto, recipeJson, ruleJson, signBundle, utilityJson, verifyBundle, viewJson, type Parsed } from "./bundle.ts";

@@ -1,3 +1,4 @@
+import type { Edge } from "@cruba/crubal";
 // state.ts: an owner's state in the tables, read into the engine's State and written back as the diff of
 // two states. The engine's applyEntry is the one meaning of a write; this file only persists its result,
 // so the Postgres store can never apply an entry differently from the memory one.
@@ -54,7 +55,7 @@ export async function loadState(client: Client, owner: string): Promise<State> {
   const state = emptyState();
   const q = async (sql: string) => (await client.query(sql, [owner])).rows as Row[];
   for (const row of await q("select * from records where owner = $1 order by ord")) state.records.set(String(row.id), recordOf(row));
-  for (const row of await q("select edge, json from edges where owner = $1 order by ord")) state.edges.set(String(row.edge), row.json as JsonObject);
+  for (const row of await q("select edge, json from edges where owner = $1 order by ord")) state.edges.set(String(row.edge), row.json as unknown as Edge);
   for (const row of await q("select key, record from bindings where owner = $1 order by ord")) state.bindings.set(String(row.key), String(row.record));
   for (const row of await q("select issuer, json from instructions where owner = $1 order by issuer, n")) {
     const issuer = String(row.issuer);

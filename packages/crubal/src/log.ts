@@ -4,6 +4,7 @@
 // applies the entries in order to an empty store and needs no rules, so it gives back exactly the state the
 // store had. Redacted entries are skipped, and only value, observation and read writes may be redacted.
 
+import type { Edge } from "./access.ts";
 import { serialize } from "./canonical.ts";
 import type { Json, JsonObject, Record, Source, Status } from "./model.ts";
 import { MemoryRecords, type RecordSet } from "./records.ts";
@@ -17,7 +18,8 @@ export type Entry = JsonObject;
 /** Everything a store holds that the log carries. */
 export type State = {
   records: RecordSet;
-  edges: Map<string, JsonObject>;
+  /** Every edge written, by id; the store's commit checks each (14.5, 14.12) before it lands here. */
+  edges: Map<string, Edge>;
   /** `contract|ref` → record */
   bindings: Map<string, string>;
   /** issuer → its instructions, in order */
@@ -109,7 +111,7 @@ export function applyEntry(state: State, entry: Entry): void {
       continue;
     }
     if (isObj(w.edge)) {
-      state.edges.set(String(w.edge.edge), w.edge);
+      state.edges.set(String(w.edge.edge), w.edge as unknown as Edge);
       continue;
     }
     if (typeof w.edge === "string" && w.removed === true) {
@@ -283,8 +285,20 @@ export type Draft = {
   records: RecordSet;
   bindings: Map<string, string>;
   instructions: Map<string, JsonObject[]>;
-  edges: Map<string, JsonObject>;
+  edges: Map<string, Edge>;
   review: JsonObject[];
+};
+
+/** One write of an entry (8.5): a value at an address, an envelope field, a held value, an edge, a define, a review. */
+export type Write = JsonObject & {
+  record?: string;
+  address?: string;
+  value?: Json;
+  removed?: true;
+  envelope?: string;
+  as?: "held";
+  source?: JsonObject;
+  edge?: Edge;
 };
 
 function sourceAt(r: Record, key: string): Source | undefined {

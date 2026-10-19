@@ -308,8 +308,8 @@ export class Exchange {
     this.records = journal.draft.records;
     this.bindings = journal.draft.bindings;
     if (this.access) {
-      for (const [k, e] of this.access.edges) journal.draft.edges.set(k, e as unknown as JsonObject);
-      this.access.edges = journal.draft.edges as unknown as Map<string, Edge>;
+      for (const [k, e] of this.access.edges) journal.draft.edges.set(k, e);
+      this.access.edges = journal.draft.edges;
     }
     this.review = journal.draft.review;
   }
