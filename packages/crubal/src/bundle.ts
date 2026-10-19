@@ -527,7 +527,19 @@ export function readBundleOnto(bundle: JsonObject, base: Parsed): Parsed {
   for (const k of ["shapes", "filters", "views", "roles", "shown", "shownFor"] as const) for (const [key, val] of views[k]) (base.views[k] as Map<string, unknown>).set(key, val);
   const { perms, edges } = readAccess(text);
   if (perms.name) base.perms.name = perms.name;
-  for (const [k, v] of perms.menu) base.perms.menu.set(k, v);
+  // A menu item named by more than one package (platform's `people`, every package's `people: grant …`) is
+  // one item: a later package adds its verbs and targets to what stands, never replaces them. A preset of
+  // the same name is replaced whole: it is one declaration, not an accumulation.
+  for (const [k, v] of perms.menu) {
+    const have = base.perms.menu.get(k);
+    if (!have) {
+      base.perms.menu.set(k, v);
+      continue;
+    }
+    const verbs: MenuItem["verbs"] = { ...have.verbs };
+    for (const [verb, targets] of Object.entries(v.verbs)) verbs[verb] = [...new Set([...(verbs[verb] ?? []), ...targets])];
+    base.perms.menu.set(k, { ...have, ...v, verbs });
+  }
   for (const [k, v] of perms.presets) base.perms.presets.set(k, v);
   for (const [k, v] of perms.relations) base.perms.relations.set(k, v);
   for (const [k, v] of perms.ownership) base.perms.ownership.set(k, v);

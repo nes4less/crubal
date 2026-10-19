@@ -7,7 +7,7 @@ import { existsSync, statSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { bundleOf, parsePackage, printBundle, readBundle, signBundle, verifyBundle } from "../src/bundle.ts";
+import { bundleOf, emptyParsed, parsePackage, printBundle, readBundle, readBundleOnto, signBundle, verifyBundle } from "../src/bundle.ts";
 import { serialize } from "../src/canonical.ts";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
@@ -66,4 +66,29 @@ test("a bundle verifies with its key and fails when tampered", () => {
   const other = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x as string;
   assert.deepEqual(verifyBundle(signed, { "crubal.com": { alg: "Ed25519", public: other } }), { valid: false, reason: "signature" });
   assert.deepEqual(verifyBundle(signed, {}), { valid: false, reason: "no key" });
+});
+
+test("a menu item two packages name is one item with both packages' verbs; a preset of the same name is the later one", () => {
+  const a = `package: a.test/a /2026-01-01
+permissions: a
+  menu:
+    people: grant one
+    one: edit Thing
+  presets:
+    helper: one                                      audience: staff
+`;
+  const b = `package: a.test/b /2026-01-02
+permissions: b
+  menu:
+    people: grant two
+    two: run thing
+  presets:
+    helper: two                                      audience: staff
+`;
+  const base = emptyParsed();
+  readBundleOnto(bundleOf(parsePackage(a)), base);
+  readBundleOnto(bundleOf(parsePackage(b)), base);
+  assert.deepEqual(base.perms.menu.get("people")?.verbs, { grant: ["one", "two"] });
+  assert.deepEqual(base.perms.menu.get("one")?.verbs, { edit: ["Thing"] });
+  assert.deepEqual(base.perms.presets.get("helper")?.items, ["two"]);
 });
