@@ -56,6 +56,7 @@ A definition is a block under `facet: key`. Its settings:
 | `same-as` | the same property elsewhere: `schema:name`, `wd:P577` | none |
 | `state` | `candidate`, `active` or `retired` (4.1) | `active` |
 | `agree-by` | how two values compare for agreement and conflict (chapter 9.3): `equal`, `fold` (the alias fold, 4.3), or a package-named normalizer (`me:titleNoise`, which may drop leading articles and format words). Storage still holds one real value | `equal`, or `fold` for text and choice |
+| `transitions` | `yes` for a state facet: a later value of equal or higher trust **replaces** the current one as a transition instead of landing as a conflict (chapter 8.4); the log keeps every value it held. Without it, two values of equal trust dispute and the trust order decides | `no` |
 | `version` | the dated version (4.1) | required when published |
 
 ### By type

@@ -174,7 +174,10 @@ permissions: facility
   has `admin` on; `on: relation player` means records the caller holds that relation to; any other `on` is a
   condition over the record and `caller`. With no `on`, an item covers what the edge it is granted on
   covers.
-- **Presets** are named bundles of items, each on an audience. A spec `role` (chapter 12.4) is a preset.
+- **Presets** are named bundles of items, each on an audience. A spec `role` (chapter 12.4) is a preset. A
+  preset MAY name items of the packages its package extends, and a menu item of the same name in several
+  packages is one item with every package's verbs and targets; both are checked when the packages are in
+  force together (at install, chapter 11.4), not when one is published alone.
 - **À la carte.** An edge's `grants` may mix presets and single items.
 - **Narrowing only.** An edge's `where` adds conditions; it can never widen an item. A specific grant ("may
   edit price only on units in NM or VG condition") is an item plus a `where`.

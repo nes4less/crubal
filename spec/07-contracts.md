@@ -64,6 +64,11 @@ contract: ebayListing
 | `mode` · `terms` | how shared data is held, and the presenter's terms for `controlled` (7.8) | offer, take · offer |
 | `who` | who may run it: a condition over the caller (7.6) | all |
 | `audience` | the lowest audience (chapter 12.4) that may run it: `public`, `member`, `staff` or `owner`; the menu (chapter 14.6) and `who` still apply | all; default `public` for a contract with a `relation` (it grants the consumer's edge, chapter 14.4), `member` for any other form, `public` otherwise |
+
+A form a consumer runs on a record they do not own (a buyer cancelling their order, a member keeping
+their profile) needs no ownership: `audience: member` admits them when an edge of theirs covers the record
+(chapter 14.4), and a contract that grants a `relation` admits the caller it is about to admit. The menu
+and `who` narrow from there; nothing in a form's run reads who owns the record.
 | `origin` | the origin of the values it brings in (chapter 1.9) | receive, form, take, store; default `reported` for systems and `declared` for forms |
 | `lands` | `value` (the default), `suggestion` (7.5) or `observation` (chapter 9.7) | receive, form, take |
 | `ref` | the field of their payload that is their own ID for the thing; arrivals are bound by it (chapter 9.2a) | receive, form, take |
