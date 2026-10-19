@@ -50,15 +50,22 @@ export async function publish(client: Client, owner: string, p: Projecting, name
   const aud = audience ?? v.show;
   const version = v.version ?? "";
   const projection = version ? `${name} /${version}` : name;
-  const stored = (await client.query("select record, row, buckets, sort, pin, seq from projections where owner = $1 and view = $2 and audience = $3 and version = $4 order by seq", [owner, name, aud, version])).rows as Row[];
+  // What is marked and whether the view was ever published come first: a view with nothing stale costs
+  // two small queries, never a read of every stored row (ME: fifteen views, thousands of rows each, on
+  // every write). Stored rows are read in full only for a first or a reset publish; otherwise the marked ones.
   const anyVersion = (await client.query("select distinct version from projections where owner = $1 and view = $2 and audience = $3", [owner, name, aud])).rows as Row[];
   const published = anyVersion.length > 0;
   const reset = published && !anyVersion.some((r) => r.version === version);
-  const last = new Map<string, string>(stored.map((r) => [String(r.record), serialize({ row: r.row as JsonObject, buckets: (r.buckets ?? {}) as JsonObject, order: { sort: (r.sort ?? []) as Json, ...(r.pin ? { pin: Number(r.pin) } : {}) } })]));
   const marked = (await client.query("select record from stale where owner = $1 and view = $2", [owner, name])).rows as Row[];
   const full = !published || reset;
   const only = full ? undefined : marked.map((r) => String(r.record));
   if (!full && !only?.length) return [];
+  const stored = (
+    full
+      ? await client.query("select record, row, buckets, sort, pin, seq from projections where owner = $1 and view = $2 and audience = $3 and version = $4 order by seq", [owner, name, aud, version])
+      : await client.query("select record, row, buckets, sort, pin, seq from projections where owner = $1 and view = $2 and audience = $3 and version = $4 and record = any($5) order by seq", [owner, name, aud, version, only])
+  ).rows as Row[];
+  const last = new Map<string, string>(stored.map((r) => [String(r.record), serialize({ row: r.row as JsonObject, buckets: (r.buckets ?? {}) as JsonObject, order: { sort: (r.sort ?? []) as Json, ...(r.pin ? { pin: Number(r.pin) } : {}) } })]));
 
   // The rows, on a working set that loads what the view reads.
   const needs = new Needs();
