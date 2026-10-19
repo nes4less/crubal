@@ -557,7 +557,11 @@ export class Exchange {
       if (broken) return { ...o, outcome: "contradiction", cites: { rule: broken.rule ?? "" } };
       const current = r.values[o.to];
       if (current === undefined || (isObj(current) && "$empty" in current)) return o;
-      return serialize(current) === serialize(o.value as Json) ? o : { ...o, outcome: "conflict" };
+      if (serialize(current) === serialize(o.value as Json)) return o;
+      // A state facet moves (4.2, 9.3): a later value of equal or higher trust is absorbed, not disputed.
+      // Equal trust is the common case here (a form of the same origin); the landing decides the rest.
+      if (this.dict.facets.get(o.to)?.transitions && (c.origin === "declared" || callerId)) return o;
+      return { ...o, outcome: "conflict" };
     });
     const source: Source = { origin: c.origin, via: log };
     const gate = this.gate(recordId, callerId);
