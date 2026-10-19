@@ -4,6 +4,7 @@ import { readDefinitions } from "../src/defs.ts";
 import { checkRecipe, readRecipes, restamp } from "../src/migrate.ts";
 import { entryHash, fieldPath, land, readContracts, receive, verifyChain } from "../src/store.ts";
 import { CrubalError } from "../src/tree.ts";
+import { applyEntry, emptyState } from "../src/log.ts";
 
 const dict = readDefinitions(`
 kind: item
@@ -96,4 +97,10 @@ test("review by key proposes only unknown keys over the threshold", () => {
   const intakes = [1, 2, 3].map((n) => ({ for: `P-${n}`, outcomes: [{ from: "S", to: "m:S", outcome: "unknown", value: "x" }, { from: "F", to: "format", outcome: "new", value: "LP" }] }));
   const r = reviewByKey(intakes, 3);
   assert.deepEqual(r.proposals, [{ key: "m:S", objects: 3, state: "candidate" }]);
+});
+
+test("a define of a filter is filed as a filter, never as the facet it names (G11)", () => {
+  const state = emptyState();
+  applyEntry(state, { log: "L-1", writes: [{ define: { facet: "shelf", type: "choice", values: [{ value: "A" }] } }, { define: { filter: "byShelf", facet: "shelf" } }] } as never);
+  assert.deepEqual([...state.definitions.keys()].sort(), ["facet:shelf", "filter:byShelf"]);
 });
