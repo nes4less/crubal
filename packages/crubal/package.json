@@ -15,7 +15,7 @@
     }
   },
   "bin": {
-    "crubal": "./dist/bin/crubal.js"
+    "crubal": "dist/bin/crubal.js"
   },
   "engines": {
     "node": ">=20"
