@@ -77,10 +77,10 @@ a new MUST or a new case updates this file.
 | 9.4 | `keep-raw` declares `prefix` | exchange-errors/x03-keep-raw-without-prefix |
 | 10.1 | a breaking change ships a recipe in the same version | unit: publish.test |
 | 10.1 | a store restamps before it accepts data under the new version | store/007-restamp; pg test: install restamps |
-| 10.1 | no mapping on read; a receiver on an older version holds the intake | by construction (one version in force); open: holding an intake written under a newer version |
+| 10.1 | no mapping on read; a receiver on an older version holds the intake | by construction (one version in force); unit: exchange `versionGate` and host.test (a take held under a newer version, restamped under an older) |
 | 10.4 | the restamp's result is as if every write came first | store/007-restamp, store/041-retype, store/042-dry-run |
 | 10.5 | refused at publish | store-errors/s01-recipe-unknown-value |
-| 10.7 | a change that stops projecting a key carries its instruction | store/024-instructions, 029-instruction-order; open: the publish refusal |
+| 10.7 | a change that stops projecting a key carries its instruction | store/024-instructions, 029-instruction-order; unit: publish.test (a level line removed without its instruction block is refused; with it the bundle carries the block and the install issues it) |
 | 11.1 | `crubal` and the package's own name never remapped; no two prefixes for one identity | package-errors/p03-reserved-prefix |
 | 11.1 | a utility serves only presets, relations and audiences the package declares; narrows only to presets, items and relations; a setting is a facet | package-errors/p08-utility-unknown-preset; unit: utility.test (the narrowing and the setting refusals; the block round-trips through its bundle and is listed in `members`) |
 | 11.2 | `identify` keys are unique; an extension never removes a vary step | store/016-arrival (bound by identify), rules/010-unique-per-level; package-errors/p01-extends-widens |
@@ -108,8 +108,5 @@ a new MUST or a new case updates this file.
 
 ## Open
 
-The rows marked "open" are MUSTs without a case because the engine doesn't enforce them yet: an intake
-written under a newer package version held until the receiver upgrades (10.1; needs the version an intake
-was written under on the wire), and the publish check that a change which stops projecting a key carries
-its instruction (10.7; instructions are issued at run time today, not published in a bundle). Both are
-design before code.
+None. The two rows that were open (10.1's hold under a newer version, 10.7's publish refusal) closed with
+the 2026-10-19 revisions; their unit cases are named above and corpus cases follow at the gate's tag.
