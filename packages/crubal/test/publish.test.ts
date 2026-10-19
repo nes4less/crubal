@@ -102,3 +102,35 @@ test("a signed version verifies and a changed one doesn't", () => {
   assert.deepEqual(verifyBundle(bundle, keys), { valid: true });
   assert.equal(verifyBundle({ ...bundle, version: "2026-10-02" }, keys).valid, false);
 });
+
+test("a fill step backfills records lacking the key at one level, rides a version where nothing broke, and round-trips", async () => {
+  const { bundle: v1 } = publish(base, { date: "2026-10-01" });
+  const counted = base.replace("runtime#min 1..600", "runtime#min 1..600\nqty# 0..1000000");
+  const withFill = `${counted}
+migration: shop /2026-10-01 -> shop /2026-11-01
+  facet: qty
+    fill: 1
+      for: unit::
+`;
+  const { bundle: v2 } = publish(withFill, { previous: v1, date: "2026-11-01" });
+  const { readBundle, printBundle } = await import("../src/bundle.ts");
+  const { dryRun, restamp } = await import("../src/migrate.ts");
+  const parsed = readBundle(v2);
+  const recipe = parsed.recipes[0];
+  assert.ok(recipe && recipe.steps[0]?.verb === "fill");
+  assert.match(printBundle(v2), /fill: 1\n {6}for: unit::/);
+  const records = [
+    { id: "P-1", kind: "item", level: "product", owner: "shop.example", values: { title: "A" } },
+    { id: "U-1", kind: "item", level: "unit", owner: "shop.example", of: "P-1", values: {} },
+    { id: "U-2", kind: "item", level: "unit", owner: "shop.example", of: "P-1", values: { qty: { $qty: "4", unit: "" } } },
+  ] as Parameters<typeof restamp>[0];
+  const dry = dryRun(records, recipe, parsed.dict);
+  assert.equal(dry.steps[0]?.changed, 1);
+  const after = restamp(records, recipe, parsed.dict).records;
+  assert.equal(after[0]?.values.qty, undefined, "the product is not a unit");
+  assert.ok(after[1]?.values.qty !== undefined, "the unit lacking one is filled");
+  assert.equal(JSON.stringify(after[2]?.values.qty), JSON.stringify({ $qty: "4", unit: "" }), "a unit with a count keeps it");
+  // A fill of a value the facet refuses is refused at publish.
+  const bad = withFill.replace("fill: 1", "fill: many");
+  assert.throws(() => publish(bad, { previous: v1, date: "2026-11-01" }), /not a value qty takes/);
+});

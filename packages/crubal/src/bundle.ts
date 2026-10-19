@@ -169,6 +169,9 @@ export function recipeJson(r: Recipe): JsonObject {
       case "recompute":
         o.recompute = true;
         break;
+      case "fill":
+        o.fill = { value: s.value, ...(s.level ? { level: s.level } : {}), ...(s.when ? { when: s.when } : {}) };
+        break;
     }
     return o;
   });
@@ -420,6 +423,7 @@ function recipeText(r: JsonObject): string[] {
     if (isObj(s.move)) out.push(`    move: -> ${s.move.to}`);
     if (typeof s.review === "string") out.push(`    review: ${s.review}`);
     if (s.recompute === true) out.push("    recompute");
+    if (isObj(s.fill)) out.push(`    fill: ${q(String(s.fill.value))}`, ...(typeof s.fill.level === "string" ? [`      for: ${s.fill.level}::`] : []), ...(typeof s.fill.when === "string" ? [`      when: ${s.fill.when}`] : []));
   }
   return out;
 }

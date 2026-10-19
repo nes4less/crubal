@@ -21,7 +21,9 @@ export type Step =
   | { verb: "move"; facet: string; to: string; line: number; text: string }
   | { verb: "review"; facet: string; cond: string; line: number; text: string }
   | { verb: "recompute"; facet: string; line: number; text: string }
-  | { verb: "retype"; facet: string; from: string; to: string; line: number; text: string };
+  | { verb: "retype"; facet: string; from: string; to: string; line: number; text: string }
+  /** `fill: value` with `for: level::` and `when:` beneath: records lacking the key get the value (10.3). */
+  | { verb: "fill"; facet: string; value: string; level?: string; when?: string; line: number; text: string };
 
 export type Recipe = { from: string; to: string; steps: Step[]; line: number };
 
@@ -97,6 +99,17 @@ export function readRecipes(source: string): Recipe[] {
           case "review":
             recipe.steps.push({ verb: "review", cond: s.value, ...base });
             break;
+          case "fill": {
+            let level: string | undefined;
+            let when: string | undefined;
+            for (const b of s.children) {
+              if (b.key === "for") level = b.value.trim().replace(/::$/, "");
+              else if (b.key === "when") when = b.value.trim();
+              else throw new CrubalError(`a fill takes "for:" and "when:" beneath it, not ${b.key}`, b.line);
+            }
+            recipe.steps.push({ verb: "fill", value: unq(s.value), ...(level ? { level } : {}), ...(when ? { when } : {}), ...base });
+            break;
+          }
           default:
             throw new CrubalError(`unknown recipe step: ${s.text}`, s.line);
         }
@@ -121,6 +134,13 @@ export function checkRecipe(r: Recipe, dict: Dictionary): void {
       if (s.else !== undefined) need(s.else);
     }
     if (s.verb === "convert" && convert("1", s.from, s.to) === null) throw new CrubalError(`can't convert ${s.from} to ${s.to}`, s.line);
+    if (s.verb === "fill") {
+      if (!f) throw new CrubalError(`${s.facet} is not a facet of ${r.to}`, s.line);
+      const v = readUnder(f, s.value, dict, s.line);
+      if (v === undefined || checkScalar(f, v).outcome !== "absorbed") throw new CrubalError(`${s.value} is not a value ${s.facet} takes`, s.line);
+      if (s.level && !dict.levels.has(s.level)) throw new CrubalError(`${s.level} is not a level of ${r.to}`, s.line);
+      if (s.when) parseCondition(s.when, s.line);
+    }
   }
 }
 
@@ -157,7 +177,7 @@ export function restamp(records: Record[], recipe: Recipe, dict: Dictionary, sta
     const sources: { [address: string]: Source } = { ...(rec.sources ?? {}) };
     recipe.steps.forEach((s, si) => {
       const v = values[s.facet];
-      if (v === undefined && s.verb !== "review") return;
+      if (v === undefined && s.verb !== "review" && s.verb !== "fill") return;
       const before = serialize((values[s.facet] ?? null) as Json);
       const reviewsBefore = review.length;
       switch (s.verb) {
@@ -221,6 +241,17 @@ export function restamp(records: Record[], recipe: Recipe, dict: Dictionary, sta
         }
         case "recompute":
           break; // the rules rebuild produced values
+        case "fill": {
+          // A backfill (10.3): a record lacking the key, at the level named, where the condition holds, gets the
+          // value read under the facet; a record that has one is left alone.
+          if (v !== undefined) break;
+          if (s.level && rec.level !== s.level) break;
+          if (s.when && evaluate(parseCondition(s.when, s.line), values) !== true) break;
+          const f = dict.facets.get(s.facet);
+          const filled = f ? readUnder(f, s.value, dict) : undefined;
+          if (filled !== undefined) values[s.facet] = filled as Json;
+          break;
+        }
       }
       if (stats) {
         const st = stats[si] as StepStats;

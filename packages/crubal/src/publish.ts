@@ -2,6 +2,7 @@
 // that didn't change keeps its version; one that did takes the date. A breaking change needs a recipe step
 // that covers it, from the previous version to this one; a recipe is refused when nothing broke.
 
+import { checkRecipe } from "./migrate.ts";
 import { bundleHash, bundleOf, type Parsed, parsePackage, signBundle } from "./bundle.ts";
 import { serialize } from "./canonical.ts";
 import type { Json, JsonObject } from "./model.ts";
@@ -186,6 +187,8 @@ export function publish(source: string | Parsed, o: PublishOptions): { bundle: J
   b.members = members;
   b.version = version;
   // Recipes (10.5 (5), 11.4): a breaking member needs a step that covers it, in a recipe from the previous version.
+  // Every recipe's own checks (10.5 (2) to (4)) against the version it reaches: the corpus ran them, publish didn't.
+  for (const r of parsed.recipes) checkRecipe(r, parsed.dict);
   const recipes = (b.recipes as JsonObject[] | undefined) ?? [];
   const from = o.previous ? `${b.package} /${o.previous.version}` : undefined;
   const to = `${b.package} /${version}`;
@@ -197,7 +200,9 @@ export function publish(source: string | Parsed, o: PublishOptions): { bundle: J
     const ok = c.member.startsWith("facet:") ? covered.has(c.member) : anyReview || covered.size > 0;
     if (!ok) throw new CrubalError(`${c.member} is a breaking change (${c.why.join("; ")}) and no recipe from ${from ?? "the previous version"} covers it: needs ${c.recipe?.join(", ") ?? "a step"}`);
   }
-  if (!breaking.length && covering.length) throw new CrubalError(`a recipe from ${from} is present but nothing broke`);
+  // A recipe of fills and recomputes alone is a backfill (10.3): it may ride a version where nothing broke.
+  const backfill = (r: JsonObject) => ((r.steps as JsonObject[]) ?? []).every((s) => isObj(s.fill) || s.recompute === true);
+  if (!breaking.length && covering.some((r) => !backfill(r))) throw new CrubalError(`a recipe from ${from} is present but nothing broke`);
   for (const r of covering) (r.migration as JsonObject).to = to;
   if (o.previous) b.previous = String(o.previous.version);
   if (o.key) return { bundle: signBundle(b, o.key.d, o.key.x), changes };

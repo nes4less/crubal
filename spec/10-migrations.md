@@ -59,6 +59,7 @@ its target.
 | `review` | `review: condition` | values where the condition holds go to the review queue | yes |
 | `recompute` | `recompute` | produced values (rollups, derivations) are rebuilt by the new rules | no |
 | `retype` | `retype: text -> choice` | a facet's values are read under its new type; values that fit land, the rest go to review | the leftovers |
+| `fill` | `fill: 1` with `for: unit::` and an optional `when:` beneath | records lacking the key, at the level named, where the condition holds, get the value read under the facet; a record that has one is left alone. A backfill for a key the new version adds | no |
 
 A key never renames: keys are identity (chapter 4.1). A new label is not a migration. Moving values to a new
 key is `move`.
@@ -101,6 +102,8 @@ A package MUST be refused at publish when a recipe breaks these:
 3. `convert` names units the units table can convert between.
 4. A `split` either has `else` or is accepted as sending its leftovers to review.
 5. Every breaking change between the two versions (chapter 4.8) is covered by a step.
+6. A recipe whose steps are all `fill` or `recompute` is a backfill and MAY accompany a version where nothing
+   broke; any other recipe with nothing broken is refused.
 
 ## 10.6 The JSON form
 
@@ -115,7 +118,8 @@ A package MUST be refused at publish when a recipe breaks these:
         "when": [ { "if": "hdrFormats has", "to": "4K" } ], "else": "Blu-ray" } },
     { "facet": "audioLanguage", "move": { "to": "audioTracks[*].language" } },
     { "facet": "languages", "review": "count of languages over 2" },
-    { "facet": "condition", "recompute": true }
+    { "facet": "condition", "recompute": true },
+    { "facet": "qty", "fill": { "value": "1", "level": "unit" } }
   ]
 }
 ```
