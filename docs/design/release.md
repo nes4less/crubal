@@ -32,12 +32,13 @@ well-known file with core 2026-10-14, units 2026-10-15 and party 2026-10-16 (ste
 made its owner and issued a key; `/health` answered (step 2). The install by name of
 `cashierfu.com/product` fetched the adopter's well-known file, resolved what it extends, and **stopped at
 crubal.com/party: the bundle crubal.com serves carries no signature**, and a conforming store refuses an
-unsigned bundle (step 3). The site build signs only when `CRUBAL_SIGNING_KEY` is in its environment; the
-public half is in the well-known file and the build. So the gate waits on the steward: the key set in the
-crubal.com deployment's environment and the site redeployed, then steps 3 to 8 run again. Steps 4 to 8 are
-exercised by the host suite against a local publisher meanwhile; step 6 against the adopter's own packages
-has no `http` send to run (its sends are adapter-bound: eBay, Stripe mail, the bench printer), which the
-runbook notes.
+unsigned bundle (step 3). The site build signs only when `CRUBAL_SIGNING_KEY` is in its environment, and
+the first pair's private half had never reached it. The steward rotated the key that afternoon (public half
+in the well-known file from 2026-10-19), set the private half in the deployment and redeployed; the install
+by name then went through, party verified from crubal.com and the adopter's packages from its host, and
+steps 4, 5, 7 and 8 passed on them (the gate log has each answer). Step 6 against the adopter's own
+packages has no `http` send to run (its sends are adapter-bound: eBay, Stripe mail, the bench printer, the
+marketplace stream); the host suite shows it with a test contract. **The gate is passed.**
 
 The claim was re-run the same day against the corpus dated 2026-10-19, which gained cases for the
 revisions of the day: a state facet moving under `transitions` (exchange/032), a member's form on a record
