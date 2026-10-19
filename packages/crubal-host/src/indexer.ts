@@ -43,6 +43,9 @@ export class Index {
     const owner = store.owner;
     const cur = (await this.pool.query("select seq from index_cursors where owner = $1 and view = $2 and version = $3 and audience = $4", [owner, view, version, v.show])).rows[0] as Row | undefined;
     let seq = cur ? Number(cur.seq) : 0;
+    // A cursor past the stream's head means the stream was started over behind the index (a store
+    // rebuilt before 0.1.16 wiped its streams): the index takes the stream from its start again.
+    if (seq > 0 && seq > (await store.streamHead(view, v.show))) seq = 0;
     const entries = await store.entriesSince(view, seq, v.show);
     return this.ingest(owner, view, version, v.show, entries, seq);
   }
@@ -51,21 +54,43 @@ export class Index {
   async ingest(owner: string, view: string, version: string, audience: string, entries: StreamEntry[], from?: number): Promise<number> {
     const cur = (await this.pool.query("select seq from index_cursors where owner = $1 and view = $2 and version = $3 and audience = $4", [owner, view, version, audience])).rows[0] as Row | undefined;
     let seq = from ?? (cur ? Number(cur.seq) : 0);
+    // Rows land in batches of 500, one statement each, in stream order: a reset or a removal flushes what
+    // is pending first (ME: 9,437 rows in one view's first publish).
+    // Within a batch a record appears once, as its latest entry (one statement may not touch a row twice).
+    let pending: JsonObject[] = [];
+    const flush = async () => {
+      if (!pending.length) return;
+      const latest = new Map<string, JsonObject>();
+      for (const e of pending) latest.set(String(e.record), e);
+      pending = [...latest.values()];
+      await this.pool.query(
+        `insert into index_rows (owner, view, version, audience, record, row, buckets, marks, ancestors, sort, pin, seq, search)
+         select $1, $2, $3, $4, e ->> 'record', e -> 'row', coalesce(e -> 'buckets', '{}'::jsonb), e -> 'row' -> 'marks',
+           coalesce(array(select jsonb_array_elements_text(case when jsonb_typeof(e -> 'row' -> 'ancestors') = 'array' then e -> 'row' -> 'ancestors' else '[]'::jsonb end)), '{}'),
+           coalesce(e -> 'sort', '[]'::jsonb), (e ->> 'pin')::integer, (e ->> 'seq')::bigint, to_tsvector('simple', e ->> 'search')
+         from jsonb_array_elements($5::jsonb) as t(e)
+         on conflict (owner, view, version, audience, record) do update set row = excluded.row, buckets = excluded.buckets, marks = excluded.marks,
+           ancestors = excluded.ancestors, sort = excluded.sort, pin = excluded.pin, seq = excluded.seq, search = excluded.search`,
+        [owner, view, version, audience, JSON.stringify(pending)],
+      );
+      pending = [];
+    };
     for (const e of entries) {
       if (e.seq <= seq) continue;
-      if (e.reset) await this.pool.query("delete from index_rows where owner = $1 and view = $2 and audience = $3", [owner, view, audience]);
-      if (e.removed) await this.pool.query("delete from index_rows where owner = $1 and view = $2 and version = $3 and audience = $4 and record = $5", [owner, view, version, audience, e.record]);
-      else if (e.row) {
-        await this.pool.query(
-          `insert into index_rows (owner, view, version, audience, record, row, buckets, marks, ancestors, sort, pin, seq, search)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, to_tsvector('simple', $13))
-           on conflict (owner, view, version, audience, record) do update set row = excluded.row, buckets = excluded.buckets, marks = excluded.marks,
-             ancestors = excluded.ancestors, sort = excluded.sort, pin = excluded.pin, seq = excluded.seq, search = excluded.search`,
-          [owner, view, version, audience, e.record, e.row, e.buckets ?? {}, e.row.marks ?? null, Array.isArray(e.row.ancestors) ? e.row.ancestors : [], JSON.stringify(e.sort ?? []), e.pin ?? null, e.seq, textOf(e.row)],
-        );
+      if (e.reset) {
+        await flush();
+        await this.pool.query("delete from index_rows where owner = $1 and view = $2 and audience = $3", [owner, view, audience]);
+      }
+      if (e.removed) {
+        await flush();
+        await this.pool.query("delete from index_rows where owner = $1 and view = $2 and version = $3 and audience = $4 and record = $5", [owner, view, version, audience, e.record]);
+      } else if (e.row) {
+        pending.push({ record: e.record, row: e.row, buckets: e.buckets ?? {}, sort: e.sort ?? [], ...(e.pin ? { pin: e.pin } : {}), seq: e.seq, search: textOf(e.row) });
+        if (pending.length >= 500) await flush();
       }
       seq = e.seq;
     }
+    await flush();
     await this.pool.query("insert into index_cursors (owner, view, version, audience, seq) values ($1, $2, $3, $4, $5) on conflict (owner, view, version, audience) do update set seq = excluded.seq", [owner, view, version, audience, seq]);
     return seq;
   }

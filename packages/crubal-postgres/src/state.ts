@@ -121,7 +121,7 @@ export async function persist(client: Client, owner: string, before: State, afte
 
 /** Forget an owner's state tables (not its log), before a rebuild. */
 export async function wipeState(client: Client, owner: string): Promise<void> {
-  for (const t of ["records", "edges", "bindings", "instructions", "review", "runs", "observations", "installed", "reads", "definitions", "projections", "projection_stream", "stale"]) {
+  for (const t of ["records", "edges", "bindings", "instructions", "review", "runs", "observations", "installed", "reads", "definitions"]) {
     await client.query(`delete from ${t} where owner = $1`, [owner]);
   }
 }

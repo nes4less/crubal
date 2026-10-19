@@ -61,6 +61,7 @@ unchanged, so what the database holds is what the border carries.
 | `projections` | `owner`, `view`, `version`, `audience`, `record`, `row`, `buckets`, `marks`, `ancestors[]`, `seq` | one row per selected record (spec 12.6) |
 | `projection_stream` | `owner`, `view`, `version`, `audience`, `seq`, `record`, `row` or `removed`, `reset` | append-only; what index contracts carry |
 | `stale` | `owner`, `view`, `record`, `since` | rows awaiting a rebuild; filled inside the write transaction, drained outside it |
+| `published` | `owner`, `view`, `audience`, `version` | the view was published for the audience, and under which version (0.1.16): an empty view is told from one never published, and a version change is a reset |
 
 ## The write path
 
@@ -101,6 +102,23 @@ engine, upserts `projections`, and appends one `projection_stream` entry, number
 `fresh: write` runs the projector as soon as the write commits (`LISTEN`/`NOTIFY` on commit); `fresh: 5m`
 lets it batch. A new view version writes `reset: true` first and starts its numbering over. Index contracts
 (spec 12.6.2) read the stream from their cursor; a push run is the projector's last step for `when: entry`.
+
+### How a publish runs (0.1.16, brief 17 item 8)
+
+A publish asks the engine for every row of the view in one pass (`ProjectOptions.all`: no page, no counts),
+on a working set that loads what the view reads, with record ids and children fetched one query per kind
+rather than one each. It then writes the stream and the rows in batches of 500 statements' worth
+(`jsonb_array_elements`), and the host's index ingests the same way. On ME's catalog (22,000 records,
+fifteen views) the largest view, 9,437 units, publishes whole in 0.5 s in the store and 0.3 s in the index;
+every other view under 0.3 s.
+
+The stream of a view for an audience continues from its head under every version: a new version starts at
+1 with its first entry marked `reset`, and a version come back to continues past what it published before,
+so an index resuming from its cursor for that version takes the reset and what follows. On a reset every
+row is announced again whatever was stored. A reinstall or a rebuild never wipes the projections; it marks
+every row of every view stale, and the next publish rebuilds, compares and announces what left.
+`republish(view?)` forces a reset publish of a view (or all), for an index that lost rows; `streamHead`
+tells an index whether its cursor is past the stream, in which case it starts over.
 
 ## Rebuild, redaction, erasure
 

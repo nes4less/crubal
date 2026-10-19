@@ -210,6 +210,36 @@ first use, so a projection no longer scans the whole map per record. Same data: 
 200-row view 1.3 s (was 56.6 s), the stale-row publish 20 ms (was 752 ms), commit 4.2 ms, page 1.7 ms,
 search 0.8 ms, a record by id 0.2 ms.
 
+## R: round two (2026-10-19, brief 17 item 8)
+
+Measured on ME's own catalog in the local store (schema `crubal_me`: 21,959 records, fifteen views, 3,050
+products, 9,440 units, 9,442 offers), with `packages/crubal-postgres/bench/me-publish.ts` (each view idle,
+every row marked stale, and a first publish, the last two rolled back), `crubal-host/bench/me-index.ts`
+(the index taking a first publish), `me-commit-page.ts` (one unit's value set and set back; the shop's
+first page, a page with one pick, a search) and `me-reindex.ts` (every view republished whole and applied).
+
+Before: the largest view, `channelStatus` over 9,437 units, 7.2 s for a first publish; the product views
+(3,050 rows) 1.4 to 2.7 s; the two offer views, 57 rows over 9,442 offers, 1.1 s for a first publish and
+2.0 s with every row marked stale; a warm commit 210 ms; the shop's first page 143 ms cold, 10 ms warm. Three
+causes (defects G14, G15, G16): the projector paged the view through the engine and every page selected
+and counted the whole view (197 pages for the largest view); the working set loaded records by id and
+children by parent one query each (11,299 on the offers); the rows and the stream were written two
+statements per row; and after every commit the definitions were parsed again (~110 ms), since the cache
+was keyed on the head the commit had just moved. Measuring also showed ME's local index holding three
+versions of its shop and 1,860 rows nothing had removed: a reinstall or rebuild wiped the store's
+projections and streams, so the next publish announced no removals and restarted the stream behind the
+index's cursor.
+
+After (0.1.16): `channelStatus` whole in 0.5 s in the store and 0.3 s in the index (target 5 s); the
+product views 0.2 to 0.3 s; the offer views 0.2 to 0.3 s; every view's idle publish 1 to 4 ms; a warm commit
+49 ms (target 50), a cold one 215 to 270 ms; the shop's page 2 to 14 ms warm, 137 to 161 ms cold; the whole
+catalog republished whole, 21,763 rows across fifteen views, 2.2 s in the store and 2.3 s in the index.
+The cold costs are the definitions parse on a fresh store (130 ms on ME), which host.md's serverless
+section names and which the next round could cache across stores by bundle hash. The wipe is gone (every
+row marked stale instead), a `published` marker tells an empty view from one never published, a stream
+continues from its head under every version, `republish` and the index's rewind guard repair an index that
+drifted, and ME's local index was repaired that way.
+
 ## Calls made here
 
 - A hand-made list is a record with the core facet `crubal:items` (G).

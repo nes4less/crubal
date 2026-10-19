@@ -201,6 +201,16 @@ create table if not exists projection_stream (
   primary key (owner, view, version, audience, seq)
 );
 
+-- A view published at least once for an audience, and under which version: a view with no rows is
+-- otherwise indistinguishable from one never published, and would rebuild whole on every write.
+create table if not exists published (
+  owner text not null,
+  view text not null,
+  audience text not null,
+  version text not null,
+  primary key (owner, view, audience)
+);
+
 create table if not exists stale (
   owner text not null,
   view text not null,

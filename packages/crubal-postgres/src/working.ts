@@ -189,23 +189,48 @@ export async function loadNeeds(client: Client, owner: string, needs: Needs, int
     }
   };
   const sel = "select * from records where owner = $1";
+  // Records asked for one by one, and children asked for parent by parent, are fetched in one query per
+  // kind: a view's shape reading each row's parent asked 11,299 single-row questions on ME's offers.
+  const byId: string[] = [];
+  const children = new Map<string, { along: string; level: string; ids: string[] }>();
+  for (const key of [...needs.pending]) {
+    if (needs.answered.has(key)) {
+      needs.pending.delete(key);
+      continue;
+    }
+    const [kind, ...rest] = key.split(":");
+    if (kind === "record") {
+      byId.push(rest.join(":"));
+      needs.pending.delete(key);
+      needs.answered.add(key);
+    } else if (kind === "children") {
+      const [along, id, level] = rest as [string, string, string];
+      const g = children.get(`${along}|${level}`) ?? { along, level, ids: [] };
+      g.ids.push(id);
+      children.set(`${along}|${level}`, g);
+      needs.pending.delete(key);
+      needs.answered.add(key);
+    }
+  }
+  if (byId.length) {
+    const rows = (await client.query(`${sel} and id = any($2) order by ord`, [owner, byId])).rows as Row[];
+    const found = new Set(rows.map((r) => String(r.id)));
+    put(rows);
+    for (const id of byId) if (!found.has(id)) needs.absent.add(id);
+  }
+  for (const { along, level, ids } of children.values()) {
+    const col = along === "of" ? '"of"' : "within";
+    put((await client.query(`${sel} and ${col} = any($2)${level ? " and level = $3" : ""} order by ord`, level ? [owner, ids, level] : [owner, ids])).rows as Row[]);
+  }
   for (const key of [...needs.pending]) {
     needs.pending.delete(key);
     if (needs.answered.has(key)) continue;
     const [kind, ...rest] = key.split(":");
     const arg = rest.join(":");
-    if (kind === "record") {
-      const { rows } = await client.query(`${sel} and id = $2`, [owner, arg]);
-      if (rows.length) put(rows as Row[]);
-      else needs.absent.add(arg);
-    } else if (kind === "all") {
+    if (kind === "all") {
       put((await client.query(`${sel} order by ord`, [owner])).rows as Row[]);
     } else if (kind === "level") {
       put((await client.query(`${sel} and level = $2 order by ord`, [owner, arg])).rows as Row[]);
-    } else if (kind === "children") {
-      const [along, id, level] = rest as [string, string, string];
-      const col = along === "of" ? '"of"' : "within";
-      put((await client.query(`${sel} and ${col} = $2${level ? " and level = $3" : ""} order by ord`, level ? [owner, id, level] : [owner, id])).rows as Row[]);
     } else if (kind === "for") {
       put((await client.query(`${sel} and ($2 = any(wears) or level = $2 or kind = $2) order by ord`, [owner, arg])).rows as Row[]);
     } else if (kind === "key") {

@@ -88,6 +88,28 @@ export class PgStore {
     return out;
   }
 
+  /**
+   * Publish every view whole next time, with a reset on each stream (12.6.2): an index that lost rows, or
+   * kept rows nothing removed, is brought back to what the store holds. The named view alone when given.
+   */
+  async republish(view?: string): Promise<void> {
+    const p = await this.projecting();
+    if (!p) return;
+    for (const v of p.views.views.values()) {
+      if (view && v.name !== view) continue;
+      await this.pool.query("insert into published (owner, view, audience, version) values ($1, $2, $3, '*') on conflict (owner, view, audience) do update set version = '*'", [this.owner, v.name, v.show]);
+    }
+  }
+
+  /** The head of a view's stream for an audience (12.6.2): the last sequence number published, 0 when none. */
+  async streamHead(view: string, audience?: string): Promise<number> {
+    const p = await this.projecting();
+    const v = p?.views.views.get(view);
+    if (!v) throw new Error(`no view ${view}`);
+    const { rows } = await this.pool.query("select coalesce(max(seq), 0) as seq from projection_stream where owner = $1 and view = $2 and audience = $3 and version = $4", [this.owner, view, audience ?? v.show, v.version ?? ""]);
+    return Number((rows[0] as { seq: string | number }).seq);
+  }
+
   /** The entries of a view's stream after `seq` (12.6.2). */
   async entriesSince(view: string, seq: number, audience?: string): Promise<StreamEntry[]> {
     const p = await this.projecting();
@@ -101,8 +123,8 @@ export class PgStore {
   }
 
   /** After a persist: mark what the entry made stale, inside the same transaction. */
-  private async afterPersist(client: Client, before: State, after: State, seq: number): Promise<void> {
-    const p = this.options.projecting ?? (await this.projectingFrom(client));
+  private async afterPersist(client: Client, before: State, after: State, seq: number, parsed?: Parsed): Promise<void> {
+    const p = this.options.projecting ?? (parsed ? projectingOf(parsed) : await this.projectingFrom(client));
     if (p?.views.views.size) await markStale(client, this.owner, p, before, after, seq);
   }
 
@@ -149,9 +171,7 @@ export class PgStore {
 
   private async projectingFrom(client: Client): Promise<Projecting | undefined> {
     if (this.options.projecting) return this.options.projecting;
-    const p = await this.definitionsFrom(client);
-    if (!p.views.views.size && !p.dict.facets.size) return undefined;
-    return { dict: p.dict, views: p.views, perms: p.perms };
+    return projectingOf(await this.definitionsFrom(client));
   }
 
   /**
@@ -242,8 +262,22 @@ export class PgStore {
     }
     if (!result.entry) throw new Error("the install wrote nothing");
     this.defsCache = undefined;
-    if (previous) for (const table of ["projections", "projection_stream", "stale"]) await this.pool.query(`delete from ${table} where owner = $1`, [this.owner]);
+    if (previous) await this.staleAll((sql, params) => this.pool.query(sql, params), await this.projecting());
     return result.entry;
+  }
+
+  /**
+   * Mark every row of every view stale: after a reinstall or a rebuild the next publish rebuilds and
+   * compares every row and announces what left, and the stream keeps its numbering. (Wiping the stored
+   * rows instead, as before 0.1.16, made the next publish a first one, which announces no removals, so an
+   * index kept rows nothing ever removed: ME's index held three versions of its shop.)
+   */
+  private async staleAll(run: (sql: string, params: unknown[]) => Promise<unknown>, p: Projecting | undefined): Promise<void> {
+    if (!p) return;
+    for (const v of p.views.views.values()) {
+      await run(`insert into stale (owner, view, record, since) select $1, $2, id, 0 from records where owner = $1${v.level ? " and level = $3" : ""} on conflict do nothing`, v.level ? [this.owner, v.name, v.level] : [this.owner, v.name]);
+      await run("insert into stale (owner, view, record, since) select owner, view, record, 0 from projections where owner = $1 and view = $2 on conflict do nothing", [this.owner, v.name]);
+    }
   }
 
   /** Well-formed access (14.12) on what an entry changed: ownership, wearing, within, and every edge written. */
@@ -632,7 +666,11 @@ export class PgStore {
       const problem = differs(after, draft);
       if (problem) throw new Error(`the log doesn't describe the change: ${problem}`);
       await persist(client, this.owner, before, after);
-      await this.afterPersist(client, before, after, head.seq + (linked ? 1 : 0));
+      await this.afterPersist(client, before, after, head.seq + (linked ? 1 : 0), p);
+      // The definitions in force are unchanged by an entry with no define write (an install clears the
+      // cache itself), so the cache follows the head: parsing them again cost every commit, and the first
+      // read after it, ~110 ms on ME.
+      if (linked && this.defsCache?.seq === head.seq && !(Array.isArray(entry.writes) ? entry.writes : []).some((w) => isObj(w) && isObj(w.define))) this.defsCache = { seq: head.seq + 1, parsed: this.defsCache.parsed };
       return { entry: linked ?? (hosted[0] as Entry), out: result.out };
     }).then(async (r) => {
       if (r.entry) await this.freshen();
@@ -687,8 +725,9 @@ export class PgStore {
         const { state } = await settle(client, this.owner, base, (s) => applyEntry(s, row.entry));
         await persist(client, this.owner, base, state);
       }
-      // Projections follow: with nothing stored, the next publish rebuilds every row of every view.
-      for (const table of ["projections", "projection_stream", "stale"]) await client.query(`delete from ${table} where owner = $1`, [this.owner]);
+      // Projections follow: every row of every view is marked stale, so the next publish rebuilds and
+      // compares them all and announces what left.
+      await this.staleAll((sql, params) => client.query(sql, params), await this.projectingFrom(client));
       return loadState(client, this.owner);
     });
   }
@@ -745,4 +784,10 @@ function copyState(st: State): State {
     reads: [...st.reads],
     definitions: new Map(st.definitions),
   };
+}
+
+/** What a store projects with, from the definitions in force: nothing when there is nothing to project. */
+function projectingOf(p: Parsed): Projecting | undefined {
+  if (!p.views.views.size && !p.dict.facets.size) return undefined;
+  return { dict: p.dict, views: p.views, perms: p.perms };
 }

@@ -235,6 +235,11 @@ export type ProjectOptions = {
   access?: Access;
   /** Only these records: a projector rebuilding the rows a write made stale (12.6) asks for them alone. */
   only?: string[];
+  /**
+   * Every row in one pass, no page and no counts: a projector publishing the view (12.6) wants the rows,
+   * and a page at a time would select and count the whole view once per page (ME: 197 pages of 9,437 units).
+   */
+  all?: boolean;
 };
 export type Counts = { [filter: string]: { [bucket: string]: number } };
 /** Dependent counts (12.3): filter → bucket → dependent facet → value → count. */
@@ -505,17 +510,19 @@ export class Views {
         return !f || this.bucketsOf(f).some((b) => chosen.includes(b.name) && this.inBucket(r, f, b));
       });
     const counts: Projection["counts"] = {};
-    for (const fname of v.filters) {
-      const f = this.set.filters.get(fname);
-      if (!f) continue;
-      const pool = all.filter((r) => passes(r, fname));
-      counts[fname] = Object.fromEntries(this.bucketsOf(f).map((b) => [b.name, pool.filter((r) => this.inBucket(r, f, b)).length]));
+    if (!opts.all) {
+      for (const fname of v.filters) {
+        const f = this.set.filters.get(fname);
+        if (!f) continue;
+        const pool = all.filter((r) => passes(r, fname));
+        counts[fname] = Object.fromEntries(this.bucketsOf(f).map((b) => [b.name, pool.filter((r) => this.inBucket(r, f, b)).length]));
+      }
     }
-    const nested = this.nestedCounts(v, (fname) => all.filter((r) => passes(r, fname)));
+    const nested = opts.all ? {} : this.nestedCounts(v, (fname) => all.filter((r) => passes(r, fname)));
     const chosen = all.filter((r) => passes(r));
-    const pages = Math.max(1, Math.ceil(chosen.length / v.page));
-    const page = opts.page ?? 1;
-    const onPage = chosen.slice((page - 1) * v.page, page * v.page);
+    const pages = opts.all ? 1 : Math.max(1, Math.ceil(chosen.length / v.page));
+    const page = opts.all ? 1 : (opts.page ?? 1);
+    const onPage = opts.all ? chosen : chosen.slice((page - 1) * v.page, page * v.page);
     const pickList = Object.entries(picks).filter(([, c]) => c.length);
     const indexable = page === 1 && (pickList.length === 0 || (pickList.length === 1 && v.index.includes(pickList[0]?.[0] as string) && pickList[0]?.[1].length === 1));
     const [shapeName = "", ...more] = v.shapes;
@@ -563,13 +570,7 @@ export class Views {
 
   /** A nested view's rows for a page record (12.1, 12.2 `of`): every page, in the view's order. */
   private nestedRows(name: string, context: Record, audience: string, opts: ProjectOptions): JsonObject[] {
-    const out: JsonObject[] = [];
-    for (let page = 1; ; page++) {
-      const p = this.project(name, { audience, context, page, ...(opts.caller ? { caller: opts.caller } : {}), ...(opts.access ? { access: opts.access } : {}) });
-      out.push(...p.rows);
-      if (page >= p.pages) break;
-    }
-    return out;
+    return this.project(name, { audience, context, all: true, ...(opts.caller ? { caller: opts.caller } : {}), ...(opts.access ? { access: opts.access } : {}) }).rows;
   }
 
   /**
@@ -632,11 +633,7 @@ export class Views {
     const last = had && had.version === version ? had : { version, rows: new Map<string, string>(), seq: 0, log: [] as StreamEntry[], published: false };
     const reset = !!had && had.version !== version;
     const now = new Map<string, JsonObject>();
-    for (let page = 1; ; page++) {
-      const p = this.project(name, { ...opts, audience, page });
-      for (const row of p.rows) now.set(String(row.record), row);
-      if (page >= p.pages) break;
-    }
+    for (const row of this.project(name, { ...opts, audience, all: true }).rows) now.set(String(row.record), row);
     const out: StreamEntry[] = [];
     const next = { version, rows: new Map<string, string>(), seq: last.seq, log: [...last.log], published: true };
     for (const [id, row] of now) {

@@ -200,7 +200,7 @@ test("install through the host, then a form run, a send with an adapter and an a
   assert.deepEqual(v, { valid: true });
   assert.ok((exp.body.log as JsonObject[]).every((e) => typeof e.sig === "string"), "every entry carries a signature");
   // The review queue reads by key; erasure is the owner's.
-  assert.equal((await call("GET", "/o/shop.example/review", staffKey)).status, 200);
+  { const r = await call("GET", "/o/shop.example/review", staffKey); assert.equal(r.status, 200, JSON.stringify(r.body)); }
   assert.equal((await call("POST", "/o/shop.example/erase/U-1", staffKey)).status, 403);
   const erased = await call("POST", "/o/shop.example/erase/U-1", ownerKey);
   assert.equal(erased.status, 200);
@@ -225,8 +225,8 @@ test("install through the host, then a form run, a send with an adapter and an a
   assert.equal(p2.headers.get("x-robots-tag"), "noindex");
 
   // The loops, with the host key.
-  assert.equal((await call("POST", "/project", undefined, {}, { "x-host-key": "hk" })).status, 200);
-  assert.equal((await call("POST", "/tick", undefined, {}, { "x-host-key": "hk" })).status, 200);
+  { const r = await call("POST", "/project", undefined, {}, { "x-host-key": "hk" }); assert.equal(r.status, 200, JSON.stringify(r.body)); }
+  { const r = await call("POST", "/tick", undefined, {}, { "x-host-key": "hk" }); assert.equal(r.status, 200, JSON.stringify(r.body)); }
 });
 
 test("offer and take between two owners on one host, a link offer, and a stream pushed to the other's inbox", { skip: !url }, async () => {
@@ -301,7 +301,7 @@ view: discs
   assert.equal(byLink.status, 200);
   assert.deepEqual((byLink.body.records as JsonObject[]).map((r) => Object.keys(r.values as JsonObject)), [["title", "cost"]]);
   assert.deepEqual(byLink.body.terms, { reshare: "no" });
-  assert.equal((await call("POST", "/o/dist.example/offer/tradeOffer/unpublish", distKey)).status, 200);
+  { const r = await call("POST", "/o/dist.example/offer/tradeOffer/unpublish", distKey); assert.equal(r.status, 200, JSON.stringify(r.body)); }
   assert.equal((await call("GET", `/o/dist.example/offer/tradeOffer?link=${token}`)).status, 401, "unpublished: the token stops working");
   assert.equal(String((await call("POST", "/o/dist.example/offer/tradeOffer/link", distKey)).body.link), token, "republished: the same token");
   // The public offer is a border wrapper: the records with their sources and the signed entries they came from.
@@ -350,16 +350,16 @@ contract: distTake
   assert.equal(offer.body.package, "pub.example/dist /2026-10-01");
   // The version gate: the shop holds dist's package at v1; dist moves to v2 and offers under it; the take is held.
   const distV1 = publish(DIST, { date: "2026-10-01", key }).bundle;
-  assert.equal((await call("POST", "/o/shop.example/install", ownerKey, { bundle: distV1 })).status, 200);
+  { const r = await call("POST", "/o/shop.example/install", ownerKey, { bundle: distV1 }); assert.equal(r.status, 200, JSON.stringify(r.body)); }
   const distV2 = publish(DIST.replace("dist /2026-10-01", "dist /2026-10-02").replace("cost#USD", "cost#USD\nnotes$"), { date: "2026-10-02", previous: distV1, key }).bundle;
-  assert.equal((await call("POST", "/o/dist.example/install", distKey, { bundle: distV2 })).status, 200);
+  { const r = await call("POST", "/o/dist.example/install", distKey, { bundle: distV2 }); assert.equal(r.status, 200, JSON.stringify(r.body)); }
   const held = await call("POST", "/o/shop.example/take/distTake", ownerKey);
   assert.equal(held.status, 200, JSON.stringify(held.body));
   assert.equal((held.body.taken as JsonObject[])[0]?.stopped, "version", JSON.stringify(held.body));
   const shopReview = await (await host.storeFor("shop.example")).review();
   assert.ok(shopReview.some((it) => it.key === "version:pub.example/dist" && it.theirs === "2026-10-02" && it.ours === "2026-10-01"), JSON.stringify(shopReview));
   // The shop upgrades to v2: the take goes through again.
-  assert.equal((await call("POST", "/o/shop.example/install", ownerKey, { bundle: distV2 })).status, 200);
+  { const r = await call("POST", "/o/shop.example/install", ownerKey, { bundle: distV2 }); assert.equal(r.status, 200, JSON.stringify(r.body)); }
   const after = await call("POST", "/o/shop.example/take/distTake", ownerKey);
   assert.equal((after.body.taken as JsonObject[])[0]?.stopped, undefined, JSON.stringify(after.body));
 });
