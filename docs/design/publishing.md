@@ -150,7 +150,8 @@ pins at once.
 ## Decisions for the operator
 
 Ruled 2026-10-15: crubal.com's Ed25519 key exists (public `ZdAEPbw_CMLYZIjYM-xXBRF2tSu0Wb5aO76ebEqi4Do`, in
-the well-known file from this date; the private half in the publisher's key store, to be placed in the
+the well-known file from this date; rotated 2026-10-19 at the gate to `o0L6rmVOyeOsToUx0bqgPAgyb8R7jcsFwePBDyJBA20`,
+since the first private half never reached the build and nothing was signed under it; the private half in the publisher's key store, to be placed in the
 site build's environment as `CRUBAL_SIGNING_KEY`) (6); unsigned bundles are refused by default with a
 development override (7); the bundle is one document (8).
 

@@ -258,7 +258,8 @@ if (existsSync(join(out, "404", "index.html"))) cpSync(join(out, "404", "index.h
 
 const crubal = await import(join(root, "packages", "crubal", "src", "index.ts"));
 // crubal.com's signing key (8.5, 11.7): the public half here and in the well-known file; the private half only in the build's environment.
-const SIGNING_PUBLIC = "ZdAEPbw_CMLYZIjYM-xXBRF2tSu0Wb5aO76ebEqi4Do";
+// Rotated 2026-10-19: the first pair's private half was never placed in the build, so nothing was ever signed under it.
+const SIGNING_PUBLIC = "o0L6rmVOyeOsToUx0bqgPAgyb8R7jcsFwePBDyJBA20";
 const STD = ["core", "units", "party"];
 const stdPackages = [];
 
@@ -361,7 +362,7 @@ writeFileSync(
       crubal: "2",
       owner: "crubal.com",
       // crubal.com's signing key (8.5, 11.7): the public half; the private half is in the publisher's key store.
-      keys: { "crubal.com": { alg: "Ed25519", public: SIGNING_PUBLIC, from: "2026-10-15" } },
+      keys: { "crubal.com": { alg: "Ed25519", public: SIGNING_PUBLIC, from: "2026-10-19" } },
       packages: stdPackages.map((p) => ({ package: p.id, latest: p.version, versions: { [p.version]: `${ORIGIN}/${p.name}/${p.version}/package.json` } })),
     },
     null,
