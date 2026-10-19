@@ -9,7 +9,7 @@ import { checkPackage } from "@cruba/crubal";
 import { checkContracts } from "@cruba/crubal";
 import type { JsonObject } from "@cruba/crubal";
 import { unitsExtensionText } from "@cruba/crubal";
-import { extendUnits, resetUnits } from "@cruba/crubal";
+import { extendUnits, resetUnits, unitsTableWith } from "@cruba/crubal";
 import { checkRules } from "@cruba/crubal";
 import { checkViews } from "@cruba/crubal";
 import type { Client } from "./db.ts";
@@ -71,6 +71,10 @@ export async function definitionsOf(client: Client, owner: string, extra: JsonOb
   if (working.length) readBundleOnto(workingBundle(owner, working), base);
   // The units table in force: the standard table plus this owner's extension (one owner per process for now).
   const measures = unitsExtensionOf(working);
+  // The units table in force rides on the dictionary (11.9, per owner): the readers that hold a dictionary
+  // read it there. The process table is set too, for the few readers that hold a facet alone
+  // (checkScalar's unit question); that remaining path still sees the last owner read in this process.
+  base.dict.units = unitsTableWith(measures.length ? unitsExtensionText(measures) : undefined);
   resetUnits();
   if (measures.length) extendUnits(unitsExtensionText(measures));
   (base as Parsed & { units?: JsonObject[] }).units = measures;

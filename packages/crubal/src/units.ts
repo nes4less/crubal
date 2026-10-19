@@ -60,39 +60,45 @@ export function resetUnits(): void {
 }
 
 /** The real unit a spelling names, or null: the unit itself, or one of its spellings, folded. */
-export function unitOf(spelling: string): string | null {
-  if (current.units.has(spelling)) return spelling;
+export function unitOf(spelling: string, table: UnitsTable = current): string | null {
+  if (table.units.has(spelling)) return spelling;
   const k = foldSpelling(spelling);
-  for (const u of current.units.values()) if (u.unit.toLowerCase() === k || u.spellings.some((s) => foldSpelling(s) === k)) return u.unit;
+  for (const u of table.units.values()) if (u.unit.toLowerCase() === k || u.spellings.some((s) => foldSpelling(s) === k)) return u.unit;
   return null;
 }
 
 /** Is this a unit the table knows, `currency`, or an ISO 4217 code (1.4.4)? */
-export function knownUnit(u: string): boolean {
-  return u === "currency" || /^[A-Z]{3}$/.test(u) || current.units.has(u);
+export function knownUnit(u: string, table: UnitsTable = current): boolean {
+  return u === "currency" || /^[A-Z]{3}$/.test(u) || table.units.has(u);
 }
 
-export function dimensionOf(unit: string): string | null {
-  return current.units.get(unit)?.dimension ?? null;
+export function dimensionOf(unit: string, table: UnitsTable = current): string | null {
+  return table.units.get(unit)?.dimension ?? null;
 }
 
 /** A currency's minor-unit places (ISO 4217), for a border that asks for them; 2 when unknown. */
-export function currencyPlaces(code: string): number {
-  return current.currencies.get(code)?.places ?? 2;
+export function currencyPlaces(code: string, table: UnitsTable = current): number {
+  return table.currencies.get(code)?.places ?? 2;
 }
 
 /**
  * Convert an amount between units of one dimension: through the base by factor and offset, rounded to
  * `places`, else the dimension's rounding, else 6 places with trailing zeros dropped.
  */
-export function convert(amount: string, from: string, to: string, places?: number): string | null {
-  const a = current.units.get(from);
-  const b = current.units.get(to);
+export function convert(amount: string, from: string, to: string, places?: number, table: UnitsTable = current): string | null {
+  const a = table.units.get(from);
+  const b = table.units.get(to);
   if (!a || !b || a.dimension !== b.dimension) return null;
   const base = Number(amount) * a.factor + a.offset;
   const v = (base - b.offset) / b.factor;
   // The facet's places are kept exactly; the dimension's rounding is a most, trailing zeros dropped.
   if (places !== undefined) return v.toFixed(places);
-  const dimRounding = [...current.units.values()].find((u) => u.dimension === a.dimension && u.factor === 1 && u.offset === 0)?.rounding;
+  const dimRounding = [...table.units.values()].find((u) => u.dimension === a.dimension && u.factor === 1 && u.offset === 0)?.rounding;
   return String(Number(v.toFixed(dimRounding ?? 6)));
+}
+
+/** The standard table plus one owner's extension, as a table of its own (11.9): per dictionary, never global. */
+export function unitsTableWith(extension?: string): UnitsTable {
+  const table = readUnits(STANDARD_UNITS);
+  return extension ? readUnits(extension, table, true) : table;
 }

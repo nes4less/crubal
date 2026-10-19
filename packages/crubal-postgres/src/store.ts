@@ -2,7 +2,7 @@
 // chain, build the entry, apply it with the engine's applyEntry, persist the difference, append the log.
 // The log is the truth; `rebuild` gives every other table back from it.
 
-import { applyEntry, diffWrites, differs, type Draft, type Entry, type State } from "@cruba/crubal";
+import { applyEntry, diffWrites, differs, type Draft, type Entry, type State, MemoryRecords } from "@cruba/crubal";
 import { Engine, serialize } from "@cruba/crubal";
 import { CrubalError } from "@cruba/crubal";
 import { Access, type Edge } from "@cruba/crubal";
@@ -453,14 +453,52 @@ export class PgStore {
     return e;
   }
 
-  /** The owner's state as the tables hold it. */
+  /**
+   * The owner's state as the tables hold it, kept per chain head: the same head answers from memory; a
+   * head a little further on replays the entries since onto a copy (the engine's own replay), so a write
+   * never costs a reload of every record; a gap over 200 entries, or an entry the replay can't take,
+   * reads the tables whole. A commit works on a copy of the loaded state, so a kept state is never shared
+   * with a draft. (G6: Cashierfu carried this around the store until 0.1.15.)
+   */
   async state(): Promise<State> {
     const client = await this.pool.connect();
     try {
-      return await loadState(client, this.owner);
+      const { rows } = await client.query("select head_seq from chains where owner = $1 and chain = $2", [this.owner, this.chain]);
+      const seq = rows.length ? Number((rows[0] as { head_seq: string | number }).head_seq) : -1;
+      // A hosted person's writes go to their own chain (14.1) and move no head of ours, so the key the
+      // state is kept under takes every hosted head along: one of theirs moving reads the tables whole.
+      const hostedRows = await client.query("select coalesce(sum(head_seq), 0)::text as total, count(*)::text as n from chains where owner like $1 and chain = $2", [`${this.owner}:%`, this.chain]);
+      const hosted = `${(hostedRows.rows[0] as { total: string; n: string }).n}/${(hostedRows.rows[0] as { total: string; n: string }).total}`;
+      const kept = this.keptState;
+      if (kept && kept.seq === seq && kept.hosted === hosted) return kept.state;
+      if (kept && kept.hosted === hosted && seq > kept.seq && seq - kept.seq <= 200) {
+        const since = await client.query("select seq, entry from log where owner = $1 and chain = $2 and seq > $3 order by seq", [this.owner, this.chain, kept.seq]);
+        const entries = since.rows as { seq: string | number; entry: Entry }[];
+        const contiguous = entries.length === seq - kept.seq && entries.every((e, i) => Number(e.seq) === kept.seq + i + 1);
+        if (contiguous) {
+          const next = copyState(kept.state);
+          try {
+            for (const e of entries) applyEntry(next, e.entry);
+            this.keptState = { seq, hosted, state: next };
+            return next;
+          } catch {
+            // an entry the replay can't take: the tables, below
+          }
+        }
+      }
+      const state = await loadState(client, this.owner);
+      this.keptState = { seq, hosted, state };
+      return state;
     } finally {
       client.release();
     }
+  }
+
+  private keptState: { seq: number; hosted: string; state: State } | undefined;
+
+  /** Forget the kept state: after a rewrite of history that moves no head (an erase, a rebuild). */
+  forgetState(): void {
+    this.keptState = undefined;
   }
 
   /** The owner's entries, in chain order. */
@@ -691,4 +729,20 @@ export class PgStore {
 /** The facets a dictionary declares `transitions: yes` (4.2). */
 function transitionsOf(dict: { facets: Map<string, { key: string; transitions?: boolean }> }): Set<string> {
   return new Set([...dict.facets.values()].filter((f) => f.transitions).map((f) => f.key));
+}
+
+/** A state copied one level down, so replayed entries apply to a fresh object while readers keep theirs. */
+function copyState(st: State): State {
+  return {
+    records: new MemoryRecords(st.records),
+    edges: new Map(st.edges),
+    bindings: new Map(st.bindings),
+    instructions: new Map([...st.instructions].map(([k, v]) => [k, [...v]])),
+    observations: [...st.observations],
+    reviews: [...st.reviews],
+    runs: new Map(st.runs),
+    installed: [...st.installed],
+    reads: [...st.reads],
+    definitions: new Map(st.definitions),
+  };
 }

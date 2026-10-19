@@ -4,6 +4,7 @@
 
 import { type Truth, evaluate, parseCondition } from "./conditions.ts";
 import type { ClassDef, ClassLine, Dictionary, Facet } from "./defs.ts";
+import type { UnitsTable } from "./units.ts";
 import type { Json, JsonObject, Record } from "./model.ts";
 import { itemText } from "./print-text.ts";
 import { readUnder } from "./read-text.ts";
@@ -294,19 +295,19 @@ function foldChoice(f: Facet, v: Json): Json {
   return v;
 }
 
-function foldQuantity(f: Facet, v: Json): Json {
+function foldQuantity(f: Facet, v: Json, units?: UnitsTable): Json {
   if (!isObj(v) || !("$qty" in v) || !f.unit) return v;
-  const from = unitOf(String(v.unit)) ?? String(v.unit);
+  const from = unitOf(String(v.unit), units) ?? String(v.unit);
   if (from === f.unit) return from === v.unit ? v : { $qty: v.$qty as Json, unit: from };
   if (!f.accepts.includes(from) && !f.accepts.includes(String(v.unit))) return v;
-  const amount = convert(String(v.$qty), from, f.unit, f.places);
+  const amount = convert(String(v.$qty), from, f.unit, f.places, units);
   return amount === null ? v : { $qty: amount, unit: f.unit };
 }
 
 export function foldValue(f: Facet, v: Json, dict: Dictionary): Json {
   if (Array.isArray(v)) return v.map((x) => foldValue(f, x, dict));
   if (f.type === "choice") return foldChoice(f, v);
-  if (f.type === "number") return foldQuantity(f, v);
+  if (f.type === "number") return foldQuantity(f, v, dict.units);
   if (f.type === "compound" && isObj(v)) return foldFields(v, f.children ?? new Map(), dict);
   return v;
 }

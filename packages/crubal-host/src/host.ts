@@ -186,6 +186,7 @@ export class Host {
    * `until` and the new with `from`, so the chain verifies across the rotation.
    */
   async rotateKey(owner: string, now = this.now()): Promise<{ owner: string; public: string; retired: string }> {
+    this.forgetStore(owner);
     const old = await this.keyOf(owner);
     if (!old) throw new Error(`${owner} has no key to rotate`);
     const { rows } = await this.pool.query("select created from host_owners where owner = $1", [owner]);
@@ -399,10 +400,22 @@ export class Host {
   // ─── Stores and borders ────────────────────────────────────────────────────
 
   /** An owner's store, signing with the owner's key when the host holds one. */
+  /** One store per owner for the life of the host, so its definitions and state caches outlive a call (G6). */
   async storeFor(owner: string): Promise<PgStore> {
+    const had = this.stores.get(owner);
+    if (had) return had;
     const key = await this.keyOf(owner);
     const signer = key ? (hash: string) => edSign(null, Buffer.from(hash, "hex"), createPrivateKey({ key: { kty: "OKP", crv: "Ed25519", x: key.public, d: key.private }, format: "jwk" })).toString("base64url") : undefined;
-    return new PgStore(this.pool, owner, { ...(signer ? { signer } : {}), hostedSigner: (o) => this.hostedSigner(o), ...(this.o.fresh ? { fresh: this.o.fresh } : {}), ...(this.o.allowUnsigned ? { allowUnsigned: true } : {}) });
+    const store = new PgStore(this.pool, owner, { ...(signer ? { signer } : {}), hostedSigner: (o) => this.hostedSigner(o), ...(this.o.fresh ? { fresh: this.o.fresh } : {}), ...(this.o.allowUnsigned ? { allowUnsigned: true } : {}) });
+    if (key) this.stores.set(owner, store);
+    return store;
+  }
+
+  private readonly stores = new Map<string, PgStore>();
+
+  /** Drop an owner's kept store: after a key rotation (its signer changes) or a rewrite of its history. */
+  forgetStore(owner: string): void {
+    this.stores.delete(owner);
   }
 
   /**

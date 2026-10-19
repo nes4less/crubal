@@ -250,3 +250,27 @@ suggestions for the person) and refuses an emergency edge or a new edge for anyo
 caller's live edges grouped by owner, over the store's `edges` table with an index on `who`) and `GET
 /whoami/rows?relation=…` (the index rows whose record or ancestor is one of those edges' `on`, across owners;
 the feed's primitive). `bench/platform.ts` measures the three over ten owners and a million records.
+
+## The serverless shape, as it runs (added 2026-10-19, brief 17 item 7)
+
+Cashierfu runs the reference host inside a Next.js application on Vercel: one process per function
+invocation, Postgres behind it, a scheduler calling one endpoint every five minutes. What that means for
+the host's own machinery:
+
+- **Loops are endpoints.** `tick`, `drain`, `project`, the deliveries, the marketplace's push pass and the
+  link index walk run when `POST /api/loops/tick` is called (the host key or the cron secret), each at the
+  rate the owner's root sets; a ledger records every run. Nothing runs between calls.
+- **`fresh: write` publishes after the response.** Inside a request the projection of the marked views is
+  queued with the platform's `after()` hook and runs once the response is sent, one owner's projections
+  in a line; outside a request (a script, a test) it runs before the commit answers, as the store does.
+  A function that is frozen before the queue drains leaves the views stale until the next write or the
+  `project` loop, which is why the loop exists.
+- **The host keeps one store per owner and the store keeps its state per chain head** (0.1.15): within one
+  invocation every call reuses them; across invocations the first call reloads. A key rotation or a
+  rewrite of history drops the kept store or state (`forgetStore`, `forgetState`).
+- **Streams between owners on one host** run through the push pass with an adapter the application
+  registers by contract name; the acknowledgement moves the cursor exactly as an HTTP inbox would. A
+  second host is reached by the same pass over HTTP with a signed POST.
+- **The units table** rides on each owner's dictionary; the process-wide table remains for the readers
+  that hold a facet alone, and sees the last owner read.
+

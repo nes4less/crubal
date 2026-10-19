@@ -2,6 +2,7 @@
 // the shorthand into one model. The Reader uses only a facet's type, how many, unit, words, children and
 // identity; the Dictionary level uses the rest.
 
+import type { UnitsTable } from "./units.ts";
 import { CrubalError, type Node, readTree } from "./tree.ts";
 import { readList, splitTop } from "./lex.ts";
 import { unitOf } from "./units.ts";
@@ -124,6 +125,8 @@ export type Dictionary = {
   match: Map<string, string[][]>;
   /** kind name → `independent`, `cascade of`, `cascade within` or `cascade both` (11.2 `archive`) */
   archive: Map<string, string>;
+  /** The units table this dictionary reads with (11.9): the standard table plus the owner's extension; absent, the process's. */
+  units?: UnitsTable;
 };
 
 export function emptyDictionary(): Dictionary {

@@ -7,7 +7,7 @@ export { printText, type PrintMode } from "./print-text.ts";
 export { canonical, serialize } from "./canonical.ts";
 export { checkWrapper, parseJson, type Wrapper, type Record, type Json, type JsonObject, type Source } from "./model.ts";
 export { decide as decideReview, openItems, unitsExtensionText, type Decision } from "./review.ts";
-export { extendUnits, resetUnits } from "./units.ts";
+export { extendUnits, resetUnits, unitsTableWith, type UnitsTable } from "./units.ts";
 export { runCorpus, type CaseResult } from "./corpus.ts";
 export { checkPackage, checkRecord, facetJson, foldKey, foldRecord, resolve, resolvedJson, type Outcome, type Warning } from "./dictionary.ts";
 export { evaluate, parseCondition, type Truth } from "./conditions.ts";
