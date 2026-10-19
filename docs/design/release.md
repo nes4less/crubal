@@ -19,6 +19,9 @@ because the handoffs it names are unproven.
    tag; a later tag renews it. Tags never move.
 3. `@cruba/crubal` goes to **0.2.0**, claiming `CRUBAL 2 · Views · corpus 2026-MM-DD`;
    `@cruba/crubal-postgres` and `@cruba/crubal-host` publish at 0.1.0 as the reference store and host.
+   (Done 2026-10-19 with the three at **0.2.0** together: the store and the host had reached 0.1.16 in
+   lockstep with the engine by the gate, and a first publish below the version the adopter already vendors
+   would have read as a downgrade. They stay in lockstep from here.)
 4. crubal.com serves the **spec chapters** as pages, the dated version, the corpus tag and the claim.
 5. The **freeze rule** starts (11.8): a dated revision of 2 only adds; a change that breaks what readers
    hold is CRUBAL 3, with its form recipe. The corpus is tagged with each revision.

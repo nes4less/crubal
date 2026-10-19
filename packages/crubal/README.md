@@ -3,7 +3,7 @@
 The CRUBAL reference implementation. Pure functions, JSON in and JSON out, so a compiled core can replace
 the internals later behind the same API.
 
-**Level reached: Views**, every chapter of the spec (1–14). Conformance claim: `CRUBAL 2 · Views · corpus 2026-10-15`.
+**Level reached: Views**, every chapter of the spec (1–14). Conformance claim: `CRUBAL 2 · Views · corpus 2026-10-19` (the gate, 2026-10-19; `CLAIM.md`).
 
 - **Reader:** the text form and JSON both ways, facet types, unknown keys kept exactly, plain-words refusals
   with line numbers.
@@ -58,7 +58,7 @@ A run applies the rules (7.4 step 6): a value a `must` rule won't have is parked
 the rule and never lands, a `suggest` fills and a derivation lands with `origin: derived` and the rule as
 its `via`, a changed verdict holds, and each is a logged effect.
 
-It passes every corpus folder (192 cases; `crubal claim <corpus> --out CLAIM.md` runs every level and writes the claim, 13.3). The corpus and this package name no adopter and no third party:
+It passes every corpus folder (198 cases; `crubal claim <corpus> --out CLAIM.md` runs every level and writes the claim, 13.3). The corpus and this package name no adopter and no third party:
 `test.example` owns the data, `market:` stands for any marketplace, `bench` for any in-house tool, and
 product, unit and the like are the test package's own kinds, never the core's.
 
