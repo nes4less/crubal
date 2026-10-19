@@ -387,6 +387,12 @@ migration: base /2026-10-01 -> base /2026-11-01
   assert.deepEqual(entry.by, { migration: "base /2026-10-01 -> base /2026-11-01" });
   assert.equal((await store.state()).records.get("P-1")?.values.format, "DVD");
   assert.ok((await store.definitions()).dict.facets.get("format")?.values?.every((v) => v.value === "DVD"));
+  // A retired member leaves the package (11.4): the view first, then the shape; the shape can't go while the view reads it (G12).
+  await assert.rejects(store.define({ shape: "line", retired: true }, { person: "staff-1" }, "2026-10-15T20:00:08Z"), /line/);
+  await store.define({ view: "lines", retired: true }, { person: "staff-1" }, "2026-10-15T20:00:09Z");
+  await store.define({ shape: "line", retired: true }, { person: "staff-1" }, "2026-10-15T20:00:10Z");
+  assert.equal((await store.definitions(true)).views.views.has("lines"), false);
+  assert.equal((await store.definitions(true)).views.shapes.has("line"), false);
   assert.deepEqual(await store.verify(), { valid: true });
   // The border reads its contracts from the store too.
   const border = await PgBorder.over(store);

@@ -29,22 +29,33 @@ export function workingBundle(owner: string, definitions: Iterable<JsonObject>):
   // a contract its kind), so each define is filed under what it is (G11).
   const sections: { [member: string]: string } = { filter: "filters", view: "views", contract: "contracts", facet: "facets", class: "classes", rule: "rules", kind: "kinds", shape: "shapes" };
   const b: JsonObject = { crubal: "2", package: "working", version: "working", owner, id: `${owner}/working` };
+  // In log order, by member key: a later define of the same member replaces the earlier, a retired one
+  // (8.5, 11.4) takes it out, so the working package holds each member once as it now stands.
+  const members = new Map<string, { section: string; def: JsonObject }>();
   for (const d of definitions) {
     const member = Object.keys(sections).find((m) => typeof d[m] === "string");
     if (member) {
-      const list = (b[sections[member] as string] as JsonObject[] | undefined) ?? [];
-      list.push(d);
-      b[sections[member] as string] = list;
+      const key = `${member}:${String(d[member])}`;
+      if (d.retired === true) members.delete(key);
+      else members.set(key, { section: sections[member] as string, def: d });
       continue;
     }
-    if (typeof d.permissions === "string") b.permissions = d;
+    if (typeof d.permissions === "string") {
+      if (d.retired === true) delete b.permissions;
+      else b.permissions = d;
+    }
     if (d.ownership !== undefined) b.ownership = d.ownership;
+  }
+  for (const { section, def } of members.values()) {
+    const list = (b[section] as JsonObject[] | undefined) ?? [];
+    list.push(def);
+    b[section] = list;
   }
   return b;
 }
 
 /** Build the definitions in force: installed bundles in order, then the working package. */
-export async function definitionsOf(client: Client, owner: string): Promise<Parsed> {
+export async function definitionsOf(client: Client, owner: string, extra: JsonObject[] = []): Promise<Parsed> {
   const base = emptyParsed();
   const installed = (await client.query("select json from installed where owner = $1 order by ord", [owner])).rows as Row[];
   for (const row of installed) {
@@ -55,9 +66,11 @@ export async function definitionsOf(client: Client, owner: string): Promise<Pars
     readBundleOnto(bundle, base);
   }
   const defs = (await client.query("select json from definitions where owner = $1 order by ord", [owner])).rows as Row[];
-  if (defs.length) readBundleOnto(workingBundle(owner, defs.map((r) => r.json as JsonObject)), base);
+  // `extra`: define writes not yet committed, so a trial (store.define) is checked as the package would stand.
+  const working = [...defs.map((r) => r.json as JsonObject), ...extra];
+  if (working.length) readBundleOnto(workingBundle(owner, working), base);
   // The units table in force: the standard table plus this owner's extension (one owner per process for now).
-  const measures = unitsExtensionOf(defs.map((r) => r.json as JsonObject));
+  const measures = unitsExtensionOf(working);
   resetUnits();
   if (measures.length) extendUnits(unitsExtensionText(measures));
   (base as Parsed & { units?: JsonObject[] }).units = measures;

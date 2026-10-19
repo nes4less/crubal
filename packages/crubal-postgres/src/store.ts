@@ -434,8 +434,14 @@ export class PgStore {
 
   /** A define write (8.5, 11.4): one member of the working package as it now stands, checked with the rest first. */
   async define(member: JsonObject, by: JsonObject = { person: "owner" }, at?: string): Promise<Entry | null> {
-    const trial = readBundleOnto(workingBundle(this.owner, [member]), await this.definitions(true));
-    checkAll(trial);
+    // The trial is the package as it would stand with this write (a redefinition replacing, a retired member
+    // gone), checked whole; only then does the write land.
+    const client = await this.pool.connect();
+    try {
+      checkAll(await definitionsOf(client, this.owner, [member]));
+    } finally {
+      client.release();
+    }
     const e = (await this.commitFrom(() => ({ by, extra: [{ define: member }], out: null }), at)).entry;
     this.defsCache = undefined;
     return e;
