@@ -329,7 +329,7 @@ function facetText(f: JsonObject, depth: number): string[] {
     if (f.open === true) vals.push("...");
     line("values", vals.join(", "));
   }
-  for (const k of ["fixed", "ranked", "scored", "required", "na", "unique"]) if (f[k] === true) line(k, "yes");
+  for (const k of ["fixed", "ranked", "scored", "required", "na", "unique", "transitions"]) if (f[k] === true) line(k, "yes");
   line("to", str(f.to));
   if (Array.isArray(f.facets)) {
     out.push(`${pad}  facets:`);

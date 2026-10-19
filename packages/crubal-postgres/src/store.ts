@@ -393,7 +393,7 @@ export class PgStore {
         const sources = { ...(r.sources ?? {}) };
         for (const [k, s] of Object.entries(sources)) if (s.via === earlier || s.via === row.intake) { delete values[k]; delete sources[k]; }
         const cleared = { ...r, values, sources };
-        draft.records.set(recordId, land(cleared, { outcomes: again.outcomes as IntakeOutcome[], contract: c.name }, { origin: c.origin || "reported", via: row.intake }, p.dict.trust, p.dict.facetTrust));
+        draft.records.set(recordId, land(cleared, { outcomes: again.outcomes as IntakeOutcome[], contract: c.name }, { origin: c.origin || "reported", via: row.intake }, p.dict.trust, p.dict.facetTrust, transitionsOf(p.dict)));
         return { by: { migration: "replay" }, extra: [], out: null };
       }, at);
       await this.pool.query("update intake set json = $3 where owner = $1 and intake = $2", [this.owner, row.intake, { ...row.json, replays: [...((row.json.replays as JsonObject[]) ?? []), { outcomes: again.outcomes as unknown as Json, contract: c.name, ...(entry.entry ? { entry: String(entry.entry.log) } : {}) }] }]);
@@ -680,4 +680,9 @@ export class PgStore {
     });
     await this.rebuild();
   }
+}
+
+/** The facets a dictionary declares `transitions: yes` (4.2). */
+function transitionsOf(dict: { facets: Map<string, { key: string; transitions?: boolean }> }): Set<string> {
+  return new Set([...dict.facets.values()].filter((f) => f.transitions).map((f) => f.key));
 }

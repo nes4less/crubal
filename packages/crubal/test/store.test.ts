@@ -104,3 +104,14 @@ test("a define of a filter is filed as a filter, never as the facet it names (G1
   applyEntry(state, { log: "L-1", writes: [{ define: { facet: "shelf", type: "choice", values: [{ value: "A" }] } }, { define: { filter: "byShelf", facet: "shelf" } }] } as never);
   assert.deepEqual([...state.definitions.keys()].sort(), ["facet:shelf", "filter:byShelf"]);
 });
+
+test("transitions: a state facet takes a later value of equal trust as a move, not a conflict; without the setting it conflicts (4.2)", () => {
+  const r = { id: "O-1", kind: "order", level: "order", owner: "o", values: { orderState: "paid" }, sources: { orderState: { origin: "declared", via: "L-1" } } } as never;
+  const outcomes = [{ from: "orderState", to: "orderState", outcome: "conflict", value: "shipped" }] as never;
+  const moved = land(r, { outcomes, person: true }, { origin: "declared", via: "L-2" }, undefined, undefined, new Set(["orderState"])) as { values: { orderState: string }; alternatives?: object };
+  assert.equal(moved.values.orderState, "shipped");
+  assert.equal(moved.alternatives, undefined);
+  const disputed = land(r, { outcomes, person: true }, { origin: "declared", via: "L-2" }) as { values: { orderState: string }; alternatives?: { orderState?: unknown[] } };
+  assert.equal(disputed.values.orderState, "paid", "equal trust keeps the current value");
+  assert.equal(disputed.alternatives?.orderState?.length, 1, "and the later one is an alternative");
+});

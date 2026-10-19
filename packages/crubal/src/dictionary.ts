@@ -45,7 +45,7 @@ export function facetJson(f: Facet): JsonObject {
   if (f.words) o.words = [...f.words];
   if (f.values) o.values = f.values.map((v): JsonObject => (v.aliases.length ? { value: v.value, aliases: [...v.aliases] } : { value: v.value }));
   put("open", f.open || undefined);
-  for (const k of ["fixed", "ranked", "scored", "required", "na", "unique"] as const) put(k, f[k] || undefined);
+  for (const k of ["fixed", "ranked", "scored", "required", "na", "unique", "transitions"] as const) put(k, f[k] || undefined);
   put("to", f.to);
   if (f.children) o.facets = [...f.children.values()].map(facetJson);
   put("identity", f.identity);

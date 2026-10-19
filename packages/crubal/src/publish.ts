@@ -76,7 +76,7 @@ function facetChange(was: JsonObject, now: JsonObject): Change {
   if (was.state !== "retired" && now.state === "retired") bump("retired", "retired", "review or move");
   if (was.state === "candidate" && (now.state ?? "active") === "active") bump("safe", "promoted");
   if (!same(was.combine, now.combine)) bump("breaking", "combine changed", "recompute");
-  for (const k of ["unique", "na", "when", "to", "identity", "agree-by", "ordered", "ranked", "scored", "words", "qualifiers", "accepts", "zone", "facets"]) if (!same(was[k], now[k])) bump(k === "unique" || k === "when" ? "breaking" : "safe", `${k} changed`, k === "unique" || k === "when" ? "review" : undefined);
+  for (const k of ["unique", "na", "when", "to", "identity", "agree-by", "ordered", "ranked", "scored", "words", "qualifiers", "accepts", "zone", "facets", "transitions"]) if (!same(was[k], now[k])) bump(k === "unique" || k === "when" ? "breaking" : "safe", `${k} changed`, k === "unique" || k === "when" ? "review" : undefined);
   for (const k of new Set([...Object.keys(was), ...Object.keys(now)])) if (k.includes(":") && !same(was[k], now[k])) bump("safe", `${k} changed`);
   return { member: `facet:${now.facet}`, kind: st.kind, why, ...(recipe.length ? { recipe } : {}) };
 }

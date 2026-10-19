@@ -427,6 +427,8 @@ export function land(
   source: Source,
   trust: string[] = DEFAULT_TRUST,
   facetTrust: Map<string, string[]> = new Map(),
+  /** The facets declared `transitions: yes` (4.2): a later value of equal or higher trust replaces, never conflicts. */
+  transitions: Set<string> = new Set(),
 ): Record {
   const order = trust.length ? trust : DEFAULT_TRUST;
   const incoming: Who = { source, ...(intake.contract ? { contract: intake.contract } : {}), ...(intake.person ? { person: true } : {}) };
@@ -446,7 +448,15 @@ export function land(
     if (serialize(current) === serialize(o.value)) continue; // agreement: the current source stays
     const was = sourceAt(out, o.to) as Source;
     const fo = facetTrust.get(o.to) ?? [];
-    const incomingWins = rank(incoming, order, fo) < rank({ source: was }, order, fo);
+    const incomingRank = rank(incoming, order, fo);
+    const currentRank = rank({ source: was }, order, fo);
+    // A state facet moves: a later value of equal or higher trust is the transition, not a dispute (4.2).
+    if (transitions.has(o.to) && incomingRank <= currentRank) {
+      out.values[o.to] = o.value;
+      (out.sources as { [a: string]: Source })[o.to] = source;
+      continue;
+    }
+    const incomingWins = incomingRank < currentRank;
     const loser: JsonObject = incomingWins ? { value: current, origin: was.origin, via: was.via } : { value: o.value, origin: source.origin, via: source.via };
     if (incomingWins) {
       out.values[o.to] = o.value;

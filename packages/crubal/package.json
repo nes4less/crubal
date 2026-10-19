@@ -1,6 +1,6 @@
 {
   "name": "@cruba/crubal",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "The CRUBAL reference implementation: read, print, check and run CRUBAL, a language and engine for data about any kind of thing.",
   "license": "Apache-2.0",
   "type": "module",

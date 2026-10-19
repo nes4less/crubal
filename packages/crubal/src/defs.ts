@@ -60,6 +60,8 @@ export type Facet = {
   required?: boolean;
   na?: boolean;
   unique?: boolean;
+  /** A state facet (4.2): a later value of equal or higher trust replaces the current one instead of conflicting. */
+  transitions?: boolean;
   when?: string;
   combine?: string;
   /** Prefixed package settings, carried unchanged. */
@@ -470,6 +472,7 @@ function applySetting(f: Facet, name: string, value: string, line: number) {
     case "na":
     case "unique":
     case "open":
+    case "transitions":
       (f as unknown as { [k: string]: boolean })[name] = yes(v);
       return;
     case "fungible":
