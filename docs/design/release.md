@@ -21,7 +21,9 @@ because the handoffs it names are unproven.
    `@cruba/crubal-postgres` and `@cruba/crubal-host` publish at 0.1.0 as the reference store and host.
    (Done 2026-10-19 with the three at **0.2.0** together: the store and the host had reached 0.1.16 in
    lockstep with the engine by the gate, and a first publish below the version the adopter already vendors
-   would have read as a downgrade. They stay in lockstep from here.)
+   would have read as a downgrade. They stay in lockstep from here. Published 2026-10-19 by the steward,
+   each under a one-time code: `@cruba/crubal`, `@cruba/crubal-postgres`, `@cruba/crubal-host` at 0.2.0,
+   public.)
 4. crubal.com serves the **spec chapters** as pages, the dated version, the corpus tag and the claim.
 5. The **freeze rule** starts (11.8): a dated revision of 2 only adds; a change that breaks what readers
    hold is CRUBAL 3, with its form recipe. The corpus is tagged with each revision.
@@ -41,7 +43,8 @@ in the well-known file from 2026-10-19), set the private half in the deployment 
 by name then went through, party verified from crubal.com and the adopter's packages from its host, and
 steps 4, 5, 7 and 8 passed on them (the gate log has each answer). Step 6 against the adopter's own
 packages has no `http` send to run (its sends are adapter-bound: eBay, Stripe mail, the bench printer, the
-marketplace stream); the host suite shows it with a test contract. **The gate is passed.**
+marketplace stream); the host suite shows it with a test contract. **The gate is passed.** The revision merged (pull request 4), the corpus tagged `corpus/2026-10-19`, the three
+packages published at 0.2.0 the same evening; the freeze rule holds from here.
 
 The claim was re-run the same day against the corpus dated 2026-10-19, which gained cases for the
 revisions of the day: a state facet moving under `transitions` (exchange/032), a member's form on a record
