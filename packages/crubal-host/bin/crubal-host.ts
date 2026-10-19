@@ -4,7 +4,7 @@
 //   crubal-host migrate                      the store's tables and the host's
 //   crubal-host owner create <domain>        an owner, with the key the host signs its chain with
 //   crubal-host key issue <owner> <caller>   an API key for a caller (printed once)
-//   crubal-host serve [--port 8787]          the HTTP surface
+//   crubal-host serve [--port 8787]          the HTTP surface (CRUBAL_HOST_OF=domain=url,… maps publishers not yet at https://<domain>)
 
 import { connect } from "@cruba/crubal-postgres";
 import { Host } from "../src/host.ts";
@@ -19,8 +19,16 @@ const host = new Host(pool, {
   ...(process.env.CRUBAL_HOST_KEY ? { hostKey: process.env.CRUBAL_HOST_KEY } : {}),
   ...(process.env.CRUBAL_HOST_CORS ? { cors: process.env.CRUBAL_HOST_CORS.split(",").map((s) => s.trim()) } : {}),
   ...(process.env.CRUBAL_HOST_BODY_LIMIT ? { bodyLimit: Number(process.env.CRUBAL_HOST_BODY_LIMIT) } : {}),
+  // CRUBAL_HOST_OF maps a domain to where its host answers, for a gate run against a publisher that isn't
+  // at https://<domain> yet: "cashierfu.com=http://localhost:3100/h,other.example=http://…".
+  ...(process.env.CRUBAL_HOST_OF ? { hostOf: hostOfFrom(process.env.CRUBAL_HOST_OF) } : {}),
   fresh: "write",
 });
+
+function hostOfFrom(spec: string): (domain: string) => string {
+  const map = new Map(spec.split(",").map((pair) => pair.trim()).filter(Boolean).map((pair) => { const i = pair.indexOf("="); return [pair.slice(0, i).trim(), pair.slice(i + 1).trim()] as [string, string]; }));
+  return (domain: string) => map.get(domain) ?? `https://${domain}`;
+}
 
 try {
   if (cmd === "migrate") {
