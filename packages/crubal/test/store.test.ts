@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { readDefinitions } from "../src/defs.ts";
 import { checkRecipe, readRecipes, restamp } from "../src/migrate.ts";
 import { entryHash, fieldPath, land, readContracts, receive, verifyChain } from "../src/store.ts";
+import { versionGate } from "../src/exchange.ts";
 import { CrubalError } from "../src/tree.ts";
 import { applyEntry, emptyState } from "../src/log.ts";
 
@@ -115,4 +116,13 @@ test("transitions: a state facet takes a later value of equal trust as a move, n
   const disputed = land(r, { outcomes, contract: "ship" }, { origin: "declared", via: "L-2" });
   assert.equal(disputed.values.orderState, "paid", "equal trust keeps the current value");
   assert.equal(((disputed as { alternatives?: { orderState?: unknown[] } }).alternatives?.orderState ?? []).length, 1, "and the later one is an alternative");
+});
+
+test("the version gate at a border (10.1): the same version is taken, an older one restamped, a newer one held, a package we don't hold or no version on the wire taken as is", () => {
+  const mine = [{ package: "pub.example/dist", version: "2026-10-02" }];
+  assert.deepEqual(versionGate("pub.example/dist /2026-10-02", mine), { kind: "take" });
+  assert.deepEqual(versionGate("pub.example/dist /2026-10-01", mine), { kind: "restamp", package: "pub.example/dist", theirs: "2026-10-01", ours: "2026-10-02" });
+  assert.deepEqual(versionGate("pub.example/dist /2026-11-01", mine), { kind: "hold", package: "pub.example/dist", theirs: "2026-11-01", ours: "2026-10-02" });
+  assert.deepEqual(versionGate("other.example/x /2026-11-01", mine), { kind: "take" });
+  assert.deepEqual(versionGate(undefined, mine), { kind: "take" });
 });

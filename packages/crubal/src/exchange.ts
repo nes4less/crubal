@@ -906,7 +906,25 @@ function suggest(r: Record, outcomes: IntakeOutcome[], source: Source): Record {
 }
 
 /** An offer as one owner's host serves it to another (7.8): the border wrapper's content. */
-export type Offer = { contract: string; owner: string; to: string; mode: string; terms: { [term: string]: string }; gives: string[]; records: Record[]; log?: JsonObject[] };
+export type Offer = { contract: string; owner: string; to: string; mode: string; terms: { [term: string]: string }; gives: string[]; records: Record[]; log?: JsonObject[]; /** The package version the records were written under (3.8, 10.1): `<owner>/<name> /<version>`. */ package?: string };
+
+/**
+ * The version gate at a border (10.1): what a receiver does with data written under another version of a
+ * package it holds. Newer than ours: hold until we upgrade. Older: restamp through the recipes between.
+ * The same, or a package we don't hold, or no version on the wire: take as is.
+ */
+export function versionGate(theirs: string | undefined, installed: { package: string; version: string }[]): { kind: "take" } | { kind: "hold"; package: string; theirs: string; ours: string } | { kind: "restamp"; package: string; theirs: string; ours: string } {
+  if (!theirs) return { kind: "take" };
+  const at = theirs.lastIndexOf(" /");
+  if (at < 0) return { kind: "take" };
+  const pkg = theirs.slice(0, at).trim();
+  const version = theirs.slice(at + 2).trim();
+  const ours = installed.filter((i) => i.package === pkg).map((i) => i.version).sort().at(-1);
+  if (!ours) return { kind: "take" };
+  if (version > ours) return { kind: "hold", package: pkg, theirs: version, ours };
+  if (version < ours) return { kind: "restamp", package: pkg, theirs: version, ours };
+  return { kind: "take" };
+}
 
 // ─── Borders (8.5.1) ─────────────────────────────────────────────────────────
 

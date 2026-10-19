@@ -346,6 +346,22 @@ contract: distTake
   const rows = (await pool.query("select record, row from index_rows where owner = $1 and view = 'discs'", ["dist.example"])).rows as { record: string; row: JsonObject }[];
   assert.deepEqual(rows.map((r) => [r.record, r.row.heading]), [["D-1", "Gremlins"]], "the inbox put the presenter's rows in the index under its name");
   assert.deepEqual((await call("POST", "/push", undefined, { owner: "dist.example" }, { "x-host-key": "hk" })).body, [], "nothing new since the acknowledged cursor");
+  // The offer names the package version its records were written under (3.8, 10.1).
+  assert.equal(offer.body.package, "pub.example/dist /2026-10-01");
+  // The version gate: the shop holds dist's package at v1; dist moves to v2 and offers under it; the take is held.
+  const distV1 = publish(DIST, { date: "2026-10-01", key }).bundle;
+  assert.equal((await call("POST", "/o/shop.example/install", ownerKey, { bundle: distV1 })).status, 200);
+  const distV2 = publish(DIST.replace("dist /2026-10-01", "dist /2026-10-02").replace("cost#USD", "cost#USD\nnotes$"), { date: "2026-10-02", previous: distV1, key }).bundle;
+  assert.equal((await call("POST", "/o/dist.example/install", distKey, { bundle: distV2 })).status, 200);
+  const held = await call("POST", "/o/shop.example/take/distTake", ownerKey);
+  assert.equal(held.status, 200, JSON.stringify(held.body));
+  assert.equal((held.body.taken as JsonObject[])[0]?.stopped, "version", JSON.stringify(held.body));
+  const shopReview = await (await host.storeFor("shop.example")).review();
+  assert.ok(shopReview.some((it) => it.key === "version:pub.example/dist" && it.theirs === "2026-10-02" && it.ours === "2026-10-01"), JSON.stringify(shopReview));
+  // The shop upgrades to v2: the take goes through again.
+  assert.equal((await call("POST", "/o/shop.example/install", ownerKey, { bundle: distV2 })).status, 200);
+  const after = await call("POST", "/o/shop.example/take/distTake", ownerKey);
+  assert.equal((after.body.taken as JsonObject[])[0]?.stopped, undefined, JSON.stringify(after.body));
 });
 
 test("a hosted person owns their collection in their own chain, exports and erases it as its owner; the key rotates", { skip: !url }, async () => {

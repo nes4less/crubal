@@ -269,6 +269,21 @@ export class PgBorder {
     const ex = new Exchange(this.o.dict, this.o.contracts, this.o.roles ?? [], this.o.rules ?? []);
     ex.records = state.records;
     const o = ex.offer(name, this.owner, only);
+    // The wrapper names the package version the records were written under (3.8, 10.1): the installed
+    // bundle that declares the offer contract.
+    // The latest installed version of each package: the install log keeps every version it took.
+    const latest = new Map<string, string>();
+    for (const i of state.installed) {
+      const pkg = String(i.package);
+      const version = String(i.version);
+      if ((latest.get(pkg) ?? "") < version) latest.set(pkg, version);
+    }
+    for (const [pkg, version] of latest) {
+      const { rows: b } = await this.store.pool.query("select json from bundles where owner = $1 and package = $2 and version = $3", [this.owner, pkg, version]);
+      const json = (b[0] as Row | undefined)?.json as JsonObject | undefined;
+      const contracts = (json?.contracts as JsonObject[] | undefined) ?? [];
+      if (contracts.some((c) => c.contract === name)) { o.package = `${pkg} /${version}`; break; }
+    }
     const vias = [...new Set(o.records.flatMap((r) => Object.values(r.sources ?? {}).map((s) => s.via)))];
     const { rows } = await this.store.pool.query("select entry from log where owner = $1 and log_id = any($2) order by seq", [this.owner, vias]);
     o.log = rows.map((r: Row) => r.entry as JsonObject);

@@ -4,7 +4,7 @@
 
 import { createHash, createPrivateKey, generateKeyPairSync, randomBytes, sign as edSign } from "node:crypto";
 import { ChainedSecrets, EnvSecrets, FunctionSecrets, type SecretStore } from "./secrets.ts";
-import { type Offer, verifyBorder } from "@cruba/crubal";
+import { type Offer, readBundle, restamp, verifyBorder, versionGate } from "@cruba/crubal";
 import { Access, type Record as CrubalRecord } from "@cruba/crubal";
 import type { StreamEntry } from "@cruba/crubal";
 import { readFileSync } from "node:fs";
@@ -499,6 +499,20 @@ export class Host {
       const offer = (await res.json()) as Offer;
       const verified = verifyBorder({ records: offer.records, ...(offer.log ? { log: offer.log } : {}) }, await this.resolveKeys(from));
       if (verified.verified !== true) { taken.push({ offer: name, stopped: "unverified", ...verified }); continue; }
+      // The version gate (10.1): newer than ours is held until we upgrade; older is restamped through the recipes between.
+      const gate = versionGate(offer.package, (await store.state()).installed.map((i) => ({ package: String(i.package), version: String(i.version) })));
+      if (gate.kind === "hold") {
+        const key = `version:${gate.package}`;
+        const open = (await store.review()).some((it) => it.key === key && it.from === from && it.offer === name);
+        if (!open) await store.commit({ take: takeName, from }, (d) => { d.review.push({ key, from, offer: name, package: gate.package, theirs: gate.theirs, ours: gate.ours, reason: `written under ${gate.package} /${gate.theirs}; this store holds /${gate.ours}` }); }, at);
+        taken.push({ offer: name, stopped: "version", package: gate.package, theirs: gate.theirs, ours: gate.ours });
+        continue;
+      }
+      if (gate.kind === "restamp") {
+        const rows = (await this.pool.query("select version, json from bundles where owner = $1 and package = $2 and version > $3 and version <= $4 order by version", [owner, gate.package, gate.theirs, gate.ours])).rows as { version: string; json: JsonObject }[];
+        const defs = await store.definitions();
+        for (const row of rows) for (const r of readBundle(row.json).recipes) offer.records = restamp(offer.records, r, defs.dict).records;
+      }
       for (const presenter of offer.records) {
         const key = `take|${from}|${presenter.id}`;
         let recordId = (await store.state()).bindings.get(key);

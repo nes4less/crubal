@@ -106,7 +106,12 @@ function classChange(was: JsonObject, now: JsonObject): Change {
     if (l.length !== undefined && (w.length === undefined || Number(l.length) < Number(w.length))) bump("breaking", `${k} length narrowed`);
     if (!same(w.when, l.when)) bump("safe", `${k} when changed`);
   }
-  for (const k of wl.keys()) if (!nl.has(k)) bump("safe", `line removed: ${k} (values become unasked; a level line needs an instruction)`);
+  for (const k of wl.keys()) if (!nl.has(k)) {
+    // A plain line removed leaves values unasked (safe); a level line removed stops projecting the key to the
+    // records below, and that change MUST carry its instruction (10.7).
+    if (k.includes("::")) bump("breaking", `projection stopped: ${k}`);
+    else bump("safe", `line removed: ${k} (values become unasked)`);
+  }
   const wf = (was.for as string[] | undefined) ?? [];
   const nf = (now.for as string[] | undefined) ?? [];
   if (wf.length && nf.length && wf.some((k) => !nf.includes(k))) bump("breaking", "for narrowed");
@@ -197,6 +202,18 @@ export function publish(source: string | Parsed, o: PublishOptions): { bundle: J
   const anyReview = covering.some((r) => ((r.steps as JsonObject[]) ?? []).some((s) => s.review !== undefined));
   const breaking = changes.filter((c) => c.kind === "breaking" || c.kind === "retired");
   for (const c of breaking) {
+    // A class that stops projecting a key carries the instruction for it (10.7), under the version it reaches.
+    const stopped = c.why.filter((w) => w.startsWith("projection stopped: ")).map((w) => w.slice("projection stopped: ".length));
+    if (stopped.length) {
+      const name = c.member.slice("class:".length);
+      const issuers = [`class:${name}/${version}`, `class:${name}/${o.date}`];
+      const have = issuers.flatMap((i) => parsed.instructions.get(i) ?? []);
+      for (const line of stopped) {
+        const key = line.replace(/^\w+::/, "");
+        if (!have.some((i) => i.op === "-" && i.key === key)) throw new CrubalError(`${c.member} stops projecting ${line} and carries no instruction for it: needs \`instructions: class:${name}/${version}\` with \`-${key}\` (10.7)`);
+      }
+      if (c.why.every((w) => w.startsWith("projection stopped: "))) continue;
+    }
     const ok = c.member.startsWith("facet:") ? covered.has(c.member) : anyReview || covered.size > 0;
     if (!ok) throw new CrubalError(`${c.member} is a breaking change (${c.why.join("; ")}) and no recipe from ${from ?? "the previous version"} covers it: needs ${c.recipe?.join(", ") ?? "a step"}`);
   }

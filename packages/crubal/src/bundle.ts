@@ -4,6 +4,7 @@
 // printing it and reading the text. The hash is over the canonical form without `hash` and `sig`; the
 // signature is Ed25519 over the hash's bytes, as a log entry's is (8.5).
 
+import { type Instruction, readInstructionBlocks } from "./lifecycle.ts";
 import { createPrivateKey, createPublicKey, sign as edSign, verify as edVerify } from "node:crypto";
 import { type Edge, type MenuItem, type Permissions, readAccess } from "./access.ts";
 import { serialize } from "./canonical.ts";
@@ -19,7 +20,7 @@ import { type Filter, readViews, type Shape, type View, type ViewSet } from "./v
 const isObj = (v: Json | undefined): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** Everything the readers make of one package's text. */
-export type Parsed = { info: PackageInfo; dict: Dictionary; rules: Rule[]; contracts: Contract[]; views: ViewSet; perms: Permissions; edges: Edge[]; recipes: Recipe[] };
+export type Parsed = { info: PackageInfo; dict: Dictionary; rules: Rule[]; contracts: Contract[]; views: ViewSet; perms: Permissions; edges: Edge[]; recipes: Recipe[]; /** The instruction blocks a version carries (10.7): issuer → its instructions. */ instructions: Map<string, Instruction[]> };
 
 /** Read a package's text with every reader. */
 export function parsePackage(source: string): Parsed {
@@ -27,7 +28,7 @@ export function parsePackage(source: string): Parsed {
   if (!info) throw new Error("no package header");
   const dict = readDefinitions(source);
   const { perms, edges } = readAccess(source);
-  return { info, dict, rules: readRules(source), contracts: readContracts(source), views: readViews(source), perms, edges, recipes: readRecipes(source) };
+  return { info, dict, rules: readRules(source), contracts: readContracts(source), views: readViews(source), perms, edges, recipes: readRecipes(source), instructions: readInstructionBlocks(source) };
 }
 
 // ─── Writers: the JSON forms ─────────────────────────────────────────────────
@@ -289,6 +290,7 @@ export function bundleOf(p: Parsed): JsonObject {
   if (p.perms.ownership.size) o.ownership = Object.fromEntries([...p.perms.ownership].map(([k, v]) => [k, [...v]]));
   if (p.perms.emergency) o.emergency = { approvers: String(p.perms.emergency.approvers), longest: p.perms.emergency.longest };
   if (p.recipes.length) o.recipes = p.recipes.map(recipeJson);
+  if (p.instructions.size) o.instructions = [...p.instructions].map(([issuer, list]): JsonObject => ({ issuer, instructions: list.map((i): JsonObject => ({ n: i.n, op: i.op, key: i.key, ...(i.to ? { to: i.to } : {}), ...(i.map.length ? { map: i.map.map(([a, b]) => ({ from: a, to: b })) } : {}) })) }));
   if (info.utilities.length) o.utilities = info.utilities.map(utilityJson);
   return o;
 }
@@ -407,6 +409,15 @@ function ruleText(r: JsonObject): string[] {
   return [`rule: ${r.rule}`, ...kv("  ", "for", r.for), ...(typeof r.when === "string" ? [`  when: ${r.when}`] : []), `  then: ${r.then}`, ...kv("  ", "strength", r.strength), ...kv("  ", "because", r.because), ...kv("  ", "version", r.version)];
 }
 
+function instructionsText(b: JsonObject): string[] {
+  const out = [`instructions: ${String(b.issuer)}`];
+  for (const i of (b.instructions as JsonObject[]) ?? []) {
+    out.push(`  ${String(i.n)}: ${String(i.op)}${String(i.key)}${i.to ? ` -> ${String(i.to)}` : ""}`);
+    for (const m of (i.map as JsonObject[]) ?? []) out.push(`    ${q(String(m.from))} -> ${q(String(m.to))}`);
+  }
+  return out;
+}
+
 function recipeText(r: JsonObject): string[] {
   const m = r.migration as JsonObject;
   const out = [`migration: ${m.from} -> ${m.to}`];
@@ -479,6 +490,7 @@ export function printBundle(b: JsonObject): string {
   blocks("rules", ruleText);
   blocks("contracts", contractText);
   blocks("recipes", recipeText);
+  blocks("instructions", instructionsText);
   blocks("shapes", shapeText);
   blocks("filters", filterText);
   blocks("views", viewText);
@@ -512,7 +524,7 @@ export function readBundleInto(b: JsonObject, into: Dictionary = emptyDictionary
 /** An empty Parsed to read packages onto, in order. */
 export function emptyParsed(): Parsed {
   const { perms } = readAccess("");
-  return { info: { name: "", version: "", owner: "", line: 0, crubal: 2, crubalLine: 0, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {}, utilities: [] }, dict: emptyDictionary(), rules: [], contracts: [], views: { shapes: new Map(), filters: new Map(), views: new Map(), roles: new Map(), shown: new Map(), shownFor: new Map() }, perms, edges: [], recipes: [] };
+  return { info: { name: "", version: "", owner: "", line: 0, crubal: 2, crubalLine: 0, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {}, utilities: [] }, dict: emptyDictionary(), rules: [], contracts: [], views: { shapes: new Map(), filters: new Map(), views: new Map(), roles: new Map(), shown: new Map(), shownFor: new Map() }, perms, edges: [], recipes: [], instructions: new Map() };
 }
 
 /**
@@ -550,6 +562,7 @@ export function readBundleOnto(bundle: JsonObject, base: Parsed): Parsed {
   if (perms.emergency) base.perms.emergency = perms.emergency;
   base.edges.push(...edges);
   base.recipes.push(...readRecipes(text));
+  for (const [issuer, list] of readInstructionBlocks(text)) base.instructions.set(issuer, [...(base.instructions.get(issuer) ?? []), ...list]);
   return base;
 }
 

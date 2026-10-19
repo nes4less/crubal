@@ -134,3 +134,17 @@ migration: shop /2026-10-01 -> shop /2026-11-01
   const bad = withFill.replace("fill: 1", "fill: many");
   assert.throws(() => publish(bad, { previous: v1, date: "2026-11-01" }), /not a value qty takes/);
 });
+
+test("a class that stops projecting a key (a level line removed) is refused without its instruction block, and lands with it; the bundle carries the block (10.5 (7), 10.7)", () => {
+  const v1src = base.replace("class: Item\n  for: item\n  facets:\n    !title\n    format\n", "sealed?\nclass: Item\n  for: item\n  facets:\n    !title\n    format\n    unit::sealed\n");
+  const { bundle: v1 } = publish(v1src, { date: "2026-10-01" });
+  const dropped = base.replace("class: Item\n  for: item\n  facets:\n    !title\n    format\n", "sealed?\nclass: Item\n  for: item\n  facets:\n    !title\n    format\n");
+  assert.throws(() => publish(dropped, { previous: v1, date: "2026-11-01" }), /class:Item stops projecting unit::sealed and carries no instruction/);
+  const withBlock = `${dropped}
+instructions: class:Item/2026-11-01
+  1: -sealed
+`;
+  const { bundle: v2, changes } = publish(withBlock, { previous: v1, date: "2026-11-01" });
+  assert.equal(changes.find((c) => c.member === "class:Item")?.kind, "breaking");
+  assert.deepEqual(v2.instructions, [{ issuer: "class:Item/2026-11-01", instructions: [{ n: 1, op: "-", key: "sealed" }] }]);
+});

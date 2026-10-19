@@ -227,6 +227,12 @@ export class PgStore {
           for (const item of review) draft.review.push({ ...item, step: item.step, migration: `${recipe.from} -> ${recipe.to}` });
         }
       }
+      // The version's instruction blocks (10.7) are issued here; drain applies them record by record.
+      for (const block of (bundle.instructions as JsonObject[] | undefined) ?? []) {
+        const issuer = String(block.issuer);
+        const list = (block.instructions as JsonObject[] | undefined) ?? [];
+        if (list.length) draft.instructions.set(issuer, [...(draft.instructions.get(issuer) ?? []), ...list.map((i) => ({ ...i, issuer }))]);
+      }
       const by: JsonObject = previous ? { migration: `${bundle.package} /${previous} -> ${bundle.package} /${bundle.version}` } : { person: "owner" };
       return { by, extra, out: null };
       }, at);
