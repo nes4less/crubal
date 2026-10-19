@@ -182,7 +182,7 @@ Publishing MUST run, and the bundle MUST pass, every well-formedness check:
 | 5.10 | classes |
 | 6.8 | rule sets: layering, contradictions, one spelling |
 | 7.10 | contracts, including that no secret appears |
-| 10.5 | recipes |
+| 10.5 | recipes, and the instruction a stopped projection carries (10.7) |
 | 11.1–11.4 | prefixes; kinds (a vary step names a level of its kind and facets of the package); trust order entries name real contracts and origins; `extends` doesn't widen |
 | 12.8 | views, shapes, filters and roles |
 | 14.6 | permission menus, presets, relations and ownership |

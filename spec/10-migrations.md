@@ -104,6 +104,9 @@ A package MUST be refused at publish when a recipe breaks these:
 5. Every breaking change between the two versions (chapter 4.8) is covered by a step.
 6. A recipe whose steps are all `fill` or `recompute` is a backfill and MAY accompany a version where nothing
    broke; any other recipe with nothing broken is refused.
+7. A class version that stops projecting a key (a `level::` line removed, chapter 5.3.3) carries the
+   instruction for it (10.7): an `instructions: class:<Name>/<version>` block with `-key`, published in the
+   bundle and issued when the version installs. A publish without it is refused.
 
 ## 10.6 The JSON form
 
@@ -175,4 +178,6 @@ An issuer is written as it appears in `applied` (chapter 2.3): the record's ID, 
 - Applying an instruction is a write, logged with `by: {"instruction": "<issuer> #<n>"}`. A value that a
   value map can't place goes to the review queue and is held, as in a recipe (10.4).
 - A change that stops projecting a key lower records hold values for MUST carry the instruction for it: a
-  class version in its package (chapter 5.11), a record in its own `wears` write.
+  class version in its package (chapter 5.11, checked at publish, 10.5), a record in its own `wears` write.
+  A bundle carries its instruction blocks (11.6); the store issues them when the version installs and
+  applies them record by record.

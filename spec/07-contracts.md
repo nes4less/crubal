@@ -201,6 +201,11 @@ A form is a contract with a person. Its screen assembles itself:
 
 Sharing between owners is two contracts, one on each side. Only the overlap flows.
 
+An offer travels as a border wrapper (chapter 3.8): with the records, their sources and the signed entries
+they came from, it names the **package version** they were written under. The receiver applies the
+version rule (chapter 10.1): the same version is taken; an older one is restamped through the recipes
+between; a newer one is held, as a review item, until the receiver upgrades.
+
 ```crubal
 contract: catalogOffer
   kind: offer
