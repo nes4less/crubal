@@ -1,0 +1,7 @@
+{
+  "contract": "ship", "record": "O-1",
+  "outcomes": [
+    { "from": "orderState", "to": "orderState", "outcome": "absorbed", "value": "shipped" },
+    { "from": "note", "to": "note", "outcome": "conflict", "value": "second" }
+  ]
+}

@@ -1,0 +1,23 @@
+// A state facet declared `transitions: yes` (4.2) takes a later value of equal trust as a move (9.3): the
+// outcome is absorbed and the value replaces. A facet without the setting disputes the same write.
+kind: order
+  levels: order
+facet: orderState
+  type: choice
+  values: placed, shipped
+  transitions: yes
+note$
+
+contract: ship
+  kind: form
+  needs:
+    orderState
+    note
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+order: O-1 [origin: declared, via: L-1]
+  orderState: placed
+  note: first

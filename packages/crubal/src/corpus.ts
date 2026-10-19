@@ -746,8 +746,9 @@ function runExchangeCase(folder: string, caseDir: string, name: string, shared: 
       const c = contracts.find((x) => x.name === current.run);
       if (current.offer) {
         results.push(ex.take(current.run, current.offer, current.on, json(current.presenter ?? "presenter.json") as unknown as Rec) as Json);
-      } else if (c?.kind === "receive" || current.forRun) {
-        // A late answer names its run (7.5): the receive closes it and lands with its via.
+      } else if (c?.kind === "receive" || c?.kind === "form" || current.forRun) {
+        // A receive lands its payload; a form is a receive whose source is a person (7.2), its answers the
+        // payload. A late answer names its run (7.5): the receive closes it and lands with its via.
         results.push(ex.receiveRun(current.run, current.on, readFileSync(file(current.answer ?? "answer.json"), "utf8"), current.caller, current.forRun) as Json);
       } else {
         results.push(ex.run(current.run, current.on, current.caller) as Json);

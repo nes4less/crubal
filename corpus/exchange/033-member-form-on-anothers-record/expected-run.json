@@ -1,0 +1,12 @@
+[
+  {
+    "contract": "placeOrder", "caller": "C-BUY",
+    "arrival": { "outcome": "new", "record": "O-NEW1", "ref": "K-77" },
+    "granted": { "edge": "E-placeOrder-O-NEW1", "relation": "buyer", "mode": "consume", "on": "O-NEW1" }
+  },
+  {
+    "contract": "cancelOrder", "record": "O-NEW1", "caller": "C-BUY",
+    "outcomes": [{ "from": "orderState", "outcome": "absorbed", "value": "cancelled" }]
+  },
+  { "contract": "cancelOrder", "record": "O-NEW1", "caller": "C-OTHER", "stopped": "permission" }
+]

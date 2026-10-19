@@ -1,0 +1,14 @@
+arrive: placeOrder
+level: order
+caller: C-BUY
+answer: order.json
+
+run: cancelOrder
+on: O-NEW1
+caller: C-BUY
+answer: cancel.json
+
+run: cancelOrder
+on: O-NEW1
+caller: C-OTHER
+answer: cancel.json

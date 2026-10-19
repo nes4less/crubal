@@ -20,3 +20,10 @@ class: DvdOnly
   uses: OpticalDisc
   facets:
     format{DVD}
+
+// A class nothing wears (5.3.3): a definition on its own; wearing is data.
+class: Unworn
+  for: item
+  facets:
+    title
+    runtime

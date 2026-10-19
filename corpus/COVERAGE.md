@@ -47,6 +47,7 @@ a new MUST or a new case updates this file.
 | 4.1 | a published version never changes | unit: publish.test (a version is a new bundle; the registry keeps each) |
 | 4.2 | the identity child is a link | dictionary-errors/d03-identity-not-link |
 | 4.2 | a prefixed setting is carried unchanged and changes nothing | dictionary/001-shorthand-equals-long (`me:` settings carried), reader/010-unknown-block |
+| 4.2 | `transitions: yes`: a later value of equal or higher trust replaces the current one as a move, not a conflict | exchange/032-transitions (a form of the same origin moves the state and disputes the plain facet); unit: store.test (land) |
 | 4.2.1 | `...` and `fixed: yes` never both | dictionary-errors/d04-open-and-fixed |
 | 4.3 | aliases never fold onto another key or value | dictionary-errors/d01-alias-collision, dictionary/002-alias-fold |
 | 4.4 | a shortcut and its full rule never both | rules-errors/r03-two-spellings |
@@ -54,6 +55,7 @@ a new MUST or a new case updates this file.
 | 4.7 | refused at publish | dictionary-errors/* |
 | 4.8 | a breaking version ships a recipe | unit: publish.test (recipes required by the diff) |
 | 5.3 | a type mark is the facet's own; settings narrow | dictionary-errors/d05-class-widens, dictionary/005-wear-narrowing |
+| 5.3.3 | a class is a definition and needs no wearer; wearing is data | dictionary/010-class-without-wearer |
 | 5.3.1 | a line never sets meaning | dictionary-errors/d13-line-sets-meaning, d05-class-widens |
 | 5.3.2 | asked-when never reads its own facet | dictionary/006-asked-when, rules-errors/r01-cycle (layering) |
 | 5.4 | `uses` never cycles; a meet is never empty | dictionary-errors/d06-uses-cycle, d07-empty-meet |
@@ -68,6 +70,7 @@ a new MUST or a new case updates this file.
 | 7.6 | no secret in CRUBAL text or JSON | exchange/005-who (credentials by name); by construction: contracts name credentials, the host holds them |
 | 7.6 | `who: caller may edit X` is held by the caller's edges and the menu (14.6), beside roles on the caller's record; a hosted caller with no record is what its edges make it | unit: who-may.test |
 | 7.2 | `audience`: the lowest audience that may run a contract, member for a form and public otherwise; refused at publish when it isn't one | unit: contract-audience.test |
+| 7.2 | a form a consumer runs on a record they do not own needs no ownership: `audience: member` admits a caller whose edge covers the record; a member with no edge on it is stopped | exchange/033-member-form-on-anothers-record |
 | 7.4 | an arrival by a caller is permitted like a run: anywhere by an admin or control edge, or as an admitted member; a stranger starts only a contract that grants the consumer's edge | unit: shown-for-arrivals.test |
 | 7.10 | refused at publish | exchange-errors/* |
 | 8.5 | a record's writes all go to one chain | store/001-chain-valid; host test: a hosted person's chain holds only their records' writes |
@@ -95,6 +98,7 @@ a new MUST or a new case updates this file.
 | 13.6 | the same results whatever the store's choices | pg test: every corpus log rebuilds to the same state in Postgres as in memory |
 | 14.2 | `within` never cycles, never crosses owners; ancestors kept | exchange-errors/e11-within-cycle, e13-within-another-owner, views/009-partition (ancestors) |
 | 14.6 | an item naming nothing refused | exchange-errors/x02-undefined-facet |
+| 14.6 | a preset may name items of the packages its package extends; a menu item of one name in several packages is one item with every package's verbs; checked when the packages are in force together | unit: bundle.test (a menu item two packages name is one item; a preset of the same name is the later one); the install check is `definitionsOf` + `checkAll` in crubal-postgres, exercised by every install in install.test |
 | 14.4 | each mode includes the ones below it; a `see` below admin is the audience's by the show rules (capped at member) or an item's | unit: audit-forms-access.test; host.test 14.8 |
 | 12.4 | a show rule's `for` scopes it: a class or kind rule decides for the records it covers, in access and in projections | unit: shown-for-arrivals.test; views/007-shown-for |
 | 10.4 | an install two versions ahead restamps through every recipe between, in order; the dry run reports them all | crubal-postgres: install.test |
