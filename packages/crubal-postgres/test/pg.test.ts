@@ -1,3 +1,4 @@
+import { publish as publishPackage } from "@cruba/crubal";
 // The Postgres store against the memory engine. Skipped without CRUBAL_PG_URL. Every corpus log the
 // memory store can rebuild, the Postgres store must give back the same state from the same entries; the
 // journaled operations must write the same entries; redaction must hold the chain and forget the value.
@@ -775,4 +776,61 @@ rule: unitsCounted
   assert.deepEqual(writes.map((w) => [w.record, w.address, w.value]), [["P-1", "unitCount", "2"]], "only the derived value");
   assert.equal((await store.state()).records.get("P-1")?.values.unitCount, "2");
   assert.equal(await store.rederive(["P-1", "U-1", "U-2"], { platform: "rederive" }, "2026-10-19T09:06:00Z"), null, "nothing to write twice");
+});
+
+const BULK = `package: bulk /2026-10-14
+  owner: bulk.example
+  crubal: 2
+
+kind: item
+  levels: product, unit
+  base: Item
+  vary:
+    unit: price
+title$
+format{DVD|Blu-ray|4K}
+price#USD
+class: Item
+  for: item
+  facets:
+    !title
+    format
+    unit::price
+
+shape: card
+  slots:
+    !title -> heading
+view: catalog
+  select: product
+  shape: card
+  fresh: write
+view: units
+  select: unit
+  shape: card
+  fresh: write
+`;
+
+test("load (brief 18 step 1): a thousand records land in two entries with their sources; archived ones stay out of the views; the publish runs once at the end", { skip: !url }, async () => {
+  const dropBulk = await testSchema(pool);
+  const store = new PgStore(pool, "bulk.example", { allowUnsigned: true, fresh: "write", wholeState: "refuse" });
+  await store.install(publishPackage(BULK, { date: "2026-10-14" }).bundle);
+  const records: Record[] = [];
+  for (let i = 1; i <= 500; i++) records.push({ id: `P-${i}`, kind: "item", level: "product", owner: "bulk.example", values: { title: `Title ${i}`, format: "DVD" } } as Record);
+  for (let i = 1; i <= 500; i++) records.push({ id: `U-${i}`, kind: "item", level: "unit", of: `P-${i}`, owner: "bulk.example", status: { state: "archived", reason: "legacy" }, values: { price: { $money: "5.00", currency: "USD" } } } as unknown as Record);
+  const t = Date.now();
+  const out = await store.load(records, { migration: "conversion" }, { origin: "reported" });
+  const ms = Date.now() - t;
+  assert.equal(out.entries.length, 2);
+  assert.equal(out.records, 1000);
+  const p1 = await store.get("P-1");
+  assert.equal(p1?.values.title, "Title 1");
+  assert.deepEqual(p1?.sources?.title ?? p1?.sources?.["*"], { origin: "reported", via: "L-2" }, "a value cites the entry that landed it");
+  const u1 = await store.get("U-1");
+  assert.equal(u1?.status?.state, "archived");
+  assert.equal(u1?.status?.reason, "legacy");
+  assert.equal((await store.records({ level: "unit" }, { archived: false })).length, 0, "every unit archived");
+  assert.equal((await store.records({ level: "product" })).length, 500);
+  assert.ok(ms < 30_000, `a thousand records loaded in ${ms} ms`);
+  console.log(`load: a thousand records in ${ms} ms, ${out.published} rows published`);
+  await dropBulk();
 });

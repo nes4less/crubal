@@ -50,6 +50,8 @@ create index if not exists records_of on records (owner, "of");
 create index if not exists records_within on records (owner, within);
 create index if not exists records_ancestors on records using gin (ancestors);
 create index if not exists records_values on records using gin ((doc -> 'values'));
+create index if not exists records_kind on records (owner, kind);
+create index if not exists records_wears on records using gin (wears);
 
 create table if not exists definitions (
   owner text not null,
@@ -108,6 +110,7 @@ create table if not exists review (
   json jsonb not null,
   primary key (owner, ord)
 );
+create index if not exists review_key on review (owner, (json ->> 'key'));
 
 create table if not exists runs (
   owner text not null,
@@ -123,6 +126,8 @@ create table if not exists observations (
   json jsonb not null,
   primary key (owner, ord)
 );
+create index if not exists observations_on on observations (owner, (json ->> 'on'));
+create index if not exists observations_supports on observations (owner, (json ->> 'supports'));
 
 create table if not exists reads (
   owner text not null,

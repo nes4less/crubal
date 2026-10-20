@@ -135,8 +135,47 @@ export class PgStore {
   }
 
   private async freshen(): Promise<void> {
+    if (this.quiet) return;
     // Views with `fresh: write` publish now (12.6); a view with a delay waits for the loop.
     if (this.options.fresh === "write" && (await this.projecting())?.views.views.size) await this.project(undefined, undefined, (v) => v.fresh === "write");
+  }
+
+  /** Set while a bulk load runs: the per-commit publish waits for the one publish at the end. */
+  private quiet = false;
+
+  /**
+   * Load many records as the owner's own, in batches: one entry per batch, each record set whole with its
+   * `sources` (or the `origin` given), the checks, rules and stale marks of a commit applying to every one;
+   * the views publish once at the end. For a conversion or a migration (brief 18 step 1): a million rows
+   * in an afternoon, not a day per hundred thousand through arrivals.
+   */
+  async load(records: Record[], by: JsonObject, opts: { batch?: number; at?: string; origin?: string; publish?: boolean } = {}): Promise<{ entries: string[]; records: number; published: number }> {
+    const size = Math.max(1, Math.floor(opts.batch ?? 500));
+    const entries: string[] = [];
+    this.quiet = true;
+    try {
+      for (let i = 0; i < records.length; i += size) {
+        const slice = records.slice(i, i + size);
+        // Each record's values cite the entry that lands them (8.5), unless the record brings its own sources.
+        const { rows } = await this.pool.query("select head_seq from chains where owner = $1 and chain = $2", [this.owner, this.chain]);
+        const via = `L-${(rows.length ? Number((rows[0] as { head_seq: string | number }).head_seq) : 0) + 1}`;
+        const e = await this.commit(
+          by,
+          (d) => {
+            for (const r of slice) {
+              const sources = r.sources ?? { "*": { origin: opts.origin ?? "reported", via } };
+              d.records.set(r.id, { ...r, owner: r.owner ?? this.owner, sources } as Record);
+            }
+          },
+          opts.at,
+        );
+        if (e) entries.push(String(e.log));
+      }
+    } finally {
+      this.quiet = false;
+    }
+    const published = opts.publish === false ? 0 : (await this.project()).length;
+    return { entries, records: records.length, published };
   }
 
   // ─── Definitions from the store (docs/design/publishing.md) ────────────────
