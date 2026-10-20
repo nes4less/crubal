@@ -213,7 +213,8 @@ A view is **stored and indexed**, never derived on every read. The store compute
 The store keeps the view's **projection**: one row per selected record, for the view's audience, holding the
 shape's slots and, for each filter, the buckets the record falls into. Everything that needs the rules or an
 audience decision happens here: selection, values read through from upper levels, from shared parts through
-their links (`works[*].genres` in a slot, a filter or a condition, 1.10) and rolled up from lower ones,
+their links (`works[*].genres` in a slot, a filter or a condition, 1.10), from a compound's rows by child
+(`ratings[*].value`, the wildcard of chapter 6 over the record's own rows) and rolled up from lower ones,
 held, new and unknown values left out, and `show` rules applied. A `show` rule on the facet a link step
 finally reads decides its visibility, wherever it is read from.
 
