@@ -289,6 +289,7 @@ selector  = rowkey / quoted-item
 | `tracks[t3].language` | `language` in the row of `tracks` with the minted key `t3` |
 | `parts[disc1].condition` | `condition` on owned part `disc1` |
 | `genres["Holiday"]` | the item `Holiday` of the list `genres` |
+| `works[*].genres` | `genres` on every record the link facet `works` points at: a shared part, read through (1.6); `work.title` reads a single link's target |
 | `unit::condition` | `condition` at the `unit` level, written from above (rules and classes only) |
 
 A list item of a plain list is addressed by its value: the item's text form (chapter 2), with its
