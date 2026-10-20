@@ -169,7 +169,11 @@ export function visibleTo(set: Pick<ViewSet, "shown" | "shownFor">, facet: strin
 export function leafOf(address: string, dict?: Pick<Dictionary, "facets">): string {
   const base = address.replace(/^\w+::/, "").replace(/^parts\[\*\]\./, "");
   const m = base.match(/^(\w+)(?:\[\*\])?\.(.+)$/);
-  if (m && (!dict || dict.facets.get(m[1] as string)?.type === "link")) return leafOf(m[2] as string, dict);
+  if (!m) return base;
+  const first = dict?.facets.get(m[1] as string);
+  if (!dict || first?.type === "link") return leafOf(m[2] as string, dict);
+  // A compound's row child: the child's own definition when the dictionary holds it, else the compound's key.
+  if (first?.type === "compound") return dict.facets.has(leafOf(m[2] as string, dict)) ? leafOf(m[2] as string, dict) : (m[1] as string);
   return base;
 }
 
@@ -332,11 +336,27 @@ export class Views {
     return this.dict.facets.get(m[1] as string)?.type === "link" ? { link: m[1] as string, rest: m[2] as string } : null;
   }
 
+  /** An address whose first step is one of the record's compounds (`ratings[*].value`): the compound and the child. */
+  private rowStep(address: string): { compound: string; child: string } | null {
+    const m = address.match(/^(\w+)\[\*\]\.(\w+)$/);
+    if (!m) return null;
+    return this.dict.facets.get(m[1] as string)?.type === "compound" ? { compound: m[1] as string, child: m[2] as string } : null;
+  }
+
+  /** The rows of a compound on a record, as objects. */
+  private rowsOf(r: Record, compound: string): JsonObject[] {
+    const v = this.effective(r)[compound];
+    return (v === undefined ? [] : Array.isArray(v) ? v : [v]).filter(isObj);
+  }
+
   /** The values an address reads, as a list: own values, or a lower level's (`unit::price`). */
   private valuesAt(r: Record, address: string): Json[] {
     // A step through a link facet reads the linked records (shared parts, 1.6), each by the rest of the address.
     const ls = this.linkStep(address);
     if (ls) return this.linked(r, ls.link).flatMap((t) => this.valuesAt(t, ls.rest));
+    // A step into a compound's rows reads the child on every row (1.10 with the wildcard).
+    const rs = this.rowStep(address);
+    if (rs) return this.rowsOf(r, rs.compound).flatMap((row) => { const c = row[rs.child]; return c === undefined ? [] : Array.isArray(c) ? c : [c]; });
     const m = address.match(/^(\w+)::(.+)$/);
     // A level prefix reads the records below at that level, or the record itself when it sits there
     // (a standing-alone lower record answers for its own level, 1.7).
@@ -385,7 +405,7 @@ export class Views {
       return items;
     }
     const f = this.dict.facets.get(leafOf(s.from, this.dict));
-    const through = s.from.includes("::") || this.linkStep(s.from) !== null;
+    const through = s.from.includes("::") || this.linkStep(s.from) !== null || this.rowStep(s.from) !== null;
     const v = through ? this.valuesAt(r, s.from) : this.effective(r)[s.from];
     if (v === undefined || (Array.isArray(v) && !v.length)) return undefined;
     if (Array.isArray(v)) {
@@ -403,14 +423,28 @@ export class Views {
     const status = r.status?.state ?? "active";
     const own = this.effective(r);
     const out: JsonObject = { id: r.id, status, "crubal:id": r.id, "crubal:status": status, ...own };
+    // A compound's rows, addressed `X[*].child`, as lists of the child's values.
+    const rowKeys = (vals: JsonObject, prefix: string) => {
+      const added: { [k: string]: Json[] } = {};
+      for (const [key, v] of Object.entries(vals)) {
+        if (this.dict.facets.get(key)?.type !== "compound") continue;
+        for (const row of (Array.isArray(v) ? v : [v]).filter(isObj)) for (const [child, cv] of Object.entries(row)) (added[`${prefix}${key}[*].${child}`] ??= []).push(...(Array.isArray(cv) ? cv : [cv]));
+      }
+      return added;
+    };
+    Object.assign(out, rowKeys(own, ""));
     // The linked records' values, addressed through the link (`works[*].genre`, `works.genre`), so a
-    // condition reads a shared part as it reads a level below (1.6).
+    // condition reads a shared part as it reads a level below (1.6); their compounds' rows likewise.
     for (const key of Object.keys(own)) {
       if (this.dict.facets.get(key)?.type !== "link") continue;
       const targets = this.linked(r, key);
       if (!targets.length) continue;
       const merged: { [k: string]: Json[] } = {};
-      for (const t of targets) for (const [k, v] of Object.entries(this.effective(t))) (merged[k] ??= []).push(...(Array.isArray(v) ? v : [v]));
+      for (const t of targets) {
+        const tv = this.effective(t);
+        for (const [k, v] of Object.entries(tv)) (merged[k] ??= []).push(...(Array.isArray(v) ? v : [v]));
+        for (const [k, v] of Object.entries(rowKeys(tv, ""))) (merged[k] ??= []).push(...v);
+      }
       for (const [k, list] of Object.entries(merged)) {
         out[`${key}[*].${k}`] = list;
         out[`${key}.${k}`] = list.length === 1 ? (list[0] as Json) : list;

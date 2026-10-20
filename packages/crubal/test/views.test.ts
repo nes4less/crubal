@@ -105,3 +105,48 @@ test("a view reads a shared part through its link: slots, filters, conditions, a
   assert.deepEqual(stale.sort(), ["P-1", "P-2"], "a write to the work stales every release that links it");
   assert.deepEqual(v.staleAfter("releases", { id: "W-2", kind: "work", level: "work", owner: "t", values: {} }), [], "a write to no key the view reads stales nothing");
 });
+
+// ─── A compound's rows in a view (1.10, [*]): a filter on a child, through a link too ───────────────────
+const rowsSrc = `
+kind: item
+  levels: product
+kind: work
+  levels: work
+title$
+facet: ratings
+  type: compound
+  pick: any
+  facets:
+    board{MPAA|ESRB}
+    value$
+works&work*
+filter: rating
+  facet: works[*].ratings[*].value
+  buckets:
+    R: R
+    PG: PG
+shape: card
+  slots:
+    title -> heading
+    works[*].ratings[*].value -> ratings
+view: releases
+  select:
+    level: product
+    when: works[*].ratings[*].value has R
+  shape: card
+  filters: rating
+`;
+test("a filter, a slot and a condition read a compound's rows by child, through a link", () => {
+  const d = readDefinitions(rowsSrc);
+  const vs = readViews(rowsSrc);
+  checkViews(vs, d);
+  const v = new Views(d, vs);
+  v.put({ id: "W-1", kind: "work", level: "work", owner: "t", values: { ratings: [{ board: "MPAA", value: "R" }] } });
+  v.put({ id: "W-2", kind: "work", level: "work", owner: "t", values: { ratings: [{ board: "MPAA", value: "PG" }] } });
+  v.put({ id: "P-1", kind: "item", level: "product", owner: "t", values: { title: "R film", works: [{ $link: "W-1" }] } });
+  v.put({ id: "P-2", kind: "item", level: "product", owner: "t", values: { title: "PG film", works: [{ $link: "W-2" }] } });
+  const p = v.project("releases");
+  assert.deepEqual(p.records, ["P-1"], "the condition reads the rows through the link");
+  assert.deepEqual(p.rows[0]?.ratings, ["R"]);
+  assert.deepEqual(p.counts.rating, { R: 1, PG: 0 });
+});
