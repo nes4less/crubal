@@ -46,8 +46,15 @@ export class Index {
     // A cursor past the stream's head means the stream was started over behind the index (a store
     // rebuilt before 0.1.16 wiped its streams): the index takes the stream from its start again.
     if (seq > 0 && seq > (await store.streamHead(view, v.show))) seq = 0;
-    const entries = await store.entriesSince(view, seq, v.show);
-    return this.ingest(owner, view, version, v.show, entries, seq);
+    // The stream a page at a time: a first publish of a large view is more entries than memory should hold at once.
+    const page = 5000;
+    for (;;) {
+      const entries = await store.entriesSince(view, seq, v.show, page);
+      if (!entries.length) break;
+      seq = await this.ingest(owner, view, version, v.show, entries, seq);
+      if (entries.length < page) break;
+    }
+    return seq;
   }
 
   /** Apply stream entries to the rows, idempotently by seq (12.6.2): from a store's stream or pushed by a presenter. */

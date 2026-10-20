@@ -139,10 +139,10 @@ export async function publish(client: Client, owner: string, p: Projecting, name
 }
 
 /** The stream entries of a view for an audience after `seq`, for an index resuming from its cursor. */
-export async function entriesSince(client: Client, owner: string, p: Projecting, name: string, seq: number, audience?: string): Promise<StreamEntry[]> {
+export async function entriesSince(client: Client, owner: string, p: Projecting, name: string, seq: number, audience?: string, limit?: number): Promise<StreamEntry[]> {
   const v = p.views.views.get(name);
   if (!v) throw new Error(`no view ${name}`);
-  const rows = (await client.query("select json from projection_stream where owner = $1 and view = $2 and audience = $3 and version = $4 and seq > $5 order by seq", [owner, name, audience ?? v.show, v.version ?? "", seq])).rows as Row[];
+  const rows = (await client.query(`select json from projection_stream where owner = $1 and view = $2 and audience = $3 and version = $4 and seq > $5 order by seq${limit ? ` limit ${Math.max(1, Math.floor(limit))}` : ""}`, [owner, name, audience ?? v.show, v.version ?? "", seq])).rows as Row[];
   return rows.map((r) => r.json as StreamEntry);
 }
 

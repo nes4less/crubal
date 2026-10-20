@@ -90,7 +90,8 @@ export class PgStore {
     if (!p) throw new Error("the store has no views to project");
     const names = view ? [view] : [...p.views.views.values()].filter((v) => !only || only(v)).map((v) => v.name);
     const out: StreamEntry[] = [];
-    for (const name of names) out.push(...(await transaction(this.pool, (client) => publish(client, this.owner, p, name, audience))));
+    // Appended one by one: a first publish of a large view is hundreds of thousands of entries, more than a spread takes.
+    for (const name of names) for (const e of await transaction(this.pool, (client) => publish(client, this.owner, p, name, audience))) out.push(e);
     return out;
   }
 
@@ -117,12 +118,12 @@ export class PgStore {
   }
 
   /** The entries of a view's stream after `seq` (12.6.2). */
-  async entriesSince(view: string, seq: number, audience?: string): Promise<StreamEntry[]> {
+  async entriesSince(view: string, seq: number, audience?: string, limit?: number): Promise<StreamEntry[]> {
     const p = await this.projecting();
     if (!p) throw new Error("the store has no views");
     const client = await this.pool.connect();
     try {
-      return await entriesSince(client, this.owner, p, view, seq, audience);
+      return await entriesSince(client, this.owner, p, view, seq, audience, limit);
     } finally {
       client.release();
     }

@@ -158,10 +158,10 @@ export function copyWorking(base: State): State {
   for (const [k, v] of base.edges) s.edges.set(k, structuredClone(v));
   for (const [k, v] of base.instructions) s.instructions.set(k, structuredClone(v));
   for (const [k, v] of base.definitions) s.definitions.set(k, structuredClone(v));
-  s.observations.push(...structuredClone(base.observations));
-  s.reviews.push(...structuredClone(base.reviews));
-  s.installed.push(...structuredClone(base.installed));
-  s.reads.push(...structuredClone(base.reads));
+  for (const x of base.observations) s.observations.push(structuredClone(x));
+  for (const x of base.reviews) s.reviews.push(structuredClone(x));
+  for (const x of base.installed) s.installed.push(structuredClone(x));
+  for (const x of base.reads) s.reads.push(structuredClone(x));
   return s;
 }
 
