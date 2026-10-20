@@ -163,3 +163,18 @@ test("a rollup reads the rows of the record's own compound, filtered by a row co
   e3.put(rec);
   assert.equal(e3.write({ ...rec }).find((r) => r.result === "derived" && r.address === "discCount")?.value, "3", "without a filter every row counts");
 });
+
+test("a rollup over a lower level reads the active records; a filter naming status reads the archived too", () => {
+  const m = shopRecords();
+  m.set("U-2", { ...(m.get("U-2") as Record), status: { state: "archived", reason: "legacy" } });
+  const e = new Engine(shop, shopRules, () => m);
+  for (const r of m.values()) e.put(r);
+  assert.equal(e.write({ id: "P-1", kind: "item", level: "product", owner: "t", values: {} }).find((r) => r.result === "derived" && r.address === "unitCount")?.value, "1", "the archived unit is left out");
+  const all = readRules(`rule: unitsCounted
+  then: unitCount is count of unit::cashierfuId where status has
+  strength: should
+`);
+  const e2 = new Engine(shop, all, () => m);
+  for (const r of m.values()) e2.put(r);
+  assert.equal(e2.write({ id: "P-1", kind: "item", level: "product", owner: "t", values: {} }).find((r) => r.result === "derived" && r.address === "unitCount")?.value, "2", "status named: history included");
+});

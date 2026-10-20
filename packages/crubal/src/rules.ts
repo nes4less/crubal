@@ -263,8 +263,11 @@ export class Engine {
     return this.store.get(id)?.rec ?? this.records?.().get(id);
   }
 
-  /** The records at a lower level under a record, along `of`, merged ones left out. */
-  private descendants(rec: Record, level: string): Record[] {
+  /**
+   * The records at a lower level under a record, along `of`: merged ones left out always; archived ones left
+   * out unless asked for (6.4: a rollup reads the active records below; a filter naming `status` reads them all).
+   */
+  private descendants(rec: Record, level: string, archivedToo = false): Record[] {
     const set = this.records?.();
     const out: Record[] = [];
     const walk = (id: string, depth: number) => {
@@ -272,7 +275,7 @@ export class Engine {
       const kids = set ? set.childrenOf(id, "of") : [...this.store.values()].map((s) => s.rec).filter((r) => r.of === id);
       for (const k of kids) {
         if (k.status?.reason === "merged") continue;
-        if (k.level === level) out.push(this.store.get(k.id)?.rec ?? k);
+        if (k.level === level) { if (archivedToo || k.status?.state !== "archived") out.push(this.store.get(k.id)?.rec ?? k); }
         else walk(k.id, depth + 1);
       }
     };
@@ -556,7 +559,13 @@ export class Engine {
     const rows = lower ? null : address.match(/^(\w+)\[\*\](?:\.(\w+))?$/);
     const key = lower ? (lower[2] as string) : rows && rows[1] !== "parts" ? (rows[2] as string | undefined) ?? "" : address.replace(/^parts\[\*\]\./, "");
     let raw: (Json | undefined)[];
-    if (lower) raw = this.descendants(rec, lower[1] as string).map((d) => d.values[key]);
+    if (lower) {
+      // A filter over the lower records reads each with its envelope; one that names `status` sees the archived too.
+      const namesStatus = where ? reads(where).some((k) => k === "status" || k === "crubal:status") : false;
+      const below = this.descendants(rec, lower[1] as string, namesStatus);
+      const kept = where ? below.filter((d) => evaluate(where, { ...d.values, id: d.id, status: d.status?.state ?? "active", "crubal:status": d.status?.state ?? "active" }, undefined, this.now) === true) : below;
+      raw = kept.map((d) => d.values[key]);
+    }
     else if (rows && rows[1] !== "parts") {
       // The rows of one of the record's own compounds (6.11): a count needs no child; a filter reads each row.
       const list = rec.values[rows[1] as string];
