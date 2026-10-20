@@ -132,7 +132,7 @@ export class PgStore {
   /** After a persist: mark what the entry made stale, inside the same transaction. */
   private async afterPersist(client: Client, before: State, after: State, seq: number, parsed?: Parsed): Promise<void> {
     const p = this.options.projecting ?? (parsed ? projectingOf(parsed) : await this.projectingFrom(client));
-    if (p?.views.views.size) await markStale(client, this.owner, p, before, after, seq);
+    if (p?.views.views.size && !this.skipStale) await markStale(client, this.owner, p, before, after, seq);
   }
 
   private async freshen(): Promise<void> {
@@ -143,6 +143,8 @@ export class PgStore {
 
   /** Set while a bulk load runs: the per-commit publish waits for the one publish at the end. */
   private quiet = false;
+  /** A bulk load that republishes at the end marks nothing stale per batch (load, `stale: false`). */
+  private skipStale = false;
 
   /**
    * Load many records as the owner's own, in batches: one entry per batch, each record set whole with its
@@ -150,10 +152,13 @@ export class PgStore {
    * the views publish once at the end. For a conversion or a migration (brief 18 step 1): a million rows
    * in an afternoon, not a day per hundred thousand through arrivals.
    */
-  async load(records: Record[], by: JsonObject, opts: { batch?: number; at?: string; origin?: string; publish?: boolean } = {}): Promise<{ entries: string[]; records: number; published: number }> {
+  async load(records: Record[], by: JsonObject, opts: { batch?: number; at?: string; origin?: string; publish?: boolean; stale?: boolean } = {}): Promise<{ entries: string[]; records: number; published: number }> {
     const size = Math.max(1, Math.floor(opts.batch ?? 500));
     const entries: string[] = [];
     this.quiet = true;
+    // `stale: false` marks nothing stale per batch: a conversion republishes every view at the end (12.6), and
+    // marking a million rows one write at a time is the slowest thing a bulk load would do.
+    this.skipStale = opts.stale === false;
     try {
       for (let i = 0; i < records.length; i += size) {
         const slice = records.slice(i, i + size);
@@ -174,6 +179,7 @@ export class PgStore {
       }
     } finally {
       this.quiet = false;
+      this.skipStale = false;
     }
     const published = opts.publish === false ? 0 : (await this.project()).length;
     return { entries, records: records.length, published };

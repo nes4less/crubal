@@ -29,19 +29,20 @@ export class MemoryRecords extends Map<string, Record> implements RecordSet {
   private byOf?: Map<string, Record[]>;
   private byWithin?: Map<string, Record[]>;
   private byLevel?: Map<string, Record[]>;
+  private byValue?: Map<string, Map<string, Record[]>>;
 
   override set(id: string, r: Record): this {
-    this.byOf = this.byWithin = this.byLevel = undefined;
+    this.byOf = this.byWithin = this.byLevel = this.byValue = undefined;
     return super.set(id, r);
   }
 
   override delete(id: string): boolean {
-    this.byOf = this.byWithin = this.byLevel = undefined;
+    this.byOf = this.byWithin = this.byLevel = this.byValue = undefined;
     return super.delete(id);
   }
 
   override clear(): void {
-    this.byOf = this.byWithin = this.byLevel = undefined;
+    this.byOf = this.byWithin = this.byLevel = this.byValue = undefined;
     super.clear();
   }
 
@@ -83,15 +84,31 @@ export class MemoryRecords extends Map<string, Record> implements RecordSet {
   }
 
   byKey(key: string, value: Json, level?: string): Record[] {
-    // Holds the value: equal to it, or a list holding it (or every item of it), as the store's containment answers.
+    // Holds the value: equal to it, or a list holding it (or every item of it), as the store's containment
+    // answers; indexed per key on first use (a projection's staleness asks thousands of times per batch).
+    if (!this.byValue) this.byValue = new Map();
+    let index = this.byValue.get(key);
+    if (!index) {
+      index = new Map();
+      for (const r of this.values()) {
+        const v = r.values[key];
+        if (v === undefined) continue;
+        const items = Array.isArray(v) ? [...v.map(serialize), serialize(v)] : [serialize(v)];
+        for (const s of new Set(items)) { const list = index.get(s) ?? []; list.push(r); index.set(s, list); }
+      }
+      this.byValue.set(key, index);
+    }
     const wanted = Array.isArray(value) ? value.map(serialize) : [serialize(value)];
-    const holds = (v: Json) => {
-      const s = serialize(v);
-      if (s === serialize(value)) return true;
+    const first = index.get(wanted[0] as string) ?? [];
+    const exact = index.get(serialize(value)) ?? [];
+    const holds = (r: Record) => {
+      if (exact.includes(r)) return true;
+      const v = r.values[key];
       if (!Array.isArray(v)) return false;
       const have = new Set(v.map(serialize));
       return wanted.every((w) => have.has(w));
     };
-    return [...this.values()].filter((r) => (level === undefined || r.level === level) && r.values[key] !== undefined && holds(r.values[key] as Json));
+    return [...new Set([...first, ...exact])].filter((r) => (level === undefined || r.level === level) && holds(r));
   }
+
 }

@@ -792,6 +792,9 @@ export class Views {
     for (const read of reads) {
       const ls = this.linkStep(read);
       if (!ls) continue;
+      // Only a write of what the link points at (its kind, or a class it wears) can be a shared part here.
+      const to = this.dict.facets.get(ls.link)?.to;
+      if (!to || !(to === write.kind || (write.wears ?? []).includes(to))) continue;
       if (!envelope && !(leafOf(ls.rest, this.dict) in write.values)) continue;
       const linkers = [...this.records.byKey(ls.link, { $link: write.id }), ...this.records.byKey(ls.link, [{ $link: write.id }])];
       for (const r of linkers) if (!v.level || r.level === v.level) out.add(r.id);
