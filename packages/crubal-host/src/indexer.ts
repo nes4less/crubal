@@ -128,73 +128,107 @@ export class Index {
       // the owner reads everything
     } else if (rank(audience) < rank(v.show)) throw Object.assign(new Error(`${view} is for ${v.show}`), { status: 403 });
     const cur = (await this.pool.query("select seq from index_cursors where owner = $1 and view = $2 and version = $3 and audience = $4", [owner, view, version, v.show])).rows[0] as Row | undefined;
+    const seq = cur ? Number(cur.seq) : 0;
+    const picks = o.picks ?? {};
+    const pickList = Object.entries(picks).filter(([, c]) => c.length);
+    const page = Math.max(1, o.page ?? 1);
+    // The rows are selected, counted, ordered and paged by the database (brief 18 step 1): nothing here is
+    // proportional to the view. Picks are containments on the buckets document (the GIN answers), the
+    // search is the vector, the order is the stored sort and pin, the page a limit and an offset. The counts
+    // and the total are cached per index cursor: they change only when the index does.
     const where = ["owner = $1", "view = $2", "version = $3", "audience = $4"];
     const params: unknown[] = [owner, view, version, v.show];
     if (o.q) {
       params.push(o.q);
       where.push(`search @@ plainto_tsquery('simple', $${params.length})`);
     }
-    let rows = (await this.pool.query(`select record, row, buckets, marks, ancestors, sort, pin from index_rows where ${where.join(" and ")}`, params)).rows as Row[];
-    // Partition (12.6): a row is served when one of the caller's edges stands in the relation to it or an ancestor.
+    // Partition (12.6): a caller who isn't the owner is served the rows their edges stand in the relation to,
+    // or an ancestor; the candidates are bounded by the caller's own edges, never the view.
     const partition = partitionOf(v);
     const roles = new Set<string>();
-    if (partition !== "none" && o.caller !== owner && (!needsAccess || !o.caller)) rows = [];
-    else if (needsAccess && o.caller && o.caller !== owner) {
-      const caller = o.caller;
-      const kept = rows;
-      // One read for the page: the rows the caller stands in the relation to, and the roles they hold on them.
-      const out = await withAccess((a) => {
-        const served = partition !== "none" ? kept.filter((r) => a.standsIn(caller, String(r.record), partition)) : kept;
-        const held = new Set<string>();
-        // Role marks: a slot marked with a role the caller doesn't hold is dropped.
-        for (const r of served) for (const e of a.effective(caller, String(r.record)).edges) for (const g of e.grants) if (p.perms.presets.has(g)) held.add(g);
-        return { served, held };
-      });
-      rows = out.served;
-      for (const g of out.held) roles.add(g);
+    let standsOn: string[] | undefined;
+    if (partition !== "none" && o.caller !== owner) {
+      if (!needsAccess || !o.caller) standsOn = [];
+      else {
+        const caller = o.caller;
+        standsOn = await store.read((st) => [...new Set([...st.edges.values()].filter((e) => e.who === caller).map((e) => String(e.on)))]);
+      }
     }
-    const picks = o.picks ?? {};
-    const inPick = (r: Row, filter: string) => {
-      const chosen = picks[filter] ?? [];
-      if (!chosen.length) return true;
-      const have = ((r.buckets as JsonObject)?.[filter] as string[] | undefined) ?? [];
-      return chosen.some((c) => have.includes(c));
+    if (standsOn) {
+      if (!standsOn.length) return { view, version, audience: v.show, seq, page, pages: 1, rows: [], counts: Object.fromEntries(v.filters.map((f) => [f, Object.fromEntries(this.bucketNames(p, f).map((b) => [b, 0]))])), indexable: false };
+      params.push(standsOn);
+      where.push(`(record = any($${params.length}) or ancestors && $${params.length}::text[])`);
+    }
+    const order = `pin asc nulls last, ${v.order.map((ord, i) => `(sort ->> ${i}) ${ord.dir === "after" ? "desc" : "asc"}`).concat("record asc").join(", ")}`;
+    const baseWhere = where.join(" and ");
+    // Each query gets its own parameters: the base, the picks it applies (all but `except`), then any extra.
+    const build = (except?: string, extra: unknown[] = []): { sql: string; ps: unknown[] } => {
+      const ps = [...params];
+      const clauses = [baseWhere];
+      for (const [f, chosen] of pickList) {
+        if (f === except) continue;
+        clauses.push(`(${chosen.map((c) => { ps.push(JSON.stringify({ [f]: [c] })); return `buckets @> $${ps.length}::jsonb`; }).join(" or ")})`);
+      }
+      for (const x of extra) ps.push(x);
+      return { sql: clauses.join(" and "), ps };
     };
-    const passes = (r: Row, except?: string) => Object.keys(picks).every((f) => f === except || inPick(r, f));
+    // The caller's partition is checked row by row within the bounded candidates (14.10), so those are
+    // fetched whole and paged here; everyone else's page is the database's.
+    let onPage: Row[];
+    let total: number;
     const counts: Page["counts"] = {};
     const nested: Nested = {};
-    const bucketsOf = (r: Row, f: string) => ((r.buckets as JsonObject)?.[f] as string[] | undefined) ?? [];
-    for (const f of v.filters) {
-      const pool = rows.filter((r) => passes(r, f));
-      counts[f] = Object.fromEntries(this.bucketNames(p, f).map((b) => [b, pool.filter((r) => bucketsOf(r, f).includes(b)).length]));
-      // Dependent facets (12.3): their values counted inside each of this filter's buckets.
-      const deps = p.views.filters.get(f)?.dependent ?? [];
-      if (!deps.length) continue;
-      nested[f] = Object.fromEntries(this.bucketNames(p, f).map((b) => {
-        const inB = pool.filter((r) => bucketsOf(r, f).includes(b));
-        return [b, Object.fromEntries(deps.map((d) => { const tally: { [value: string]: number } = {}; for (const r of inB) for (const val of bucketsOf(r, d)) tally[val] = (tally[val] ?? 0) + 1; return [d, tally]; }))];
-      }));
-    }
-    const chosen = rows.filter((r) => passes(r));
-    // The view's order, from what the store put on the row (12.7 sort and pin), then by record.
-    const cmp = (a: Row, b: Row) => {
-      const pa = a.pin ? Number(a.pin) : 0;
-      const pb = b.pin ? Number(b.pin) : 0;
-      if (pa || pb) return pa && pb ? pa - pb : pa ? -1 : 1;
-      const sa = (a.sort as string[]) ?? [];
-      const sb = (b.sort as string[]) ?? [];
-      for (let i = 0; i < v.order.length; i++) {
-        const x = sa[i] ?? "";
-        const y = sb[i] ?? "";
-        if (x !== y) return (x < y ? -1 : 1) * (v.order[i]?.dir === "after" ? -1 : 1);
+    const key = `${owner}|${view}|${version}|${v.show}|${seq}|${JSON.stringify(pickList)}|${o.q ?? ""}|${standsOn ? standsOn.join(",") : ""}`;
+    if (standsOn && o.caller) {
+      const caller = o.caller;
+      const all = (await this.pool.query(`select record, row, buckets, marks, ancestors, sort, pin from index_rows where ${baseWhere} order by ${order}`, params)).rows as Row[];
+      const served = await withAccess((a) => {
+        const kept = all.filter((r) => a.standsIn(caller, String(r.record), partition));
+        for (const r of kept) for (const e of a.effective(caller, String(r.record)).edges) for (const g of e.grants) if (p.perms.presets.has(g)) roles.add(g);
+        return kept;
+      });
+      const inPick = (r: Row, f: string, chosen: string[]) => chosen.some((c) => (((r.buckets as JsonObject)?.[f] as string[] | undefined) ?? []).includes(c));
+      const passes = (r: Row, except?: string) => pickList.every(([f, chosen]) => f === except || inPick(r, f, chosen));
+      for (const f of v.filters) {
+        const pool = served.filter((r) => passes(r, f));
+        counts[f] = Object.fromEntries(this.bucketNames(p, f).map((b) => [b, pool.filter((r) => inPick(r, f, [b])).length]));
       }
-      return String(a.record) < String(b.record) ? -1 : String(a.record) > String(b.record) ? 1 : 0;
-    };
-    chosen.sort(cmp);
-    const pages = Math.max(1, Math.ceil(chosen.length / v.page));
-    const page = Math.max(1, o.page ?? 1);
-    const onPage = chosen.slice((page - 1) * v.page, page * v.page);
-    const pickList = Object.entries(picks).filter(([, c]) => c.length);
+      const chosen = served.filter((r) => passes(r));
+      total = chosen.length;
+      onPage = chosen.slice((page - 1) * v.page, page * v.page);
+    } else {
+      const cached = this.cache.get(key) as { total: number; counts: Page["counts"]; nested: Nested } | undefined;
+      if (cached) {
+        total = cached.total;
+        Object.assign(counts, cached.counts);
+        Object.assign(nested, cached.nested);
+      } else {
+        const all = build();
+        total = Number((await this.pool.query(`select count(*) as n from index_rows where ${all.sql}`, all.ps)).rows[0]?.n ?? 0);
+        for (const f of v.filters) {
+          const but = build(f);
+          const tally = (await this.pool.query(`select b.value as bucket, count(*) as n from index_rows, jsonb_array_elements_text(buckets -> '${f.replace(/'/g, "''")}') b where ${but.sql} group by b.value`, but.ps)).rows as { bucket: string; n: string }[];
+          const by = new Map(tally.map((t) => [t.bucket, Number(t.n)]));
+          counts[f] = Object.fromEntries(this.bucketNames(p, f).map((b) => [b, by.get(b) ?? 0]));
+          // Dependent facets (12.3): their values counted inside each of this filter's buckets.
+          const deps = p.views.filters.get(f)?.dependent ?? [];
+          if (!deps.length) continue;
+          const inner: Nested[string] = {};
+          for (const d of deps) {
+            const rows = (await this.pool.query(`select b.value as bucket, d.value as val, count(*) as n from index_rows, jsonb_array_elements_text(buckets -> '${f.replace(/'/g, "''")}') b, jsonb_array_elements_text(buckets -> '${d.replace(/'/g, "''")}') d where ${but.sql} group by b.value, d.value`, but.ps)).rows as { bucket: string; val: string; n: string }[];
+            for (const r of rows) {
+              const slot = (inner[r.bucket] ??= {});
+              (slot[d] ??= {})[r.val] = Number(r.n);
+            }
+          }
+          nested[f] = inner;
+        }
+        this.remember(key, { total, counts: structuredClone(counts), nested: structuredClone(nested) });
+      }
+      const paged = build(undefined, [v.page, (page - 1) * v.page]);
+      onPage = (await this.pool.query(`select record, row, buckets, marks, ancestors, sort, pin from index_rows where ${paged.sql} order by ${order} limit $${paged.ps.length - 1} offset $${paged.ps.length}`, paged.ps)).rows as Row[];
+    }
+    const pages = Math.max(1, Math.ceil(total / v.page));
     const indexable = !o.q && page === 1 && (pickList.length === 0 || (pickList.length === 1 && v.index.includes(pickList[0]?.[0] as string) && pickList[0]?.[1].length === 1));
     if (o.shape && !v.shapes.includes(o.shape)) throw Object.assign(new Error(`${view} has no shape ${o.shape}`), { status: 404 });
     const out = onPage.map((r): JsonObject => {
@@ -214,6 +248,13 @@ export class Index {
       delete row.ancestors;
       return row;
     });
-    return { view, version, audience: v.show, seq: cur ? Number(cur.seq) : 0, page, pages, rows: out, counts, ...(Object.keys(nested).length ? { nested } : {}), indexable };
+    return { view, version, audience: v.show, seq, page, pages, rows: out, counts, ...(Object.keys(nested).length ? { nested } : {}), indexable };
+  }
+
+  /** Counts and totals per index cursor, picks and search: a few hundred recent answers, the oldest going first. */
+  private readonly cache = new Map<string, unknown>();
+  private remember(key: string, value: unknown): void {
+    this.cache.set(key, value);
+    while (this.cache.size > 500) this.cache.delete(this.cache.keys().next().value as string);
   }
 }

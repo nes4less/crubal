@@ -45,13 +45,16 @@ shape: card
 filter: format
   facet: format
 view: catalog
-  select: product
+  select:
+    level: product
+  order: title
   shape: card
   filters: format
   fresh: write
   page: 48
 view: units
-  select: unit
+  select:
+    level: unit
   shape: card
   fresh: write
   page: 48

@@ -239,7 +239,8 @@ export async function loadNeeds(client: Client, owner: string, needs: Needs, int
     } else if (kind === "key") {
       const [level, facet, ...valueParts] = rest as [string, string, ...string[]];
       const value = valueParts.join(":");
-      put((await client.query(`${sel}${level ? " and level = $4" : ""} and doc -> 'values' -> $2 = $3::jsonb order by ord`, level ? [owner, facet, value, level] : [owner, facet, value])).rows as Row[]);
+      // Containment, so the GIN on the values document answers.
+      put((await client.query(`${sel}${level ? " and level = $3" : ""} and doc -> 'values' @> $2::jsonb order by ord`, level ? [owner, JSON.stringify({ [facet]: JSON.parse(value) }), level] : [owner, JSON.stringify({ [facet]: JSON.parse(value) })])).rows as Row[]);
     } else if (kind === "binding") {
       const map = into.bindings as WorkingMap<string>;
       if (arg === "*") {

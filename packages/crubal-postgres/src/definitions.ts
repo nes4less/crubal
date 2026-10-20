@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 // definitions.ts: what the engine runs with, built from the store (docs/design/publishing.md): the installed
 // bundles in install order (extended before extending, because a dependency is installed first), then the
 // owner's working package, every `define` write as the member now stands. The publish checks run on the
@@ -54,10 +55,31 @@ export function workingBundle(owner: string, definitions: Iterable<JsonObject>):
   return b;
 }
 
+/**
+ * Parsed definitions shared across stores that hold the same packages and the same working package
+ * (brief 18 step 1: a host of a thousand deployments on one package set parses it once, not a thousand
+ * times, and keeps one copy). Keyed by the installed versions and a hash of the define writes; a trial
+ * (`extra`) is never cached. The object is read-only to its callers, as a store's own cache already was.
+ */
+const parsedShared = new Map<string, Parsed>();
+const PARSED_SHARED_MAX = 64;
+
 /** Build the definitions in force: installed bundles in order, then the working package. */
 export async function definitionsOf(client: Client, owner: string, extra: JsonObject[] = []): Promise<Parsed> {
-  const base = emptyParsed();
   const installed = (await client.query("select json from installed where owner = $1 order by ord", [owner])).rows as Row[];
+  const defs = (await client.query("select json from definitions where owner = $1 order by ord", [owner])).rows as Row[];
+  const key = extra.length ? undefined : `${installed.map((r) => `${(r.json as JsonObject).package}/${(r.json as JsonObject).version}`).join(",")}|${createHash("sha256").update(JSON.stringify(defs.map((r) => r.json))).digest("hex")}`;
+  const shared = key ? parsedShared.get(key) : undefined;
+  if (shared) {
+    parsedShared.delete(key as string);
+    parsedShared.set(key as string, shared);
+    // The process units table follows the owner read last, for the facet-only readers (see below).
+    const measures = (shared as Parsed & { units?: JsonObject[] }).units ?? [];
+    resetUnits();
+    if (measures.length) extendUnits(unitsExtensionText(measures));
+    return shared;
+  }
+  const base = emptyParsed();
   for (const row of installed) {
     const w = row.json as JsonObject;
     const { rows } = await client.query("select json from bundles where owner = $1 and package = $2 and version = $3", [owner, String(w.package), String(w.version)]);
@@ -65,7 +87,6 @@ export async function definitionsOf(client: Client, owner: string, extra: JsonOb
     if (!bundle) throw new Error(`${w.package} /${w.version} is installed but its bundle is missing`);
     readBundleOnto(bundle, base);
   }
-  const defs = (await client.query("select json from definitions where owner = $1 order by ord", [owner])).rows as Row[];
   // `extra`: define writes not yet committed, so a trial (store.define) is checked as the package would stand.
   const working = [...defs.map((r) => r.json as JsonObject), ...extra];
   if (working.length) readBundleOnto(workingBundle(owner, working), base);
@@ -78,6 +99,10 @@ export async function definitionsOf(client: Client, owner: string, extra: JsonOb
   resetUnits();
   if (measures.length) extendUnits(unitsExtensionText(measures));
   (base as Parsed & { units?: JsonObject[] }).units = measures;
+  if (key) {
+    parsedShared.set(key, base);
+    while (parsedShared.size > PARSED_SHARED_MAX) parsedShared.delete(parsedShared.keys().next().value as string);
+  }
   return base;
 }
 

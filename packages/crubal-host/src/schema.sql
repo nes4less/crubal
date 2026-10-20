@@ -36,6 +36,9 @@ create table if not exists index_rows (
   primary key (owner, view, version, audience, record)
 );
 create index if not exists index_rows_search on index_rows using gin (search);
+-- Picks are containments on the buckets document; the first pages of a view in its stored order come off this index.
+create index if not exists index_rows_buckets on index_rows using gin (buckets);
+create index if not exists index_rows_order on index_rows (owner, view, version, audience, pin, (sort ->> 0), (sort ->> 1), (sort ->> 2), record);
 -- The platform index (14.8, 14.10): rows reached by an edge on an ancestor, across owners.
 create index if not exists index_rows_ancestors on index_rows using gin (ancestors);
 create index if not exists index_rows_record on index_rows (record);

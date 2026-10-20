@@ -631,7 +631,8 @@ export class PgStore {
     if (where.kind) add("kind = ?", where.kind);
     if (where.of) add('"of" = ?', where.of);
     if (where.within) add("within = ?", where.within);
-    if (where.key) add(`doc -> 'values' -> '${where.key[0].replace(/'/g, "''")}' = ?::jsonb`, JSON.stringify(where.key[1]));
+    // Containment, so the GIN on the values document answers (an equality on `->` would not).
+    if (where.key) add("doc -> 'values' @> ?::jsonb", JSON.stringify({ [where.key[0]]: where.key[1] }));
     if (opts.archived === false) add("coalesce(status ->> 'state', '') <> ?", "archived");
     if (opts.after !== undefined) add("ord > ?", opts.after);
     const limit = opts.limit ? ` limit ${Math.max(1, Math.floor(opts.limit))}` : "";
@@ -820,8 +821,12 @@ export class PgStore {
    */
   async commitFrom<T>(run: (draft: Draft) => { by: JsonObject; extra?: JsonObject[]; out: T }, at?: string, mark: { witnessed?: true } = {}): Promise<{ entry: Entry | null; out: T }> {
     return transaction(this.pool, async (client) => {
+      // CRUBAL_TRACE_COMMIT=1 prints each phase's time to stderr, for a probe or a slow commit in the field.
+      const T0 = Date.now();
+      const tr = (label: string) => { if (process.env.CRUBAL_TRACE_COMMIT) console.error(`commit ${this.owner} ${label} ${Date.now() - T0} ms`); };
       const head = await this.lockChain(client);
       const before = await this.base(client);
+      tr("base");
       const needs = before.records as WorkingRecords;
       // The operation runs until the working set holds everything it asked for (working.ts); so does the
       // entry's application. Both run on copies of the same base, so the draft and the applied state
@@ -831,6 +836,7 @@ export class PgStore {
       let entry: Entry;
       let result: { by: JsonObject; extra?: JsonObject[]; out: T };
       const p = await this.definitionsFrom(client, false);
+      tr("definitions");
       for (;;) {
         const had = needs.needs.loaded.size;
         ({ draft, result } = (await settle(client, this.owner, before, (s) => { const d = draftOf(s); const r = run(d); this.derive(p, before, d); return { draft: d, result: r }; })).out);
@@ -842,11 +848,14 @@ export class PgStore {
         after = (await settle(client, this.owner, before, (s) => { applyEntry(s, e); this.checkWrites(p, e, s); })).state;
         if (needs.needs.loaded.size === had) break;
       }
+      tr(`settled, ${needs.needs.loaded.size} records loaded`);
       const { entry: linked, hosted } = await this.linkSplit(client, entry, head, after);
       const problem = differs(after, draft);
       if (problem) throw new Error(`the log doesn't describe the change: ${problem}`);
       await persist(client, this.owner, before, after);
+      tr("persisted");
       await this.afterPersist(client, before, after, head.seq + (linked ? 1 : 0), p);
+      tr("stale marked");
       // The definitions in force are unchanged by an entry with no define write (an install clears the
       // cache itself), so the cache follows the head: parsing them again cost every commit, and the first
       // read after it, ~110 ms on ME.

@@ -46,6 +46,9 @@ create table if not exists records (
   primary key (owner, id)
 );
 create index if not exists records_level on records (owner, level);
+-- A level's or a kind's rows in log order with a limit, served from the index alone (the probe: a seq scan over a million rows otherwise).
+create index if not exists records_level_ord on records (owner, level, ord);
+create index if not exists records_kind_ord on records (owner, kind, ord);
 create index if not exists records_of on records (owner, "of");
 create index if not exists records_within on records (owner, within);
 create index if not exists records_ancestors on records using gin (ancestors);
