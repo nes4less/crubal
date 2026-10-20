@@ -34,6 +34,15 @@ or anyone's) runs owners' stores on it, does authentication, holds secrets and a
    reads the projection stream (spec 12.6.1). The store answers by key, by selection and by condition, and
    publishes the stream.
 
+### Reads that never load the whole state (0.3.0)
+
+`read(fn)` runs a pure function on a working set (records, bindings and runs load as asked; edges,
+instructions and the working package whole). `records(where, opts)`, `get`, `edges`, `installed`,
+`defines`, `review` and `reviews`, `binding` and `bindings`, `observations`, `emergencyReads` read the
+tables, each one indexed query. `wholeState()` is the one named whole read; `state()` is refused on a store
+built with `wholeState: "refuse"`, which a host's stores are by default. `load(records, by, opts)` is the
+bulk path. The rule and its reasons are `scale.md`.
+
 ## Tables
 
 All owner-scoped: every table's primary key begins with `owner`. JSON columns hold the spec's JSON form
