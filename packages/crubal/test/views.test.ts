@@ -150,3 +150,36 @@ test("a filter, a slot and a condition read a compound's rows by child, through 
   assert.deepEqual(p.rows[0]?.ratings, ["R"]);
   assert.deepEqual(p.counts.rating, { R: 1, PG: 0 });
 });
+
+test("a filter on a compound's child buckets by the child's own list", () => {
+  const src = `
+kind: item
+  levels: product
+title$
+facet: Audio
+  type: compound
+  pick: any
+  facets:
+    language{English|French|Spanish}
+    codec$
+filter: language
+  facet: Audio[*].language
+shape: s
+  slots:
+    title -> t
+view: v
+  select:
+    level: product
+  shape: s
+  filters: language
+`;
+  const d = readDefinitions(src);
+  const vs = readViews(src);
+  checkViews(vs, d);
+  const v = new Views(d, vs);
+  v.put({ id: "P-1", kind: "item", level: "product", owner: "t", values: { title: "a", Audio: [{ language: "English", codec: "DTS" }, { language: "French" }] } });
+  v.put({ id: "P-2", kind: "item", level: "product", owner: "t", values: { title: "b", Audio: [{ language: "Spanish" }] } });
+  const p = v.project("v");
+  assert.deepEqual(p.counts.language, { English: 1, French: 1, Spanish: 1 });
+  assert.deepEqual(v.project("v", { picks: { language: ["French"] } }).records, ["P-1"]);
+});

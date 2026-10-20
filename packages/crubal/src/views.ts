@@ -177,6 +177,17 @@ export function leafOf(address: string, dict?: Pick<Dictionary, "facets">): stri
   return base;
 }
 
+/** The definition an address finally reads: through a level prefix, parts, a link step, and into a compound's child. */
+export function facetOf(address: string, dict: Pick<Dictionary, "facets">): Facet | undefined {
+  const base = address.replace(/^\w+::/, "").replace(/^parts\[\*\]\./, "");
+  const m = base.match(/^(\w+)(?:\[\*\])?\.(.+)$/);
+  if (!m) return dict.facets.get(base);
+  const first = dict.facets.get(m[1] as string);
+  if (first?.type === "link") return facetOf(m[2] as string, dict);
+  if (first?.type === "compound") return first.children?.get(m[2] as string) ?? facetOf(m[2] as string, dict);
+  return undefined;
+}
+
 function slotKeys(from: string): string[] {
   if (from.startsWith('"')) return [...(JSON.parse(from) as string).matchAll(/\{([^{}]+)\}/g)].flatMap((m) => (m[1] as string).split("??").map((k) => k.trim().replace(/\?$/, "")));
   const agg = from.match(/^(?:count|least|most|sum|best|worst|join) of (\S+)$/);
@@ -186,10 +197,10 @@ function slotKeys(from: string): string[] {
 // ─── Publish checks (12.8) ───────────────────────────────────────────────────
 
 export function checkViews(set: ViewSet, dict: Dictionary): void {
-  const defined = (k: string) => dict.facets.has(leafOf(k, dict));
+  const defined = (k: string) => facetOf(k, dict) !== undefined;
   for (const f of set.filters.values()) {
     if (!defined(f.facet)) throw new CrubalError(`the filter ${f.name} reads ${f.facet}, which isn't a facet`, f.line);
-    const facet = dict.facets.get(leafOf(f.facet, dict));
+    const facet = facetOf(f.facet, dict);
     const seen = new Map<string, string>();
     f.buckets?.forEach((b, i) => {
       for (const v of b.values ?? []) {
@@ -370,7 +381,7 @@ export class Views {
   private fit(key: string, v: Json, audience: string): boolean {
     if (audience !== "public") return true;
     if (isObj(v) && "$empty" in v) return v.$empty === "n/a";
-    const f = this.dict.facets.get(leafOf(key, this.dict));
+    const f = facetOf(key, this.dict);
     if (f?.type === "choice" && typeof v === "string") return (f.values ?? []).some((x) => x.value === v);
     return true;
   }
@@ -404,7 +415,7 @@ export class Views {
       if (agg[1] === "most") return sorted.at(-1);
       return items;
     }
-    const f = this.dict.facets.get(leafOf(s.from, this.dict));
+    const f = facetOf(s.from, this.dict);
     const through = s.from.includes("::") || this.linkStep(s.from) !== null || this.rowStep(s.from) !== null;
     const v = through ? this.valuesAt(r, s.from) : this.effective(r)[s.from];
     if (v === undefined || (Array.isArray(v) && !v.length)) return undefined;
@@ -539,7 +550,7 @@ export class Views {
 
   private bucketsOf(f: Filter): Bucket[] {
     if (f.buckets) return f.buckets;
-    const facet = this.dict.facets.get(leafOf(f.facet, this.dict));
+    const facet = facetOf(f.facet, this.dict);
     return (facet?.values ?? []).map((v) => ({ name: v.value, values: [v.value] }));
   }
 
