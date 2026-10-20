@@ -135,6 +135,7 @@ export class PgBorder {
     const counts = await this.idCounts();
     const { out } = await this.store.commitFrom((draft: Draft) => {
       const ex = new Exchange(this.o.dict, this.o.contracts, this.o.roles ?? [], this.o.rules ?? []);
+      ex.owner = this.owner;
       // Ids are minted from the owner's highest per prefix, afresh each pass (the function may run more than once).
       const next = { ...counts };
       ex.mint = (level: string) => {
@@ -266,6 +267,7 @@ export class PgBorder {
   /** The owner's offer (7.8), with the signed log entries its values came from, for another owner's take. */
   async offer(name: string, only?: string[]): Promise<Offer> {
     const ex = new Exchange(this.o.dict, this.o.contracts, this.o.roles ?? [], this.o.rules ?? []);
+      ex.owner = this.owner;
     // An offer that names what it is `for` is answered by target; one that doesn't walks the owner's records
     // (name `for:` on a large owner), and a request for named ids walks nothing.
     const walks = !only && !this.contracts.get(name)?.parts.for;
@@ -300,6 +302,7 @@ export class PgBorder {
   async expire(now: string, at?: string): Promise<string[]> {
     const { out } = await this.store.commitFrom((draft: Draft) => {
       const ex = new Exchange(this.o.dict, this.o.contracts, this.o.roles ?? [], this.o.rules ?? []);
+      ex.owner = this.owner;
       ex.records = draft.records;
       const ids = ex.expire(now);
       return { by: { take: "expired", at: now }, extra: [], out: ids };

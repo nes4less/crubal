@@ -170,6 +170,8 @@ export class Exchange {
   bindings = new Map<string, string>();
   /** Set to make the border consult access: `run` needs the caller's `run` item, gated access suggests. */
   access?: Access;
+  /** The owner whose records these are, when the caller knows it: a store's border names it, so no run looks at a record to learn it. */
+  owner?: string;
   /**
    * How an arrival's new record is named (9.2a). A persistent store sets this to mint the next id of the
    * owner (`P-2` after `P-1`), since an Exchange is built per run and its own counter would start again.
@@ -625,7 +627,7 @@ export class Exchange {
     const c = this.contracts.get(name);
     if (!c) throw new Error(`no contract ${name}`);
     const log = this.nextLog();
-    const domain = this.access?.owner ?? this.journal?.owner ?? this.records.all()[0]?.owner ?? "";
+    const domain = this.owner ?? this.access?.owner ?? this.journal?.owner ?? this.records.all()[0]?.owner ?? "";
     // A person owns what the package lets a person own (14.1): the record is theirs, written as `domain:id`.
     const kind = this.dict.levels.get(level) ?? level;
     // Permitted on the record the new one sits under or within (14.2), else anywhere (7.4 step 1).
