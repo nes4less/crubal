@@ -240,6 +240,62 @@ row marked stale instead), a `published` marker tells an empty view from one nev
 continues from its head under every version, `republish` and the index's rewind guard repair an index that
 drifted, and ME's local index was repaired that way.
 
+## R: round three (2026-10-19, brief 18 step 1, the scale rule)
+
+The probe (`packages/crubal-host/bench/scale.ts`, scale.md): a thousand owners with a thousand records each
+and one owner with a million (half products, half units), on one Postgres, loaded through `PgStore.load`,
+then the costs that must not grow. Four runs the same evening; each found something.
+
+**Load.** Two million records in 739 s, about 2,700 a second, the process's memory flat between 136 and
+189 MB throughout; the million-record owner alone in under six minutes.
+
+**Found and fixed on the way.** The first publish of a 500,000-row view overflowed the call stack: the
+store spread a stream's entries into one call (and the working set's copies spread their lists); the index
+also held a whole stream in memory before applying it, and now takes it five thousand entries at a time.
+A commit on the million-record owner cost 1.2 s, then 269 ms: the definitions parsed again per store, so
+a thousand owners on one package set parsed it a thousand times; parsed definitions are now shared across
+stores by their installed versions and a hash of their define writes. A page of the largest view cost
+1.9 s and a search 650 ms: the index fetched every row of the view and paged in process; it now selects,
+counts, orders and pages in the database (picks as containments on the buckets document with a GIN, the
+stored order from an expression index on the sort keys, counts and totals by SQL cached per index
+cursor). Ordered reads of a level or a kind seq-scanned a million rows; `(owner, level, ord)` and
+`(owner, kind, ord)` indexes serve them. A key lookup used `->` equality, which the values GIN can't
+answer; it uses containment now. The probe's own package had named its view's level wrongly, so the
+catalog carried units; fixed, which is why run four's numbers are the ones below.
+
+**After (run four), the million-record owner:**
+
+| What | Measured | Target |
+|---|---|---|
+| commit (U-7's condition), with its inline incremental publish | 123 ms first, 4 ms next | 50 ms |
+| commit with nothing to publish | 2 to 4 ms | 50 ms |
+| incremental publish, nothing stale | 2 ms (one call at 409 ms, see below) | 1 s |
+| page 1 of the catalog (500,000 rows), cold / warm | 651 ms / 2.4 ms | 100 ms |
+| page with a pick, cold / warm | 490 ms / 1.1 ms | 100 ms |
+| search over 125,000 hits, cold / warm | 340 ms / 1.7 ms | 100 ms |
+| a key lookup (selective, GIN) | 16 ms | |
+| first publish of a 500,000-row view (store) | about 36 s (run three: 73 s for a million rows) | under an hour |
+| the index taking 500,000 rows | 25 s | |
+| a tick across a thousand owners | 403 ms | pages |
+| a thousand reads to a thousand owners | 327 ms, heap 37 → 17 MB | memory flat |
+
+Every query the working set and the projector make is an index scan (the probe prints the planner's
+plans): records by id, level, kind, parent, key (selective and broad), stale marks, the index's page in its
+stored order with and without a pick, the search vector, drain's waiting records. The log's "since"
+query seq-scans because the table is five thousand rows; it has its primary key when it isn't.
+
+**Said plainly.** (1) The first page after an index change pays the counts and the total over the view
+once, 0.3 to 0.65 s on 500,000 rows, then every page is milliseconds until the next change; on a shop that
+sells every minute that is a cold page a minute. Keeping the bucket counts as the index ingests is the
+next step if the walk shows it. (2) An install with a previous version walks the owner's records for its
+restamp by design; on the million-record owner that walk held 1.8 GB of resident memory for the two
+minutes it ran and the inline republish it triggers. It is an operator action and not a request, and it
+is the one path left that should page. (3) One idle publish call measured 409 ms and one, just after the
+reinstall, 18 s with nothing to publish; neither is explained yet and both are written down. (4) The
+synthetic owners carry a thousand records each, not the brief's ten thousand; the number of owners is what
+the host paths care about, and the million-record owner carries the size question. (5) ME's own full copy
+is measured when the steward's dump is in hand.
+
 ## Calls made here
 
 - A hand-made list is a record with the core facet `crubal:items` (G).

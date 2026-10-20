@@ -68,6 +68,17 @@ index serves reads, and every operation works on a working set that loads what i
   screen, a guest's lookup by email). They are honest about it, they load one level rather than the state,
   and they are to move to the index or to SQL aggregates as the probe orders them.
 
+## What the probe found (2026-10-19)
+
+Four runs; completion.md "R: round three" has the table. Fixed on the way: a spread over a stream's
+entries that overflowed at 500,000 rows; the index holding a whole stream before applying it; definitions
+parsed per store rather than shared; the index paging in process rather than in the database; two missing
+ordered indexes; key lookups that the GIN couldn't answer. After: a commit on a million records in single-
+digit milliseconds, a warm page in 2 ms, a cold page in under 0.7 s (the counts, once per index change), a
+thousand owners' reads with the heap flat. Still walking, said plainly: an install's restamp (1.8 GB
+resident on a million records for two minutes; an operator action; the one path that should page), and
+the cold counts after every index change, which the ingest could keep incrementally.
+
 ## The probe
 
 `packages/crubal-host/bench/scale.ts`: a host of many owners (a thousand, a thousand records each) and one
