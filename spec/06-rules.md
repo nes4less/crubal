@@ -134,6 +134,9 @@ contract: aiTitle
 - A **fill** produces only at `suggest`. At `must` and `should`, a plain value is a check.
 - A **derivation** or **rollup** produces at every strength. The engine writes it, recomputes it whenever
   what it reads changes, and stores it with `origin: derived` and the rule as its `via`.
+- A rollup over a lower level (`count of unit::cashierfuId`) reads the **active** records below, as views
+  do (1.12); merged ones never. A row filter that names `status` reads the archived too: `count of
+  unit::cashierfuId where status has` counts a product's units with history included.
 - A production writes only at a level where its key is stored: the top level, or a level where the key
   varies (chapter 1.7). Below that, records read the produced value through, as they read any other.
 - A person who edits a produced value **adopts** it (✎, chapter 8): the value stops following the rule
