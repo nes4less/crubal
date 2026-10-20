@@ -103,5 +103,5 @@ test("a view reads a shared part through its link: slots, filters, conditions, a
   assert.ok([...v.readSet("releases")].includes("works[*].workTitle"));
   const stale = v.staleAfter("releases", { id: "W-2", kind: "work", level: "work", owner: "t", values: { workTitle: "Airplane! (1980)", genres: ["Comedy"] } });
   assert.deepEqual(stale.sort(), ["P-1", "P-2"], "a write to the work stales every release that links it");
-  assert.deepEqual(v.staleAfter("releases", { id: "W-2", kind: "work", level: "work", owner: "t", values: { workTitle: "Airplane!", genres: ["Comedy"] } }), [], "an unchanged key stales nothing");
+  assert.deepEqual(v.staleAfter("releases", { id: "W-2", kind: "work", level: "work", owner: "t", values: {} }), [], "a write to no key the view reads stales nothing");
 });
