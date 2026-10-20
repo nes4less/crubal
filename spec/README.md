@@ -1,6 +1,6 @@
 # CRUBAL 2: the specification
 
-**Status:** CRUBAL 2 · 2026-10-19. Published at the gate (docs/design/release.md); from here a dated revision only adds (chapter 11.8). This spec is the source of truth for the language;
+**Status:** CRUBAL 2 · 2026-10-20 (revision 1 after the gate: link steps read shared parts, row aggregates with a filter, rows by child; pull request 5). Published at the gate on 2026-10-19 (docs/design/release.md); a dated revision only adds (chapter 11.8). This spec is the source of truth for the language;
 the design review that produced it is recorded in Media Encyclopedia's blueprint, which it supersedes.
 
 CRUBAL is a language and engine for data about any kind of thing. Everything is a key and a value. Records

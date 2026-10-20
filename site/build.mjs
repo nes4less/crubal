@@ -230,7 +230,7 @@ page(
 </ol>
 <h2>Use it</h2>
 <pre><code>npm install @cruba/crubal</code></pre>
-<p>Read the <a href="/spec/">specification</a>, try the <a href="/play/">playground</a>, or read the <a href="${REPO}">source</a>. <span class="pill">CRUBAL 2 · 2026-10-19</span></p>
+<p>Read the <a href="/spec/">specification</a>, try the <a href="/play/">playground</a>, or read the <a href="${REPO}">source</a>. <span class="pill">CRUBAL 2 · 2026-10-20</span></p>
 <h2>Who's behind it</h2>
 <p>CRUBAL is an open specification, stewarded by <strong>Infinite Token</strong>, a development company. The spec, the corpus and the reference implementation are open to anyone to read, implement and build on.</p>`,
   "CRUBAL is an open language and engine for data about any kind of thing: facets, rules, provenance and contracts, with a conformance test corpus and a reference implementation.",

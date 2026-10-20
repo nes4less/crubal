@@ -46,6 +46,11 @@ packages has no `http` send to run (its sends are adapter-bound: eBay, Stripe ma
 marketplace stream); the host suite shows it with a test contract. **The gate is passed.** The revision merged (pull request 4), the corpus tagged `corpus/2026-10-19`, the three
 packages published at 0.2.0 the same evening; the freeze rule holds from here.
 
+**Revision 2026-10-20** (pull request 5): a step through a link facet reads shared parts (1.10, 12), aggregates
+over a compound's rows take a row filter and rollups over a lower level read the active records (6), a view
+reads a compound's rows by child (12); corpus views 021–023 and rules 011. Engine, store and host published
+at 0.3.0 the same evening; the corpus tagged `corpus/2026-10-20`.
+
 The claim was re-run the same day against the corpus dated 2026-10-19, which gained cases for the
 revisions of the day: a state facet moving under `transitions` (exchange/032), a member's form on a record
 they don't own (exchange/033), a class nothing wears (dictionary/010). Reader 25, Dictionary 48, Rules 61,
