@@ -159,7 +159,8 @@ export class Index {
       params.push(standsOn);
       where.push(`(record = any($${params.length}) or ancestors && $${params.length}::text[])`);
     }
-    const order = `pin asc nulls last, ${v.order.map((ord, i) => `(sort ->> ${i}) ${ord.dir === "after" ? "desc" : "asc"}`).concat("record asc").join(", ")}`;
+    // The stored order's first three keys always, so the order matches the index on them (index_rows_order).
+    const order = `pin asc nulls last, ${[0, 1, 2].map((i) => `(sort ->> ${i}) ${v.order[i]?.dir === "after" ? "desc" : "asc"}`).concat("record asc").join(", ")}`;
     const baseWhere = where.join(" and ");
     // Each query gets its own parameters: the base, the picks it applies (all but `except`), then any extra.
     const build = (except?: string, extra: unknown[] = []): { sql: string; ps: unknown[] } => {

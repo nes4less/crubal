@@ -16,7 +16,7 @@ const OWNERS = arg("--owners", 1000);
 const EACH = arg("--each", 1000);
 const BIG = arg("--big", 1_000_000);
 const SCHEMA = (() => { const i = process.argv.indexOf("--schema"); return i >= 0 ? process.argv[i + 1] : "scale_probe"; })();
-const PACKAGE = `package: shop /2026-10-01
+const PACKAGE = `package: shop /2026-10-02
   owner: scale.example
   crubal: 2
 
@@ -62,7 +62,7 @@ view: units
 
 const ms = (t: bigint) => Number((process.hrtime.bigint() - t) / 1000n) / 1000;
 const mem = () => Math.round(process.memoryUsage().rss / 1048576);
-const bundle = publish(PACKAGE, { date: "2026-10-01" }).bundle;
+const bundle = publish(PACKAGE, { date: "2026-10-02" }).bundle;
 
 const base = connect(process.env.CRUBAL_PG_URL);
 await base.query(`create schema if not exists ${SCHEMA}`);
@@ -86,7 +86,8 @@ async function ownerStore(owner: string): Promise<PgStore> {
   const have = (await pool.query("select 1 from host_owners where owner = $1", [owner])).rows.length > 0;
   if (!have) await host.createOwner(owner);
   const store = await host.storeFor(owner);
-  if (!(await store.installed()).length) await store.install(bundle);
+  // The package at this version: a kept schema from an earlier run takes the newer one (its restamp is empty).
+  if (!(await store.installed()).some((i) => String(i.version) === String(bundle.version))) await store.install(bundle);
   return store;
 }
 
@@ -141,20 +142,36 @@ results.idlePublishRows = inc.length;
 await index.apply(s, "catalog");
 t = process.hrtime.bigint();
 const page = await index.serve(s, "catalog", { page: 1 });
-results.pageMs = ms(t);
+results.pageColdMs = ms(t);
 results.pageRows = page.rows.length;
 t = process.hrtime.bigint();
+await index.serve(s, "catalog", { page: 2 });
+results.pageWarmMs = ms(t);
+t = process.hrtime.bigint();
+await index.serve(s, "catalog", { page: 1, picks: { format: ["DVD"] } });
+results.pickColdMs = ms(t);
+t = process.hrtime.bigint();
+await index.serve(s, "catalog", { page: 3, picks: { format: ["DVD"] } });
+results.pickWarmMs = ms(t);
+t = process.hrtime.bigint();
 const search = await index.serve(s, "catalog", { q: "Gamma" });
-results.searchMs = ms(t);
+results.searchColdMs = ms(t);
 results.searchRows = search.rows.length;
 t = process.hrtime.bigint();
-await s.records({ level: "unit", key: ["condition", "NM"] }, { limit: 48 });
+await index.serve(s, "catalog", { q: "Gamma", page: 2 });
+results.searchWarmMs = ms(t);
+t = process.hrtime.bigint();
+await index.serve(s, "catalog", { q: "Title 777" });
+results.searchNarrowMs = ms(t);
+t = process.hrtime.bigint();
+await s.records({ level: "product", key: ["title", "Title 777 Beta"] }, { limit: 48 });
 results.keyLookupMs = ms(t);
 t = process.hrtime.bigint();
 await host.tick();
 results.tickAllOwnersMs = ms(t);
 t = process.hrtime.bigint();
 const before = mem();
+const heapBefore = Math.round(process.memoryUsage().heapUsed / 1048576);
 for (let o = 1; o <= Math.min(OWNERS, 1000); o++) {
   const st = await host.storeFor(`shop${o}.example`);
   await st.records({ level: "product" }, { limit: 5 });
@@ -162,6 +179,8 @@ for (let o = 1; o <= Math.min(OWNERS, 1000); o++) {
 results.thousandOwnerReadsMs = ms(t);
 results.rssBeforeMB = before;
 results.rssAfterMB = mem();
+results.heapBeforeMB = heapBefore;
+results.heapAfterMB = Math.round(process.memoryUsage().heapUsed / 1048576);
 results.storesKept = (host as unknown as { stores: Map<string, unknown> }).stores.size;
 // The planner on the queries the working set and the projector make: every one an index scan.
 const plans: JsonObject = {};
@@ -174,7 +193,10 @@ const explain = async (label: string, sql: string, params: unknown[]) => {
 await explain("recordsByLevel", "select * from records where owner = $1 and level = $2 order by ord limit 48", ["big.example", "unit"]);
 await explain("recordById", "select * from records where owner = $1 and id = $2", ["big.example", "U-7"]);
 await explain("childrenOf", 'select * from records where owner = $1 and "of" = $2 and level = $3 order by ord', ["big.example", "P-7", "unit"]);
-await explain("byKey", "select * from records where owner = $1 and level = $2 and doc -> 'values' -> 'condition' = $3::jsonb order by ord", ["big.example", "unit", '"NM"']);
+await explain("byKeySelective", "select * from records where owner = $1 and level = $2 and doc -> 'values' @> $3::jsonb order by ord", ["big.example", "product", '{"title": "Title 777 Beta"}']);
+await explain("byKeyBroad", "select * from records where owner = $1 and level = $2 and doc -> 'values' @> $3::jsonb order by ord", ["big.example", "unit", '{"condition": "NM"}']);
+await explain("pageOrder", "select record from index_rows where owner = $1 and view = $2 and version = $3 and audience = $4 order by pin asc nulls last, (sort ->> 0) asc, (sort ->> 1) asc, (sort ->> 2) asc, record asc limit 48", ["big.example", "catalog", "2026-10-02", "public"]);
+await explain("pickContain", "select record from index_rows where owner = $1 and view = $2 and version = $3 and audience = $4 and buckets @> $5::jsonb order by pin asc nulls last, (sort ->> 0) asc, (sort ->> 1) asc, (sort ->> 2) asc, record asc limit 48", ["big.example", "catalog", "2026-10-02", "public", '{"format": ["DVD"]}']);
 await explain("byKind", "select * from records where owner = $1 and kind = $2 order by ord limit 48", ["big.example", "item"]);
 await explain("stale", "select record from stale where owner = $1 and view = $2", ["big.example", "catalog"]);
 await explain("logSince", "select seq, entry from log where owner = $1 and chain = $2 and seq > $3 order by seq", ["big.example", "main", 0]);
