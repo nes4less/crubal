@@ -4,6 +4,7 @@
 // derived, flagged, incomplete, complete and completeness.
 
 import { type Expr, evaluate, parseCondition, reads, type StateOf } from "./conditions.ts";
+import { aggregateOf, levelStep, rowStep } from "./address.ts";
 import { type Dictionary, type Facet, unquote } from "./defs.ts";
 import { resolve } from "./dictionary.ts";
 import type { Json, JsonObject, Record } from "./model.ts";
@@ -30,10 +31,6 @@ export type Rule = {
   shortcut?: boolean;
 };
 
-// An aggregate: `<combine> of <address>`, the address a lower level (`unit::key`), the record's own parts
-// (`parts[*].key`) or the rows of one of its many-valued compounds (`Manifest[*].qty`, 6.11), with an optional
-// row filter (`… where manifestItemType is disc`) read against each row.
-const AGG = /^(join|sum|best|narrow|worst|deduct|replace|keep|count|least|most) of (\S+)(?: where (.+))?$/;
 const isObj = (v: Json | undefined): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);
 
 function production(thenText: string, strength: Strength): Rule["produces"] {
@@ -42,7 +39,7 @@ function production(thenText: string, strength: Strength): Rule["produces"] {
   const key = m[1] as string;
   const right = (m[2] as string).trim();
   if (right.startsWith('"')) return { key, kind: "template", right };
-  if (AGG.test(right)) return { key, kind: "rollup", right };
+  if (aggregateOf(right)) return { key, kind: "rollup", right };
   if (right === "unique" || right === "_" || right === "-") return undefined;
   if (strength === "suggest") return { key, kind: "fill", right };
   return undefined;
@@ -116,7 +113,7 @@ function readsOf(r: Rule): string[] {
   }
   // A rollup reads its parts' addresses (parts[*].condition), not the key it produces on the whole.
   if (r.produces?.kind === "rollup") {
-    const address = r.produces.right.match(AGG)?.[2] ?? "";
+    const address = aggregateOf(r.produces.right)?.address ?? "";
     // Rows of the record's own compound: the rollup reads that compound (the key before `[*]`).
     const rows = address.match(/^(\w+)\[\*\](?:\.(\w+))?$/);
     keys.push(rows && rows[1] !== "parts" ? (rows[1] as string) : address);
@@ -551,25 +548,24 @@ export class Engine {
 
   /** A rollup over parts (`worst of parts[*].condition`) or over a lower level (`count of unit::cashierfuId`). */
   rollup(right: string, rec: Record): Json | undefined {
-    const m = right.match(AGG);
-    if (!m) return undefined;
-    const how = m[1] as string;
-    const address = m[2] as string;
-    const where = m[3] ? parseCondition(m[3]) : null;
-    const lower = address.match(/^(\w+)::(.+)$/);
-    const rows = lower ? null : address.match(/^(\w+)\[\*\](?:\.(\w+))?$/);
-    const key = lower ? (lower[2] as string) : rows && rows[1] !== "parts" ? (rows[2] as string | undefined) ?? "" : address.replace(/^parts\[\*\]\./, "");
+    const agg = aggregateOf(right);
+    if (!agg) return undefined;
+    const { how, address } = agg;
+    const where = agg.where ? parseCondition(agg.where) : null;
+    const lower = levelStep(address);
+    const rows = lower ? null : rowStep(address, this.dict);
+    const key = lower ? lower.rest : rows ? (rows.child ?? "") : address.replace(/^parts\[\*\]\./, "");
     let raw: (Json | undefined)[];
     if (lower) {
       // A filter over the lower records reads each with its envelope; one that names `status` sees the archived too.
       const namesStatus = where ? reads(where).some((k) => k === "status" || k === "crubal:status") : false;
-      const below = this.descendants(rec, lower[1] as string, namesStatus);
+      const below = this.descendants(rec, lower.level, namesStatus);
       const kept = where ? below.filter((d) => evaluate(where, { ...d.values, id: d.id, status: d.status?.state ?? "active", "crubal:status": d.status?.state ?? "active" }, undefined, this.now) === true) : below;
       raw = kept.map((d) => d.values[key]);
     }
-    else if (rows && rows[1] !== "parts") {
+    else if (rows) {
       // The rows of one of the record's own compounds (6.11): a count needs no child; a filter reads each row.
-      const list = rec.values[rows[1] as string];
+      const list = rec.values[rows.compound];
       const all = (Array.isArray(list) ? list : list === undefined ? [] : [list]).filter(isObj);
       const kept = where ? all.filter((row) => evaluate(where, row, undefined, this.now) === true) : all;
       raw = kept.map((row) => (key ? row[key] : row));

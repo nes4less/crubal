@@ -7,6 +7,8 @@ import type { Access } from "./access.ts";
 import { serialize } from "./canonical.ts";
 import { evaluate, parseCondition } from "./conditions.ts";
 import type { Dictionary, Facet } from "./defs.ts";
+import { facetOf, leafOf, linkStep, rowStep } from "./address.ts";
+export { facetOf, leafOf } from "./address.ts";
 import { splitTop } from "./lex.ts";
 import type { Json, JsonObject, Record } from "./model.ts";
 import { MemoryRecords, type RecordSet } from "./records.ts";
@@ -165,29 +167,6 @@ export function visibleTo(set: Pick<ViewSet, "shown" | "shownFor">, facet: strin
 }
 
 /** The keys a slot's source reads. */
-/** The key an address finally reads: past a level prefix, `parts[*].`, and a step through a link facet (1.6, 1.10). */
-export function leafOf(address: string, dict?: Pick<Dictionary, "facets">): string {
-  const base = address.replace(/^\w+::/, "").replace(/^parts\[\*\]\./, "");
-  const m = base.match(/^(\w+)(?:\[\*\])?\.(.+)$/);
-  if (!m) return base;
-  const first = dict?.facets.get(m[1] as string);
-  if (!dict || first?.type === "link") return leafOf(m[2] as string, dict);
-  // A compound's row child: the child's own definition when the dictionary holds it, else the compound's key.
-  if (first?.type === "compound") return dict.facets.has(leafOf(m[2] as string, dict)) ? leafOf(m[2] as string, dict) : (m[1] as string);
-  return base;
-}
-
-/** The definition an address finally reads: through a level prefix, parts, a link step, and into a compound's child. */
-export function facetOf(address: string, dict: Pick<Dictionary, "facets">): Facet | undefined {
-  const base = address.replace(/^\w+::/, "").replace(/^parts\[\*\]\./, "");
-  const m = base.match(/^(\w+)(?:\[\*\])?\.(.+)$/);
-  if (!m) return dict.facets.get(base);
-  const first = dict.facets.get(m[1] as string);
-  if (first?.type === "link") return facetOf(m[2] as string, dict);
-  if (first?.type === "compound") return first.children?.get(m[2] as string) ?? facetOf(m[2] as string, dict);
-  return undefined;
-}
-
 function slotKeys(from: string): string[] {
   if (from.startsWith('"')) return [...(JSON.parse(from) as string).matchAll(/\{([^{}]+)\}/g)].flatMap((m) => (m[1] as string).split("??").map((k) => k.trim().replace(/\?$/, "")));
   const agg = from.match(/^(?:count|least|most|sum|best|worst|join) of (\S+)$/);
@@ -340,20 +319,6 @@ export class Views {
     });
   }
 
-  /** An address whose first step is a link facet (`works[*].genre`, `work.title`): the link and the rest. */
-  private linkStep(address: string): { link: string; rest: string } | null {
-    const m = address.match(/^(\w+)(?:\[\*\])?\.(.+)$/);
-    if (!m) return null;
-    return this.dict.facets.get(m[1] as string)?.type === "link" ? { link: m[1] as string, rest: m[2] as string } : null;
-  }
-
-  /** An address whose first step is one of the record's compounds (`ratings[*].value`): the compound and the child. */
-  private rowStep(address: string): { compound: string; child: string } | null {
-    const m = address.match(/^(\w+)\[\*\]\.(\w+)$/);
-    if (!m) return null;
-    return this.dict.facets.get(m[1] as string)?.type === "compound" ? { compound: m[1] as string, child: m[2] as string } : null;
-  }
-
   /** The rows of a compound on a record, as objects. */
   private rowsOf(r: Record, compound: string): JsonObject[] {
     const v = this.effective(r)[compound];
@@ -363,11 +328,11 @@ export class Views {
   /** The values an address reads, as a list: own values, or a lower level's (`unit::price`). */
   private valuesAt(r: Record, address: string): Json[] {
     // A step through a link facet reads the linked records (shared parts, 1.6), each by the rest of the address.
-    const ls = this.linkStep(address);
+    const ls = linkStep(address, this.dict);
     if (ls) return this.linked(r, ls.link).flatMap((t) => this.valuesAt(t, ls.rest));
     // A step into a compound's rows reads the child on every row (1.10 with the wildcard).
-    const rs = this.rowStep(address);
-    if (rs) return this.rowsOf(r, rs.compound).flatMap((row) => { const c = row[rs.child]; return c === undefined ? [] : Array.isArray(c) ? c : [c]; });
+    const rs = rowStep(address, this.dict);
+    if (rs) return this.rowsOf(r, rs.compound).flatMap((row) => { const c = rs.child ? row[rs.child] : row; return c === undefined ? [] : Array.isArray(c) ? c : [c]; });
     const m = address.match(/^(\w+)::(.+)$/);
     // A level prefix reads the records below at that level, or the record itself when it sits there
     // (a standing-alone lower record answers for its own level, 1.7).
@@ -416,7 +381,7 @@ export class Views {
       return items;
     }
     const f = facetOf(s.from, this.dict);
-    const through = s.from.includes("::") || this.linkStep(s.from) !== null || this.rowStep(s.from) !== null;
+    const through = s.from.includes("::") || linkStep(s.from, this.dict) !== null || rowStep(s.from, this.dict) !== null;
     const v = through ? this.valuesAt(r, s.from) : this.effective(r)[s.from];
     if (v === undefined || (Array.isArray(v) && !v.length)) return undefined;
     if (Array.isArray(v)) {
@@ -801,7 +766,7 @@ export class Views {
     }
     // A write to a shared part stales the rows that read it through a link (1.6, 12.6): the linking records.
     for (const read of reads) {
-      const ls = this.linkStep(read);
+      const ls = linkStep(read, this.dict);
       if (!ls) continue;
       // Only a write of what the link points at (its kind, or a class it wears) can be a shared part here.
       const to = this.dict.facets.get(ls.link)?.to;

@@ -1,6 +1,7 @@
 // @cruba/crubal: the CRUBAL reference implementation. Pure functions; JSON in, JSON out.
 
 export { CrubalError, readTree } from "./tree.ts";
+export { AGGREGATE, aggregateOf, facetOf, leafOf, levelStep, linkStep, partsStep, rowStep } from "./address.ts";
 export { readDefinitions, emptyDictionary, type ClassDef, type Dictionary, type Facet } from "./defs.ts";
 export { readText } from "./read-text.ts";
 export { printText, type PrintMode } from "./print-text.ts";
@@ -17,7 +18,7 @@ export { checkRecipe, dryRun, readRecipes, restamp, type Recipe, type ReviewItem
 export { checkContracts, Exchange, readRoles, verifyBorder, versionGate, type Role, type RunResult, type Offer } from "./exchange.ts";
 export { checkPackages, readPackages, type PackageInfo, type Utility } from "./packages.ts";
 export { STANDARD_PACKAGES, standardDefinitions } from "./std-packages.ts";
-export { AUDIENCES, checkViews, facetOf, leafOf, partitionOf, readViews, shownAudience, Views, visibleTo, type Nested, type Projection, type ProjectOptions, type ShownFor, type StreamEntry, type View, type ViewSet } from "./views.ts";
+export { AUDIENCES, checkViews, partitionOf, readViews, shownAudience, Views, visibleTo, type Nested, type Projection, type ProjectOptions, type ShownFor, type StreamEntry, type View, type ViewSet } from "./views.ts";
 export { applyEntry, diffWrites, differs, emptyState, Journal, rebuild, redactable, redactableWrite, redactWrite, stateJson, type Draft, type Entry, type State, type Write } from "./log.ts";
 export { MemoryRecords, type RecordSet } from "./records.ts";
 export { arrive, decide, surviving, type Arrival, type ArrivalStore } from "./arrival.ts";
