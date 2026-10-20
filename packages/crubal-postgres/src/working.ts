@@ -196,12 +196,25 @@ export async function loadNeeds(client: Client, owner: string, needs: Needs, int
   // kind: a view's shape reading each row's parent asked 11,299 single-row questions on ME's offers.
   const byId: string[] = [];
   const children = new Map<string, { along: string; level: string; ids: string[] }>();
+  // Key lookups (a unique check per record, a shared part's linkers) asked many times in one run are fetched
+  // in one containment query per level and facet: a bulk load of 2,000 records with three unique facets
+  // asked 6,000 single-row questions per batch.
+  const keyGroups = new Map<string, { level: string; facet: string; values: string[] }>();
   for (const key of [...needs.pending]) {
     if (needs.answered.has(key)) {
       needs.pending.delete(key);
       continue;
     }
     const [kind, ...rest] = key.split(":");
+    if (kind === "key") {
+      const [level, facet, ...valueParts] = rest as [string, string, ...string[]];
+      const g = keyGroups.get(`${level}|${facet}`) ?? { level, facet, values: [] };
+      g.values.push(valueParts.join(":"));
+      keyGroups.set(`${level}|${facet}`, g);
+      needs.pending.delete(key);
+      needs.answered.add(key);
+      continue;
+    }
     if (kind === "record") {
       byId.push(rest.join(":"));
       needs.pending.delete(key);
@@ -214,6 +227,11 @@ export async function loadNeeds(client: Client, owner: string, needs: Needs, int
       needs.pending.delete(key);
       needs.answered.add(key);
     }
+  }
+  for (const g of keyGroups.values()) {
+    const docs = g.values.map((v) => JSON.stringify({ [g.facet]: JSON.parse(v) }));
+    const rows = (await client.query(`${sel}${g.level ? " and level = $3" : ""} and doc -> 'values' @> any($2::jsonb[]) order by ord`, g.level ? [owner, docs, g.level] : [owner, docs])).rows as Row[];
+    put(rows);
   }
   if (byId.length) {
     const rows = (await client.query(`${sel} and id = any($2) order by ord`, [owner, byId])).rows as Row[];

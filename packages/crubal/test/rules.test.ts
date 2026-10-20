@@ -178,3 +178,12 @@ test("a rollup over a lower level reads the active records; a filter naming stat
   for (const r of m.values()) e2.put(r);
   assert.equal(e2.write({ id: "P-1", kind: "item", level: "product", owner: "t", values: {} }).find((r) => r.result === "derived" && r.address === "unitCount")?.value, "2", "status named: history included");
 });
+
+test("a rule's because round-trips through the printer's quoting", () => {
+  const rules = readRules(`rule: counted
+  then: unitCount is count of unit::cashierfuId where status has
+  strength: should
+  because: "the catalog pages the products that have units, history included (6.4)"
+`);
+  assert.equal(rules[0]?.because, "the catalog pages the products that have units, history included (6.4)");
+});

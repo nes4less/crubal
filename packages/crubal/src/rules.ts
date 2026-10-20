@@ -4,7 +4,7 @@
 // derived, flagged, incomplete, complete and completeness.
 
 import { type Expr, evaluate, parseCondition, reads, type StateOf } from "./conditions.ts";
-import type { Dictionary, Facet } from "./defs.ts";
+import { type Dictionary, type Facet, unquote } from "./defs.ts";
 import { resolve } from "./dictionary.ts";
 import type { Json, JsonObject, Record } from "./model.ts";
 import type { RecordSet } from "./records.ts";
@@ -69,7 +69,8 @@ export function readRules(source: string): Rule[] {
     }
     const thenNode = get("then");
     if (!thenNode) throw new CrubalError(`the rule ${node.value} needs a then`, node.line);
-    const because = get("because")?.value;
+    // A printed `because` holding a comma or a colon comes back quoted (the printer quotes it); the quotes are not its text.
+    const because = get("because") ? unquote(get("because")?.value ?? "") : undefined;
     const version = get("version")?.value.trim();
     out.push(
       makeRule({
