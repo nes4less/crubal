@@ -1,0 +1,60 @@
+// A rollup over a compound's rows with a row filter (6.11): the disc count is the sum of the manifest's disc rows.
+// A rollup over a lower level reads the active records (6.4): the archived unit is left out of unitsOnHand, and
+// counted by unitsEver, whose filter names status.
+discCount#
+unitsOnHand#
+unitsEver#
+facet: manifest
+  type: compound
+  pick: any
+  facets:
+    manifestItem$
+    manifestItemType$
+    manifestQty#
+class: Boxed
+  facets:
+    manifest
+    discCount
+    unitsOnHand
+    unitsEver
+
+rule: discsCounted
+  for: Boxed
+  then: discCount is sum of manifest[*].manifestQty where manifestItemType is disc
+  strength: should
+rule: unitsOnHand
+  for: Boxed
+  then: unitsOnHand is count of unit::condition
+  strength: should
+rule: unitsEver
+  for: Boxed
+  then: unitsEver is count of unit::condition where status has
+  strength: should
+
+// The units are written first, so the product's own write reads them below it.
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+unit: U-20 of P-20 [origin: observed, via: L-2]
+  condition: NM
+unit: U-21 of P-20 [origin: observed, via: L-2]
+  crubal:status: archived [reason: legacy]
+  condition: G
+
+product: P-20 [origin: declared, via: L-1]
+  crubal:wears: Boxed
+  title: Combo pack
+  manifest:
+    - [row: m1]
+      manifestItem: Blu-ray disc
+      manifestItemType: disc
+      manifestQty: 2
+    - [row: m2]
+      manifestItem: DVD disc
+      manifestItemType: disc
+      manifestQty: 1
+    - [row: m3]
+      manifestItem: Keep case
+      manifestItemType: case
+      manifestQty: 1

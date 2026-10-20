@@ -1,0 +1,73 @@
+// A filter reads a compound's rows by child, alone and through a link (1.10 with the wildcard, 12): the
+// audio languages on the release, the board ratings on the works it carries.
+view: releases
+pick:
+  rating: R
+
+kind: work
+  levels: work
+workTitle$
+works&work* ordered
+facet: audio
+  type: compound
+  pick: any
+  facets:
+    language{English|French|Spanish}
+    codec$
+facet: ratings
+  type: compound
+  pick: any
+  facets:
+    board{MPAA|ESRB}
+    value$
+
+filter: language
+  facet: audio[*].language
+filter: rating
+  facet: works[*].ratings[*].value
+  buckets:
+    R: R
+    PG: PG
+
+shape: releaseCard
+  slots:
+    !title -> heading
+
+view: releases
+  select:
+    level: product
+  order: title
+  shape: releaseCard
+  filters: language, rating
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+work: W-1 [origin: declared, via: L-1]
+  workTitle: Die Hard
+  ratings:
+    - [row: r1]
+      board: MPAA
+      value: R
+work: W-2 [origin: declared, via: L-1]
+  workTitle: Airplane!
+  ratings:
+    - [row: r1]
+      board: MPAA
+      value: PG
+product: P-1 [origin: declared, via: L-1]
+  title: Die Hard
+  works: &W-1
+  audio:
+    - [row: a1]
+      language: English
+      codec: DTS
+    - [row: a2]
+      language: French
+product: P-2 [origin: declared, via: L-1]
+  title: Airplane!
+  works: &W-2
+  audio:
+    - [row: a1]
+      language: Spanish

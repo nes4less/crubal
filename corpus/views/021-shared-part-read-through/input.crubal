@@ -1,0 +1,37 @@
+// A view reads a shared part through its link (1.6, 1.10, 12): a release's card shows its works' titles and
+// genres, in the link's order, by the address works[*].workTitle.
+view: releases
+
+kind: work
+  levels: work
+workTitle$
+works&work* ordered
+
+shape: releaseCard
+  slots:
+    !title -> heading
+    works[*].workTitle -> works
+    works[*].genres -> genres
+
+view: releases
+  select:
+    level: product
+  order: title
+  shape: releaseCard
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+work: W-1 [origin: declared, via: L-1]
+  workTitle: Die Hard
+  genres: Drama
+work: W-2 [origin: declared, via: L-1]
+  workTitle: Airplane!
+  genres: Comedy
+product: P-1 [origin: declared, via: L-1]
+  title: Double feature
+  works: &W-1, &W-2
+product: P-2 [origin: declared, via: L-1]
+  title: Just comedy
+  works: &W-2

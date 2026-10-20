@@ -1,0 +1,39 @@
+// A write to a shared part stales the rows that read it through the link (12.6): the work's genres change,
+// so every release linking it is stale; a release linking another work is not.
+view: releases
+
+kind: work
+  levels: work
+workTitle$
+works&work* ordered
+
+shape: releaseCard
+  slots:
+    !title -> heading
+    works[*].genres -> genres
+
+view: releases
+  select:
+    level: product
+  order: title
+  shape: releaseCard
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+work: W-1 [origin: declared, via: L-1]
+  workTitle: Die Hard
+  genres: Drama
+work: W-2 [origin: declared, via: L-1]
+  workTitle: Airplane!
+  genres: Comedy
+product: P-1 [origin: declared, via: L-1]
+  title: Double feature
+  works: &W-1, &W-2
+product: P-2 [origin: declared, via: L-1]
+  title: Just comedy
+  works: &W-2
+product: P-3 [origin: declared, via: L-1]
+  title: Just drama
+  works: &W-1
