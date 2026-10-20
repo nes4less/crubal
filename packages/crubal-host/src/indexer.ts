@@ -3,7 +3,7 @@
 // pages, counts, partitions, role marks, search and indexability over the rows it holds. It is never the
 // truth: a contract checks the store, and the index can be dropped and rebuilt from the stream.
 
-import { Access } from "@cruba/crubal";
+import { facetOf, Access } from "@cruba/crubal";
 import type { Json, JsonObject } from "@cruba/crubal";
 import { type Nested, partitionOf, type StreamEntry, type View } from "@cruba/crubal";
 import type { Pool } from "@cruba/crubal-postgres";
@@ -107,7 +107,8 @@ export class Index {
     const f = p.views.filters.get(filter);
     if (!f) return [];
     if (f.buckets) return f.buckets.map((b) => b.name);
-    return (p.dict.facets.get(f.facet.replace(/^\w+::/, ""))?.values ?? []).map((v) => v.value);
+    // The facet an address finally reads: through a level prefix, a link step (works[*].genre) or a compound's child.
+    return (facetOf(f.facet, p.dict)?.values ?? []).map((v) => v.value);
   }
 
   /** Serve a page of a view (12.2, 12.3, 12.5) to a caller, from the rows the index holds. */
