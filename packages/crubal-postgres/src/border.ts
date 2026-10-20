@@ -265,15 +265,16 @@ export class PgBorder {
 
   /** The owner's offer (7.8), with the signed log entries its values came from, for another owner's take. */
   async offer(name: string, only?: string[]): Promise<Offer> {
-    const state = await this.store.state();
     const ex = new Exchange(this.o.dict, this.o.contracts, this.o.roles ?? [], this.o.rules ?? []);
-    ex.records = state.records;
-    const o = ex.offer(name, this.owner, only);
+    // An offer that names what it is `for` is answered by target; one that doesn't walks the owner's records
+    // (name `for:` on a large owner), and a request for named ids walks nothing.
+    const walks = !only && !this.contracts.get(name)?.parts.for;
+    const o = await this.store.read((s) => { ex.records = s.records; return ex.offer(name, this.owner, only); }, walks ? { allowAll: true } : {});
     // The wrapper names the package version the records were written under (3.8, 10.1): the installed
     // bundle that declares the offer contract.
     // The latest installed version of each package: the install log keeps every version it took.
     const latest = new Map<string, string>();
-    for (const i of state.installed) {
+    for (const i of await this.store.installed()) {
       const pkg = String(i.package);
       const version = String(i.version);
       if ((latest.get(pkg) ?? "") < version) latest.set(pkg, version);

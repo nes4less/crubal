@@ -112,12 +112,11 @@ export class Index {
     const owner = store.owner;
     // The caller's audience decides whether this view is theirs to read (14.4): never a higher one.
     // Access only when the package declares permissions or relations: loading the state costs with the catalog.
-    const needsAccess = p.perms.menu.size || p.perms.relations.size;
-    const state = needsAccess ? await store.state() : undefined;
-    const access = state ? new Access(p.dict, p.perms, state.records, [...state.edges.values()] as never[], owner) : undefined;
-    if (access) access.views = p.views;
+    // Access runs on a working set that loads the caller's records as it asks for them, never the catalog.
+    const needsAccess = !!(p.perms.menu.size || p.perms.relations.size);
+    const withAccess = <T>(fn: (access: Access) => T): Promise<T> => store.read((s) => { const a = new Access(p.dict, p.perms, s.records, [...s.edges.values()] as never[], owner); a.views = p.views; return fn(a); });
     const rank = (a: string) => ["public", "member", "staff", "owner"].indexOf(a);
-    const audience = o.caller ? (access ? access.audienceOf(o.caller) : "member") : "public";
+    const audience = o.caller ? (needsAccess ? await withAccess((a) => a.audienceOf(o.caller as string)) : "member") : "public";
     if (o.caller === owner) {
       // the owner reads everything
     } else if (rank(audience) < rank(v.show)) throw Object.assign(new Error(`${view} is for ${v.show}`), { status: 403 });
@@ -131,13 +130,22 @@ export class Index {
     let rows = (await this.pool.query(`select record, row, buckets, marks, ancestors, sort, pin from index_rows where ${where.join(" and ")}`, params)).rows as Row[];
     // Partition (12.6): a row is served when one of the caller's edges stands in the relation to it or an ancestor.
     const partition = partitionOf(v);
-    if (partition !== "none" && o.caller !== owner) {
-      if (!access || !o.caller) rows = [];
-      else rows = rows.filter((r) => (access as Access).standsIn(o.caller as string, String(r.record), partition));
-    }
-    // Role marks: a slot marked with a role the caller doesn't hold is dropped.
     const roles = new Set<string>();
-    if (access && o.caller && o.caller !== owner) for (const r of rows) for (const e of access.effective(o.caller, String(r.record)).edges) for (const g of e.grants) if (p.perms.presets.has(g)) roles.add(g);
+    if (partition !== "none" && o.caller !== owner && (!needsAccess || !o.caller)) rows = [];
+    else if (needsAccess && o.caller && o.caller !== owner) {
+      const caller = o.caller;
+      const kept = rows;
+      // One read for the page: the rows the caller stands in the relation to, and the roles they hold on them.
+      const out = await withAccess((a) => {
+        const served = partition !== "none" ? kept.filter((r) => a.standsIn(caller, String(r.record), partition)) : kept;
+        const held = new Set<string>();
+        // Role marks: a slot marked with a role the caller doesn't hold is dropped.
+        for (const r of served) for (const e of a.effective(caller, String(r.record)).edges) for (const g of e.grants) if (p.perms.presets.has(g)) held.add(g);
+        return { served, held };
+      });
+      rows = out.served;
+      for (const g of out.held) roles.add(g);
+    }
     const picks = o.picks ?? {};
     const inPick = (r: Row, filter: string) => {
       const chosen = picks[filter] ?? [];

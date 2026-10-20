@@ -21,6 +21,8 @@ export class Needs {
   readonly absent = new Set<string>();
   /** Every ID loaded, for the trace. */
   readonly loaded = new Set<string>();
+  /** When set, `all()` throws this message instead of asking for the whole catalog (a store with `wholeState: refuse`). */
+  refuseAll: string | undefined;
 
   want(key: string): void {
     if (!this.answered.has(key)) this.pending.add(key);
@@ -47,6 +49,7 @@ export class WorkingRecords extends MemoryRecords {
   }
 
   override all(): Record[] {
+    if (this.needs.refuseAll) throw new Error(this.needs.refuseAll);
     this.needs.want("all");
     return super.all();
   }

@@ -173,12 +173,11 @@ test("credentials: connected, expired, refreshed through the provider; the retry
   const edgeEntry = entries.find((e) => e.log === made.entry) as JsonObject;
   assert.equal(edgeEntry.witnessed, true);
   await logEmergencyRead(store, "platform.example:S-14", "P-1", "E-9001", "2026-10-16T02:01:00Z");
-  const state = await store.state();
-  assert.deepEqual(state.reads.map((r) => r.record), ["P-1"]);
+  assert.deepEqual((await store.emergencyReads()).map((r) => r.record), ["P-1"]);
   assert.ok((await store.entries()).at(-1)?.witnessed, "the read is witnessed");
   const ended = await endEmergencyEdge(store, "E-9001", "shop.example", "2026-10-16T02:02:00Z", true);
   assert.deepEqual(ended, { ended: true });
-  assert.equal((await store.state()).edges.has("E-9001"), false);
+  assert.equal((await store.edges()).some((e) => e.edge === "E-9001"), false);
   await assert.rejects(store.redact(String(made.entry)), /witnessed/, "a witnessed entry is never redacted");
   void createPrivateKey;
 });

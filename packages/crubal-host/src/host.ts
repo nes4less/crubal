@@ -56,6 +56,10 @@ export type HostOptions = {
   fresh?: "write" | "asked";
   /** Install unsigned bundles (development only). */
   allowUnsigned?: boolean;
+  /** Whether a store may load an owner's whole state on a request path; the default refuses (brief 18, the scale rule). */
+  wholeState?: "allow" | "refuse";
+  /** How many owners' stores the host keeps at once (least recently used go); 256 by default. */
+  storeCache?: number;
   /** Emergency terms (14.13), published in the well-known file, when the platform has them. */
   emergency?: EmergencyTerms;
   /** OAuth providers by credential name, for the connect flow and refresh. */
@@ -138,28 +142,27 @@ export class Host {
   }
 
   private async requireConnections(store: PgStore, owner: string, person: string): Promise<void> {
-    const [p, state] = await Promise.all([store.definitions(), store.state()]);
-    const access = new Access(p.dict, p.perms, state.records, [...state.edges.values()] as never[], owner);
-    const eff = access.effective(person, this.o.rootRecord ?? "ROOT");
+    const p = await store.definitions();
+    const eff = await store.read((s) => new Access(p.dict, p.perms, s.records, [...s.edges.values()] as never[], owner).effective(person, this.o.rootRecord ?? "ROOT"));
     if (eff.mode !== "admin" && !eff.items.has("connections")) throw Object.assign(new Error(`${person} may not manage ${owner}'s connections`), { status: 403 });
   }
 
   private async systemFor(store: PgStore, name: string): Promise<CrubalRecord | undefined> {
-    return (await store.state()).records.all().find((r) => r.kind === "system" && r.values.name === name);
+    return (await store.records({ kind: "system" })).find((r) => r.values.name === name);
   }
 
   /** The system record for a service, within ROOT, made or updated; the host's action names the person. */
   private async writeSystem(store: PgStore, owner: string, name: string, values: JsonObject, person?: string): Promise<string> {
-    const state = await store.state();
-    const existing = state.records.all().find((r) => r.kind === "system" && r.values.name === name);
-    const n = state.records.all().filter((r) => /^S-\d+$/.test(r.id)).map((r) => Number(r.id.slice(2))).reduce((a, b) => Math.max(a, b), 0);
+    const systems = await store.records({ kind: "system" });
+    const existing = systems.find((r) => r.values.name === name);
+    const n = systems.filter((r) => /^S-\d+$/.test(r.id)).map((r) => Number(r.id.slice(2))).reduce((a, b) => Math.max(a, b), 0);
     const id = existing?.id ?? `S-${n + 1}`;
     const at = this.now();
     await store.commit(
       { platform: "connection", ...(person ? { person } : {}) },
       (d) => {
         const root = this.o.rootRecord ?? "ROOT";
-        const base: CrubalRecord = existing ?? { id, kind: "system", level: "system", owner, ...(state.records.get(root) ? { within: root } : {}), values: { name, systemKind: "partner" }, sources: { "*": { origin: "observed", via: "host" } } };
+        const base: CrubalRecord = existing ?? { id, kind: "system", level: "system", owner, ...(d.records.get(root) ? { within: root } : {}), values: { name, systemKind: "partner" }, sources: { "*": { origin: "observed", via: "host" } } };
         const sources = { ...(base.sources ?? {}) };
         for (const k of Object.keys(values)) if (!sources[k]) sources[k] = { origin: "observed", via: "host" };
         d.records.set(id, { ...base, values: { ...base.values, ...values }, sources });
@@ -208,6 +211,17 @@ export class Host {
 
   async owners(): Promise<{ owner: string; public: string }[]> {
     return (await this.pool.query("select owner, public from host_owners order by created")).rows as { owner: string; public: string }[];
+  }
+
+  /** The owners a page at a time, for the loops: a host of thousands never holds them all at once. */
+  private async *eachOwner(page = 100): AsyncGenerator<{ owner: string; public: string }> {
+    let after = "";
+    for (;;) {
+      const rows = (await this.pool.query("select owner, public from host_owners where owner > $1 order by owner limit $2", [after, page])).rows as { owner: string; public: string }[];
+      for (const r of rows) yield r;
+      if (rows.length < page) return;
+      after = rows[rows.length - 1]?.owner ?? after;
+    }
   }
 
   private async keyOf(owner: string): Promise<{ public: string; private: string } | undefined> {
@@ -403,11 +417,20 @@ export class Host {
   /** One store per owner for the life of the host, so its definitions and state caches outlive a call (G6). */
   async storeFor(owner: string): Promise<PgStore> {
     const had = this.stores.get(owner);
-    if (had) return had;
+    if (had) {
+      // Most recently used last, so the first entry is the one to drop.
+      this.stores.delete(owner);
+      this.stores.set(owner, had);
+      return had;
+    }
     const key = await this.keyOf(owner);
     const signer = key ? (hash: string) => edSign(null, Buffer.from(hash, "hex"), createPrivateKey({ key: { kty: "OKP", crv: "Ed25519", x: key.public, d: key.private }, format: "jwk" })).toString("base64url") : undefined;
-    const store = new PgStore(this.pool, owner, { ...(signer ? { signer } : {}), hostedSigner: (o) => this.hostedSigner(o), ...(this.o.fresh ? { fresh: this.o.fresh } : {}), ...(this.o.allowUnsigned ? { allowUnsigned: true } : {}) });
-    if (key) this.stores.set(owner, store);
+    const store = new PgStore(this.pool, owner, { ...(signer ? { signer } : {}), hostedSigner: (o) => this.hostedSigner(o), ...(this.o.fresh ? { fresh: this.o.fresh } : {}), ...(this.o.allowUnsigned ? { allowUnsigned: true } : {}), wholeState: this.o.wholeState ?? "refuse" });
+    if (key) {
+      this.stores.set(owner, store);
+      const max = Math.max(1, this.o.storeCache ?? 256);
+      while (this.stores.size > max) this.stores.delete(this.stores.keys().next().value as string);
+    }
     return store;
   }
 
@@ -468,7 +491,7 @@ export class Host {
     if (to.some((p) => p !== "public" && p !== "link" && p !== "followers" && p !== "private" && (p === domain || p === callerId))) return true;
     if (to.includes("followers")) {
       const store = await this.storeFor(owner);
-      const edges = [...(await store.state()).edges.values()];
+      const edges = await store.edges();
       return edges.some((e) => (e.who === callerId || e.who === domain) && /^follow/.test(String(e.relation)));
     }
     return false;
@@ -513,7 +536,7 @@ export class Host {
       const verified = verifyBorder({ records: offer.records, ...(offer.log ? { log: offer.log } : {}) }, await this.resolveKeys(from));
       if (verified.verified !== true) { taken.push({ offer: name, stopped: "unverified", ...verified }); continue; }
       // The version gate (10.1): newer than ours is held until we upgrade; older is restamped through the recipes between.
-      const gate = versionGate(offer.package, (await store.state()).installed.map((i) => ({ package: String(i.package), version: String(i.version) })));
+      const gate = versionGate(offer.package, (await store.installed()).map((i) => ({ package: String(i.package), version: String(i.version) })));
       if (gate.kind === "hold") {
         const key = `version:${gate.package}`;
         const open = (await store.review()).some((it) => it.key === key && it.from === from && it.offer === name);
@@ -528,7 +551,7 @@ export class Host {
       }
       for (const presenter of offer.records) {
         const key = `take|${from}|${presenter.id}`;
-        let recordId = (await store.state()).bindings.get(key);
+        let recordId = await store.binding(key);
         if (!recordId) {
           // A record of ours for theirs: minted empty, bound by the presenter's id from now on.
           const n = (await this.pool.query("select count(*) as n from bindings where owner = $1 and key like 'take|%'", [owner])).rows[0] as { n: string };
@@ -553,7 +576,7 @@ export class Host {
    */
   async push(now = this.now(), owner?: string): Promise<JsonObject[]> {
     const out: JsonObject[] = [];
-    for (const o of owner ? [{ owner }] : await this.owners()) {
+    for await (const o of owner ? [{ owner }] : this.eachOwner()) {
       const store = await this.storeFor(o.owner);
       const border = await this.borderFor(o.owner, store);
       for (const c of border.contracts.values()) {
@@ -588,7 +611,7 @@ export class Host {
   /** Taken values past their terms (7.8), for every owner or one. */
   async expire(now = this.now(), owner?: string): Promise<JsonObject[]> {
     const out: JsonObject[] = [];
-    for (const o of owner ? [{ owner }] : await this.owners()) {
+    for await (const o of owner ? [{ owner }] : this.eachOwner()) {
       const border = await this.borderFor(o.owner);
       const ids = await border.expire(now, now);
       if (ids.length) out.push({ owner: o.owner, expired: ids });
@@ -622,7 +645,7 @@ export class Host {
    * when the target already has that version. The source's bundles were verified when it installed them.
    */
   async installFromOwner(target: string, source: string, pkg: string, version?: string, at = this.now()): Promise<JsonObject[]> {
-    const have = (await (await this.storeFor(target)).state()).installed.map((i) => `${i.package} /${i.version}`);
+    const have = (await (await this.storeFor(target)).installed()).map((i) => `${i.package} /${i.version}`);
     const rows = (await this.pool.query("select package, version, json from bundles where owner = $1", [source])).rows as { package: string; version: string; json: JsonObject }[];
     const find = (id: string, v?: string) => {
       const mine = rows.filter((r) => r.package === id || r.package === id.split("/").pop());
@@ -680,7 +703,7 @@ export class Host {
     const store = await this.storeFor(owner);
     // A dependency pinned to a version the owner already holds needs no publisher at all (the standard
     // packages a deployment took at provisioning, for one).
-    if (version && (await store.state()).installed.some((i) => i.package === pkg && String(i.version) === version)) return [];
+    if (version && (await store.installed()).some((i) => i.package === pkg && String(i.version) === version)) return [];
     const domain = pkg.split("/")[0] as string;
     const wk = await this.wellKnownOf(domain);
     const listed = ((wk.packages as JsonObject[] | undefined) ?? []).find((p) => p.package === pkg);
@@ -692,7 +715,7 @@ export class Host {
     if (seen.has(key)) throw new Error(`${key} extends itself through its dependencies`);
     seen.add(key);
     const out: JsonObject[] = [];
-    const installed = (await store.state()).installed;
+    const installed = await store.installed();
     if (installed.some((i) => i.package === pkg && String(i.version) === v)) return out;
     const bundle = await this.fetchJson(url);
     // A bundle names what it extends by short name within its own publisher, or by id across publishers.
@@ -765,7 +788,7 @@ export class Host {
   async wellKnown(): Promise<JsonObject> {
     const keys: JsonObject = {};
     const retired = (await this.pool.query("select owner, public, \"from\", until from host_keys order by until")).rows as { owner: string; public: string; from: string | null; until: string }[];
-    for (const o of await this.owners()) {
+    for await (const o of this.eachOwner()) {
       const old = retired.filter((k) => k.owner === o.owner).map((k): JsonObject => ({ alg: "Ed25519", public: k.public, ...(k.from ? { from: k.from } : {}), until: k.until }));
       if (!old.length) keys[o.owner] = { alg: "Ed25519", public: o.public };
       else keys[o.owner] = [...old, { alg: "Ed25519", public: o.public, from: (old.at(-1) as JsonObject).until as Json }];
@@ -783,7 +806,7 @@ export class Host {
   /** Publish every owner's stale rows. */
   async project(owner?: string, now = this.now()): Promise<{ [owner: string]: number }> {
     const out: { [owner: string]: number } = {};
-    for (const o of owner ? [{ owner }] : await this.owners()) {
+    for await (const o of owner ? [{ owner }] : this.eachOwner()) {
       const store = await this.storeFor(o.owner);
       const p = await store.projecting();
       if (!p?.views.views.size) { out[o.owner] = 0; continue; }
@@ -805,7 +828,7 @@ export class Host {
   /** Drain pending instructions (completion.md P) for every owner or one, at a rate per owner. */
   async drain(rate = 100, owner?: string, now = this.now()): Promise<JsonObject[]> {
     const out: JsonObject[] = [];
-    for (const o of owner ? [{ owner }] : await this.owners()) {
+    for await (const o of owner ? [{ owner }] : this.eachOwner()) {
       const r = await (await this.storeFor(o.owner)).drain(rate, now);
       if (r.applied.length || r.remaining) out.push({ owner: o.owner, applied: r.applied, remaining: r.remaining });
     }
@@ -818,7 +841,7 @@ export class Host {
    */
   async retry(now = this.now(), owner?: string): Promise<JsonObject[]> {
     const out: JsonObject[] = [];
-    for (const o of owner ? [{ owner }] : await this.owners()) {
+    for await (const o of owner ? [{ owner }] : this.eachOwner()) {
       const store = await this.storeFor(o.owner);
       const border = await this.borderFor(o.owner, store);
       const { rows } = await this.pool.query("select run, json from runs where owner = $1 and json->>'state' = 'failed'", [o.owner]);
@@ -842,7 +865,7 @@ export class Host {
   /** Run every scheduled contract's due ticks, for one owner or all. */
   async tick(now = this.now(), owner?: string): Promise<JsonObject[]> {
     const out: JsonObject[] = [];
-    for (const o of owner ? [{ owner }] : await this.owners()) {
+    for await (const o of owner ? [{ owner }] : this.eachOwner()) {
       const store = await this.storeFor(o.owner);
       const border = await this.borderFor(o.owner, store);
       for (const c of border.contracts.values()) {

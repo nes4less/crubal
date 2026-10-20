@@ -770,7 +770,8 @@ export class Exchange {
     const c = this.contracts.get(name);
     if (!c || c.kind !== "offer") throw new Error(`no offer ${name}`);
     const wears = c.parts.for;
-    const pool = only ? only.flatMap((id) => this.records.get(id) ?? []) : this.records.all();
+    // What the contract is `for` is asked for by target, never the whole catalog (brief 18, the scale rule).
+    const pool = only ? only.flatMap((id) => this.records.get(id) ?? []) : wears ? this.records.forTarget(wears) : this.records.all();
     const records: Record[] = [];
     for (const r of pool) {
       if (r.status?.state === "archived") continue;

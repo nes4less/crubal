@@ -99,8 +99,7 @@ export async function logEmergencyRead(store: PgStore, who: string, recordId: st
 
 /** End an emergency edge: the owner may, unless it cites a legal order; the attempt is recorded either way. */
 export async function endEmergencyEdge(store: PgStore, edgeId: string, by: string, now: string, isOwner: boolean): Promise<{ ended: boolean; reason?: string }> {
-  const state = await store.state();
-  const edge = state.edges.get(edgeId);
+  const edge = (await store.edges()).find((e) => e.edge === edgeId);
   if (!edge || edge.relation !== "emergency") throw new Error(`no emergency edge ${edgeId}`);
   const legal = (edge.emergency as JsonObject | undefined)?.kind === "legal";
   if (isOwner && legal) {

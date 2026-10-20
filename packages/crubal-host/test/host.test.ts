@@ -507,7 +507,7 @@ class: Noted
   assert.deepEqual(done.map((d) => d.installed), ["pub.example/base", "pub.example/ext"], "the dependency first");
   assert.equal(done[1]?.from, `${base}/ext/2026-10-01/package.json`);
   const store = await host.storeFor("adopter.example");
-  assert.deepEqual((await store.state()).installed.map((i) => `${i.package} /${i.version}`), ["pub.example/base /2026-10-01", "pub.example/ext /2026-10-01"]);
+  assert.deepEqual((await store.installed()).map((i) => `${i.package} /${i.version}`), ["pub.example/base /2026-10-01", "pub.example/ext /2026-10-01"]);
   // Again: nothing to do.
   assert.deepEqual((await call("POST", "/o/adopter.example/install", ownerKey, { package: "pub.example/ext" })).body.installed, []);
   // A tampered bundle is refused: the file's key doesn't sign it.

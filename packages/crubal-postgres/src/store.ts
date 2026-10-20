@@ -29,6 +29,12 @@ function draftOf(state: State): Draft {
 }
 
 export type StoreOptions = {
+  /**
+   * Whether `state()` and `records.all()` may load an owner's whole state. `refuse` is for a host serving
+   * requests: nothing on a request path may be proportional to the catalog (brief 18, the scale rule);
+   * rebuild, erase and an install's restamp read whole regardless, since they are what they are.
+   */
+  wholeState?: "allow" | "refuse";
   chain?: string;
   /** Definitions handed in instead of read from the store's installed bundles and define writes (tests). */
   projecting?: Projecting;
@@ -185,7 +191,7 @@ export class PgStore {
     const v = verifyBundle(bundle, bundle.sig ? keys : undefined);
     if (!v.valid) throw new Error(`${bundle.id}: the bundle doesn't verify (${v.reason})`);
     if (Number(bundle.crubal ?? 2) > 2) throw new Error(`${bundle.id} is written in CRUBAL ${bundle.crubal}, above this store's`);
-    const installed = (await this.state()).installed;
+    const installed = await this.installed();
     const have = (pkg: string) => installed.filter((i) => i.package === pkg).map((i) => String(i.version));
     for (const e of (bundle.extends as JsonObject[] | undefined) ?? []) {
       // Named by short name within the bundle's own publisher, or by id across publishers.
@@ -225,7 +231,7 @@ export class PgStore {
       const gone = new Set([...was.presets.keys(), ...was.menu.keys()].filter((n) => !own.presets.has(n) && !own.menu.has(n)));
       if (gone.size) {
         const now = at ?? new Date().toISOString();
-        const holding = [...installed.length ? (await this.state()).edges.values() : []].filter((e) => (!e.until || String(e.until) > now) && (e.grants as string[] | undefined)?.some((g) => gone.has(g)));
+        const holding = [...installed.length ? (await this.edges()) : []].filter((e) => (!e.until || String(e.until) > now) && (e.grants as string[] | undefined)?.some((g) => gone.has(g)));
         if (holding.length) throw new Error(`${bundle.id} /${bundle.version} drops ${[...gone].join(", ")}, which ${holding.map((e) => String(e.edge)).join(", ")} still grant; lapse or regrant them first`);
       }
     }
@@ -384,7 +390,8 @@ export class PgStore {
 
   /** The review items still open (9.5). */
   async review(): Promise<JsonObject[]> {
-    return openItems((await this.state()).reviews);
+    const { rows } = await this.pool.query("select json from review where owner = $1 order by ord", [this.owner]);
+    return openItems((rows as { json: JsonObject }[]).map((r) => r.json));
   }
 
   /**
@@ -449,25 +456,38 @@ export class PgStore {
    */
   async drain(rate = 100, at?: string): Promise<{ applied: string[]; remaining: number }> {
     const dict = (await this.definitions()).dict;
-    const s = await this.state();
-    const store = { records: s.records, bindings: s.bindings, instructions: s.instructions, review: s.reviews, edges: s.edges } as unknown as LifecycleStore;
-    const waiting = s.records.all().filter((r) => r.status?.state !== "archived" && pending(store, r).length > 0).map((r) => r.id);
+    // The records with an instruction still to apply, found by the tables (lifecycle.ts issuersFor: the
+    // parent's instructions, a kind's, a class's worn by the record or its parent), oldest first; never a
+    // walk of the catalog (brief 18, the scale rule).
+    const waitingSql = `
+      with ins as (select issuer, count(*)::int as n from instructions where owner = $1 group by issuer)
+      select r.id, r.ord from records r
+      where r.owner = $1 and coalesce(r.status ->> 'state', '') <> 'archived' and exists (
+        select 1 from ins i where coalesce((r.applied ->> i.issuer)::int, 0) < i.n and (
+          i.issuer = r."of"
+          or (i.issuer like 'kind:%' and split_part(substr(i.issuer, 6), '/', 1) = r.kind)
+          or (i.issuer like 'class:%' and (
+            split_part(substr(i.issuer, 7), '/', 1) = any(r.wears)
+            or split_part(substr(i.issuer, 7), '/', 1) = any(coalesce((select p.wears from records p where p.owner = r.owner and p.id = r."of"), '{}'::text[]))))))`;
+    const { rows } = await this.pool.query(`${waitingSql} order by r.ord limit $2`, [this.owner, rate]);
     const applied: string[] = [];
-    for (const id of waiting.slice(0, rate)) {
+    for (const row of rows as { id: string }[]) {
+      const id = String(row.id);
       const entry = await this.commit({ migration: "drain" }, (d) => { apply(d as unknown as LifecycleStore, id, dict); }, at);
       if (entry) applied.push(id);
     }
-    return { applied, remaining: Math.max(0, waiting.length - applied.length) };
+    const left = (await this.pool.query(`select count(*)::int as n from (${waitingSql}) w`, [this.owner])).rows[0] as { n: number };
+    return { applied, remaining: Number(left.n) };
   }
 
   /** What installing a version would restamp (10.4): per recipe and step, how many values change and how many go to review. */
   async dryRun(bundle: JsonObject): Promise<{ recipes: { from: string; to: string; steps: StepStats[]; review: number }[]; records: number }> {
-    const installed = (await this.state()).installed;
+    const installed = await this.installed();
     const previous = installed.filter((i) => i.package === bundle.id).map((i) => String(i.version)).at(-1);
     if (!previous) return { recipes: [], records: 0 };
     const next = readBundleOnto(bundle, await this.definitions(true));
     const own = readBundle(bundle);
-    const records = (await this.state()).records.all().filter((r) => ownRecord(own, r));
+    const records = (await this.whole()).records.all().filter((r) => ownRecord(own, r));
     const recipes = recipesBetween(next.recipes, String(bundle.package), previous, String(bundle.version)).map((r) => { const d = dryRun(records, r, next.dict); return { from: r.from, to: r.to, steps: d.steps, review: d.review }; });
     return { recipes, records: records.length };
   }
@@ -495,6 +515,12 @@ export class PgStore {
    * with a draft. (G6: Cashierfu carried this around the store until 0.1.15.)
    */
   async state(): Promise<State> {
+    if (this.options.wholeState === "refuse") throw new Error(`${this.owner}: the whole state is refused on a request path; read what is needed with read(), records(), installed(), edges() or openReview()`);
+    return this.whole();
+  }
+
+  /** The whole state regardless of the option: for rebuild, erase and an install's restamp. */
+  private async whole(): Promise<State> {
     const client = await this.pool.connect();
     try {
       const { rows } = await client.query("select head_seq from chains where owner = $1 and chain = $2", [this.owner, this.chain]);
@@ -526,6 +552,75 @@ export class PgStore {
     } finally {
       client.release();
     }
+  }
+
+  // ─── Reads that never load the whole state (brief 18, the scale rule) ─────
+
+  /**
+   * A read on a working set: `fn` runs on a state whose records, bindings and runs load as it asks for them
+   * (by id, level, parent, target or key), and runs again until it asked for nothing new; edges,
+   * instructions and the working package are loaded whole (they are small). The lists (reviews,
+   * observations, installed, reads) are not loaded here: the readers below serve them. `fn` MUST be pure.
+   */
+  async read<T>(fn: (s: State) => T, opts: { allowAll?: boolean } = {}): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      const needs = new Needs();
+      if (this.options.wholeState === "refuse" && !opts.allowAll) needs.refuseAll = `${this.owner}: records.all() asks for the whole catalog on a request path; ask by level, parent, target or key`;
+      const base = workingState(needs);
+      await loadWhole(client, this.owner, base);
+      const { out } = await settle(client, this.owner, base, fn);
+      return out;
+    } finally {
+      client.release();
+    }
+  }
+
+  /** Records by level, kind, parent, placement or one key's value, in log order; paged by `ord`. */
+  async records(where: { level?: string; kind?: string; of?: string; within?: string; key?: [string, Json] } = {}, opts: { limit?: number; after?: number; archived?: boolean } = {}): Promise<Record[]> {
+    const conds = ["owner = $1"];
+    const params: unknown[] = [this.owner];
+    const add = (sql: string, v: unknown) => { params.push(v); conds.push(sql.replace("?", `$${params.length}`)); };
+    if (where.level) add("level = ?", where.level);
+    if (where.kind) add("kind = ?", where.kind);
+    if (where.of) add('"of" = ?', where.of);
+    if (where.within) add("within = ?", where.within);
+    if (where.key) add(`doc -> 'values' -> '${where.key[0].replace(/'/g, "''")}' = ?::jsonb`, JSON.stringify(where.key[1]));
+    if (opts.archived === false) add("coalesce(status ->> 'state', '') <> ?", "archived");
+    if (opts.after !== undefined) add("ord > ?", opts.after);
+    const limit = opts.limit ? ` limit ${Math.max(1, Math.floor(opts.limit))}` : "";
+    const { rows } = await this.pool.query(`select * from records where ${conds.join(" and ")} order by ord${limit}`, params);
+    return (rows as { [column: string]: unknown }[]).map((r) => recordOf(r));
+  }
+
+  /** Every edge of the owner (small: people and their grants). */
+  async edges(): Promise<Edge[]> {
+    const { rows } = await this.pool.query("select json from edges where owner = $1 order by ord", [this.owner]);
+    return (rows as { json: Edge }[]).map((r) => r.json);
+  }
+
+  /** The install log: every version taken, in order. */
+  async installed(): Promise<JsonObject[]> {
+    const { rows } = await this.pool.query("select json from installed where owner = $1 order by ord", [this.owner]);
+    return (rows as { json: JsonObject }[]).map((r) => r.json);
+  }
+
+  /** The record a binding (`contract|ref`) names, if any. */
+  async binding(key: string): Promise<string | undefined> {
+    const { rows } = await this.pool.query("select record from bindings where owner = $1 and key = $2", [this.owner, key]);
+    return rows[0] ? String((rows[0] as { record: string }).record) : undefined;
+  }
+
+  /** The log of reads under an emergency edge (14.13), in order. */
+  async emergencyReads(): Promise<JsonObject[]> {
+    const { rows } = await this.pool.query("select json from reads where owner = $1 order by ord", [this.owner]);
+    return (rows as { json: JsonObject }[]).map((r) => r.json);
+  }
+
+  /** The observations on one record (9.7). */
+  async observationsOn(id: string): Promise<JsonObject[]> {
+    const { rows } = await this.pool.query("select json from observations where owner = $1 and json ->> 'on' = $2 order by ord", [this.owner, id]);
+    return (rows as { json: JsonObject }[]).map((r) => r.json);
   }
 
   private keptState: { seq: number; hosted: string; state: State } | undefined;
@@ -616,6 +711,7 @@ export class PgStore {
   /** An empty working state with the whole small tables in it; records, bindings and runs load as needed. */
   private async base(client: Client): Promise<State> {
     const needs = new Needs();
+    if (this.options.wholeState === "refuse") needs.refuseAll = `${this.owner}: records.all() asks for the whole catalog inside a commit on a request path; ask by level, parent, target or key`;
     this.trace = needs;
     const base = workingState(needs);
     await loadWhole(client, this.owner, base);

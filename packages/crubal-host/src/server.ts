@@ -271,7 +271,7 @@ async function respond(host: Host, req: Req, res: Res, seen: Seen): Promise<void
       return json(res, 200, (await endEmergencyEdge(store, name, callerId ?? "platform", at, isOwner)) as unknown as Json);
     }
     // A read under an emergency edge is logged, record by record (14.13).
-    const underEmergency = callerId ? [...(await store.state()).edges.values()].find((e) => e.who === callerId && e.relation === "emergency" && (typeof e.until !== "string" || e.until > at)) : undefined;
+    const underEmergency = callerId ? (await store.edges()).find((e) => e.who === callerId && e.relation === "emergency" && (typeof e.until !== "string" || e.until > at)) : undefined;
 
     // A view's page from the reference index (12.6.1): applied from the stream first, then served.
     if (what === "v" && name && method === "GET") {
@@ -328,11 +328,12 @@ async function respond(host: Host, req: Req, res: Res, seen: Seen): Promise<void
       if (underEmergency && callerId) await logEmergencyRead(store, callerId, name, String(underEmergency.edge), at);
       const p = await store.definitions();
       // What the caller may see (14.6): with a permission menu declared, a facet needs the caller's `see` item.
-      const state = p.perms.menu.size ? await store.state() : undefined;
-      const access = state ? new Access(p.dict, p.perms, state.records, [...state.edges.values()] as never[], owner) : undefined;
-      if (access) access.views = p.views;
       const values: JsonObject = {};
-      for (const [k, v] of Object.entries(r.values)) if (!access || isOwner || access.may(callerId, "see", k, r.id)) values[k] = v;
+      if (!p.perms.menu.size || isOwner) for (const [k, v] of Object.entries(r.values)) values[k] = v;
+      else {
+        const seen = await store.read((s) => { const a = new Access(p.dict, p.perms, s.records, [...s.edges.values()] as never[], owner); a.views = p.views; return Object.keys(r.values).filter((k) => a.may(callerId, "see", k, r.id)); });
+        for (const k of seen) values[k] = r.values[k] as Json;
+      }
       const { sources, ...plain } = r as unknown as JsonObject;
       return json(res, 200, q("full") ? { ...plain, values, sources: sources ?? {} } : { ...plain, values });
     }
@@ -340,12 +341,14 @@ async function respond(host: Host, req: Req, res: Res, seen: Seen): Promise<void
       const border = await host.borderFor(owner, store);
       const c = border.contracts.get(name);
       if (!c || c.kind !== "form") throw new HttpError(404, `no form ${name}`);
-      const state = await store.state();
       const p = await store.definitions();
-      const record = q("record") ? state.records.get(q("record") as string) : undefined;
-      const access = p.perms.menu.size ? new Access(p.dict, p.perms, state.records, [...state.edges.values()] as never[], owner) : undefined;
-      if (access) access.views = p.views;
-      return json(res, 200, formOf(c, record, p.dict, { records: state.records, ...(callerId ? { caller: callerId } : {}), ...(access ? { access } : {}) }));
+      const form = await store.read((s) => {
+        const record = q("record") ? s.records.get(q("record") as string) : undefined;
+        const access = p.perms.menu.size ? new Access(p.dict, p.perms, s.records, [...s.edges.values()] as never[], owner) : undefined;
+        if (access) access.views = p.views;
+        return formOf(c, record, p.dict, { records: s.records, ...(callerId ? { caller: callerId } : {}), ...(access ? { access } : {}) });
+      });
+      return json(res, 200, form);
     }
     if (what === "stream" && name) {
       const border = await host.borderFor(owner, store);
@@ -439,7 +442,7 @@ async function respond(host: Host, req: Req, res: Res, seen: Seen): Promise<void
       if (hostedId) {
         // A person erases their own records: the writes in their chain, and the domain's state follows.
         const domainStore = await host.storeFor(domain);
-        const r = (await domainStore.state()).records.get(name);
+        const r = await domainStore.get(name);
         if (!r || r.owner !== owner) throw new HttpError(403, `${name} isn't ${owner}'s`);
         return json(res, 200, (await domainStore.erase(name)) as unknown as Json);
       }
