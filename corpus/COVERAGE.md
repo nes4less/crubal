@@ -21,6 +21,8 @@ a new MUST or a new case updates this file.
 | 1.6 | an empty list is never written | reader/003-lists (print), reader-errors/e02-empty-list-item |
 | 1.6 | an identity child is a link | dictionary-errors/d03-identity-not-link |
 | 1.6 | a minted row key is never reused | store/008-row-matching, reader-errors/e06-duplicate-row |
+| 1.6, 1.10 | a shared part is read through its link: `works[*].genres` in a slot, a filter, a condition | views/021-shared-part-read-through, views/022-rows-by-child |
+| 1.10 | a compound's rows are read by child with the wildcard, alone and through a link | views/022-rows-by-child |
 | 1.8 | `row`, `origin`, `via`, `owner` never qualifier keys | reader-errors/e09-reserved-qualifier, dictionary-errors/d12-reserved-child |
 | 2.1 | a tab in indentation is refused | reader-errors/e01-tab-indent |
 | 2.2 | unknown top-level keys refused | reader-errors/e05-unknown-top-level |
@@ -65,6 +67,9 @@ a new MUST or a new case updates this file.
 | 6.6 | `must` global rules enforced at the Rules level | rules/005-rollup-and-unique, rules/010-unique-per-level |
 | 6.8 | no cycle, no contradiction, one spelling, the order said | rules-errors/r01-cycle, r02-contradiction, r03-two-spellings, rules/003-undetermined |
 | 6.11 | events and current values give the same results | rules/001-fill-and-derive, store/013-replay |
+| 6.11 | an aggregate over a compound's rows, with a row filter | rules/011-rows-and-archived |
+| 6.4 | a rollup over a lower level reads the active records; a filter naming `status` reads the archived too | rules/011-rows-and-archived |
+| 12.6 | a write to a shared part stales the rows that read it through the link | views/023-shared-part-stale |
 | 7.3 | our side of a value map is a real value | exchange-errors/x01-value-map-to-alias |
 | 7.5 | never act twice for one key | exchange/006-idempotency, exchange/020-send-restart-once |
 | 7.6 | no secret in CRUBAL text or JSON | exchange/005-who (credentials by name); by construction: contracts name credentials, the host holds them |

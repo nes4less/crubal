@@ -60,12 +60,15 @@ test      = path " is " value                      ; equals
           / path " is " state                      ; a value's state (6.3.2)
 path      = address / aggregate / envelope
 envelope  = "id" / "level" / "of" / "within" / "status"   ; the record's envelope (chapter 1.1); "status" is its state
-aggregate = combine " of " address                 ; "worst of parts[*].condition"
-          / ( "count" / "least" / "most" ) " of " address   ; how many · smallest · largest
+aggregate = combine " of " address [ " where " condition ]      ; "worst of parts[*].condition"
+          / ( "count" / "least" / "most" ) " of " address [ " where " condition ]   ; how many · smallest · largest
 ```
 
-- **Addresses** are chapter 1.10's, plus the wildcard `[*]` for every row or part, and the level prefix
-  (`unit::condition`) to read a lower level from above. A path MAY start with `caller.` (the caller, chapter
+- **Addresses** are chapter 1.10's, plus the wildcard `[*]` for every row or part, the level prefix
+  (`unit::condition`) to read a lower level from above, and a step through a link facet
+  (`works[*].genres`) to read shared parts (1.6). An aggregate over a compound's rows or a record's parts
+  MAY carry a row filter, `where` and a condition read against each row: `count of Manifest[*] where
+  manifestItemType is disc`; a bare `Manifest[*]` counts rows. A path MAY start with `caller.` (the caller, chapter
   7.6) or `context.` (a page's record, chapter 12.2) to read another record than the one the condition is
   on; `caller` and `context` alone, before `wears` or `may`, name that record itself.
 - **Envelope fields** read as paths: `status` is `active` for a record that has none, so `not status is
@@ -131,6 +134,9 @@ contract: aiTitle
 - A **fill** produces only at `suggest`. At `must` and `should`, a plain value is a check.
 - A **derivation** or **rollup** produces at every strength. The engine writes it, recomputes it whenever
   what it reads changes, and stores it with `origin: derived` and the rule as its `via`.
+- A rollup over a lower level (`count of unit::cashierfuId`) reads the **active** records below, as views
+  do (1.12); merged ones never. A row filter that names `status` reads the archived too: `count of
+  unit::cashierfuId where status has` counts a product's units with history included.
 - A production writes only at a level where its key is stored: the top level, or a level where the key
   varies (chapter 1.7). Below that, records read the produced value through, as they read any other.
 - A person who edits a produced value **adopts** it (✎, chapter 8): the value stops following the rule

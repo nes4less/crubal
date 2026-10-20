@@ -1,0 +1,4 @@
+[
+  { "record": "P-1", "heading": "Double feature", "works": ["Die Hard", "Airplane!"], "genres": ["Drama", "Comedy"] },
+  { "record": "P-2", "heading": "Just comedy", "works": ["Airplane!"], "genres": ["Comedy"] }
+]

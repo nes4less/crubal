@@ -1,0 +1,5 @@
+[
+  { "record": "P-20", "result": "derived", "address": "discCount", "value": "3", "rule": "discsCounted" },
+  { "record": "P-20", "result": "derived", "address": "unitsOnHand", "value": "1", "rule": "unitsOnHand" },
+  { "record": "P-20", "result": "derived", "address": "unitsEver", "value": "2", "rule": "unitsEver" }
+]

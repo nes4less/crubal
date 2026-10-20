@@ -1,0 +1,8 @@
+{
+  "records": ["P-1"],
+  "counts": {
+    "language": { "English": 1, "French": 1, "Spanish": 0 },
+    "rating": { "R": 1, "PG": 1 }
+  },
+  "indexable": false
+}
