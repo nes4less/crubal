@@ -117,3 +117,49 @@ test("a derived value keeps following its rule across engines (its source says d
   assert.equal(e2.readsLowerLevels, true);
   assert.equal(new Engine(shop, []).readsLowerLevels, false);
 });
+
+// ─── Rollups over a compound's rows (6.11): a count of the manifest's disc rows, with a row filter ─────────
+const manifestDefs = readDefinitions(`
+kind: item
+  levels: product
+title$
+discCount#
+facet: Manifest
+  type: compound
+  pick: any
+  facets:
+    manifestItem$
+    manifestItemType$
+    qty#
+`);
+const manifestRules = readRules(`rule: discsCounted
+  then: discCount is sum of Manifest[*].qty where manifestItemType is disc
+  strength: should
+`);
+test("a rollup reads the rows of the record's own compound, filtered by a row condition", () => {
+  const m = new MemoryRecords();
+  const rec: Record = { id: "P-1", kind: "item", level: "product", owner: "t", values: { title: "Combo", Manifest: [
+    { manifestItem: "DVD disc", manifestItemType: "disc", qty: "1" },
+    { manifestItem: "Blu-ray disc", manifestItemType: "disc", qty: "2" },
+    { manifestItem: "Keep case", manifestItemType: "case", qty: "1" },
+  ] } };
+  m.set(rec.id, rec);
+  const e = new Engine(manifestDefs, manifestRules, () => m);
+  e.put(rec);
+  const out = e.write({ ...rec });
+  assert.equal(out.find((r) => r.result === "derived" && r.address === "discCount")?.value, "3", "two disc rows, quantities 1 and 2; the case row is filtered out");
+  const counted = readRules(`rule: rowsCounted
+  then: discCount is count of Manifest[*] where manifestItemType is disc
+  strength: should
+`);
+  const e2 = new Engine(manifestDefs, counted, () => m);
+  e2.put(rec);
+  assert.equal(e2.write({ ...rec }).find((r) => r.result === "derived" && r.address === "discCount")?.value, "2", "a bare [*] counts rows");
+  const none = readRules(`rule: rowsCounted
+  then: discCount is count of Manifest[*].qty
+  strength: should
+`);
+  const e3 = new Engine(manifestDefs, none, () => m);
+  e3.put(rec);
+  assert.equal(e3.write({ ...rec }).find((r) => r.result === "derived" && r.address === "discCount")?.value, "3", "without a filter every row counts");
+});

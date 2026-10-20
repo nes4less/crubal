@@ -165,6 +165,14 @@ export function visibleTo(set: Pick<ViewSet, "shown" | "shownFor">, facet: strin
 }
 
 /** The keys a slot's source reads. */
+/** The key an address finally reads: past a level prefix, `parts[*].`, and a step through a link facet (1.6, 1.10). */
+export function leafOf(address: string, dict?: Pick<Dictionary, "facets">): string {
+  const base = address.replace(/^\w+::/, "").replace(/^parts\[\*\]\./, "");
+  const m = base.match(/^(\w+)(?:\[\*\])?\.(.+)$/);
+  if (m && (!dict || dict.facets.get(m[1] as string)?.type === "link")) return leafOf(m[2] as string, dict);
+  return base;
+}
+
 function slotKeys(from: string): string[] {
   if (from.startsWith('"')) return [...(JSON.parse(from) as string).matchAll(/\{([^{}]+)\}/g)].flatMap((m) => (m[1] as string).split("??").map((k) => k.trim().replace(/\?$/, "")));
   const agg = from.match(/^(?:count|least|most|sum|best|worst|join) of (\S+)$/);
@@ -174,10 +182,10 @@ function slotKeys(from: string): string[] {
 // ─── Publish checks (12.8) ───────────────────────────────────────────────────
 
 export function checkViews(set: ViewSet, dict: Dictionary): void {
-  const defined = (k: string) => dict.facets.has(k.replace(/^\w+::/, "").replace(/^parts\[\*\]\./, ""));
+  const defined = (k: string) => dict.facets.has(leafOf(k, dict));
   for (const f of set.filters.values()) {
     if (!defined(f.facet)) throw new CrubalError(`the filter ${f.name} reads ${f.facet}, which isn't a facet`, f.line);
-    const facet = dict.facets.get(f.facet.replace(/^\w+::/, ""));
+    const facet = dict.facets.get(leafOf(f.facet, dict));
     const seen = new Map<string, string>();
     f.buckets?.forEach((b, i) => {
       for (const v of b.values ?? []) {
@@ -211,7 +219,7 @@ export function checkViews(set: ViewSet, dict: Dictionary): void {
         ...v.shapes.flatMap((s) => (set.shapes.get(s)?.slots ?? []).flatMap((sl) => slotKeys(sl.from))),
         ...v.filters.map((f) => set.filters.get(f)?.facet ?? f),
       ];
-      const hidden = reads.find((k) => !visibleTo(set, k, "public"));
+      const hidden = reads.find((k) => !visibleTo(set, leafOf(k, dict), "public"));
       if (hidden) throw new CrubalError(`the public view ${v.name} reads ${hidden}, which show rules hide from public`, v.line);
     }
   }
@@ -301,8 +309,34 @@ export class Views {
     return this.records.childrenOf(r.id, "of", level);
   }
 
+  /**
+   * The records a link facet points at: shared parts, read through (1.6). A link into a vocabulary (`wd`,
+   * `gpc`) or to a url points at no record here and reads nothing.
+   */
+  private linked(r: Record, link: string): Record[] {
+    const f = this.dict.facets.get(link);
+    if (!f || f.type !== "link" || !f.to || !(this.dict.kinds.has(f.to) || this.dict.classes.has(f.to))) return [];
+    const v = this.effective(r)[link];
+    const items = v === undefined ? [] : Array.isArray(v) ? v : [v];
+    return items.flatMap((x) => {
+      const id = isObj(x) && "$link" in x ? String(x.$link) : typeof x === "string" ? x : "";
+      const t = id ? this.records.get(id) : undefined;
+      return t && t.status?.state !== "archived" ? [t] : [];
+    });
+  }
+
+  /** An address whose first step is a link facet (`works[*].genre`, `work.title`): the link and the rest. */
+  private linkStep(address: string): { link: string; rest: string } | null {
+    const m = address.match(/^(\w+)(?:\[\*\])?\.(.+)$/);
+    if (!m) return null;
+    return this.dict.facets.get(m[1] as string)?.type === "link" ? { link: m[1] as string, rest: m[2] as string } : null;
+  }
+
   /** The values an address reads, as a list: own values, or a lower level's (`unit::price`). */
   private valuesAt(r: Record, address: string): Json[] {
+    // A step through a link facet reads the linked records (shared parts, 1.6), each by the rest of the address.
+    const ls = this.linkStep(address);
+    if (ls) return this.linked(r, ls.link).flatMap((t) => this.valuesAt(t, ls.rest));
     const m = address.match(/^(\w+)::(.+)$/);
     // A level prefix reads the records below at that level, or the record itself when it sits there
     // (a standing-alone lower record answers for its own level, 1.7).
@@ -316,12 +350,13 @@ export class Views {
   private fit(key: string, v: Json, audience: string): boolean {
     if (audience !== "public") return true;
     if (isObj(v) && "$empty" in v) return v.$empty === "n/a";
-    const f = this.dict.facets.get(key.replace(/^\w+::/, ""));
+    const f = this.dict.facets.get(leafOf(key, this.dict));
     if (f?.type === "choice" && typeof v === "string") return (f.values ?? []).some((x) => x.value === v);
     return true;
   }
 
-  private canSee(key: string, audience: string, caller?: Record, record?: Record): boolean {
+  private canSee(address: string, audience: string, caller?: Record, record?: Record): boolean {
+    const key = leafOf(address, this.dict);
     if (!visibleTo(this.set, key, audience, record, this.dict)) return false;
     if (!caller || rankOf(audience) <= rankOf("member")) return true;
     // Above member, a person sees what members see plus what their roles grant (default deny).
@@ -330,7 +365,7 @@ export class Views {
     const names = (Array.isArray(held) ? held : held ? [held] : []).map((x) => (isObj(x) && "$link" in x ? String(x.$link) : String(x)));
     return names.some((n) => {
       const role = this.set.roles.get(n);
-      return role && role.see.includes(key.replace(/^\w+::/, "")) && rankOf(role.audience) <= rankOf(audience);
+      return role && role.see.includes(key) && rankOf(role.audience) <= rankOf(audience);
     });
   }
 
@@ -349,12 +384,13 @@ export class Views {
       if (agg[1] === "most") return sorted.at(-1);
       return items;
     }
-    const f = this.dict.facets.get(s.from.replace(/^\w+::/, ""));
-    const v = s.from.includes("::") ? this.valuesAt(r, s.from) : this.effective(r)[s.from];
-    if (v === undefined) return undefined;
+    const f = this.dict.facets.get(leafOf(s.from, this.dict));
+    const through = s.from.includes("::") || this.linkStep(s.from) !== null;
+    const v = through ? this.valuesAt(r, s.from) : this.effective(r)[s.from];
+    if (v === undefined || (Array.isArray(v) && !v.length)) return undefined;
     if (Array.isArray(v)) {
       const kept = v.filter((x) => this.fit(s.from, x, audience));
-      return kept.length ? (f?.many || s.from.includes("::") ? kept : kept[0]) : undefined;
+      return kept.length ? (f?.many || through ? kept : kept[0]) : undefined;
     }
     return this.fit(s.from, v, audience) ? v : undefined;
   }
@@ -365,7 +401,22 @@ export class Views {
    */
   private conditionValues(r: Record): JsonObject {
     const status = r.status?.state ?? "active";
-    return { id: r.id, status, "crubal:id": r.id, "crubal:status": status, ...this.effective(r) };
+    const own = this.effective(r);
+    const out: JsonObject = { id: r.id, status, "crubal:id": r.id, "crubal:status": status, ...own };
+    // The linked records' values, addressed through the link (`works[*].genre`, `works.genre`), so a
+    // condition reads a shared part as it reads a level below (1.6).
+    for (const key of Object.keys(own)) {
+      if (this.dict.facets.get(key)?.type !== "link") continue;
+      const targets = this.linked(r, key);
+      if (!targets.length) continue;
+      const merged: { [k: string]: Json[] } = {};
+      for (const t of targets) for (const [k, v] of Object.entries(this.effective(t))) (merged[k] ??= []).push(...(Array.isArray(v) ? v : [v]));
+      for (const [k, list] of Object.entries(merged)) {
+        out[`${key}[*].${k}`] = list;
+        out[`${key}.${k}`] = list.length === 1 ? (list[0] as Json) : list;
+      }
+    }
+    return out;
   }
 
   /** The values of the view's order keys as text, and the pin position: what an index orders rows by (12.7). */
@@ -454,7 +505,7 @@ export class Views {
 
   private bucketsOf(f: Filter): Bucket[] {
     if (f.buckets) return f.buckets;
-    const facet = this.dict.facets.get(f.facet.replace(/^\w+::/, ""));
+    const facet = this.dict.facets.get(leafOf(f.facet, this.dict));
     return (facet?.values ?? []).map((v) => ({ name: v.value, values: [v.value] }));
   }
 
@@ -702,6 +753,14 @@ export class Views {
       if (reads.has(key) && v.level && write.level !== v.level) {
         for (const r of this.records.childrenOf(write.id, "of", v.level)) out.add(r.id);
       }
+    }
+    // A write to a shared part stales the rows that read it through a link (1.6, 12.6): the linking records.
+    for (const read of reads) {
+      const ls = this.linkStep(read);
+      if (!ls) continue;
+      if (!envelope && !(leafOf(ls.rest, this.dict) in write.values)) continue;
+      const linkers = [...this.records.byKey(ls.link, { $link: write.id }), ...this.records.byKey(ls.link, [{ $link: write.id }])];
+      for (const r of linkers) if (!v.level || r.level === v.level) out.add(r.id);
     }
     // A write to the list's items (12.2) stales every row: those it holds now, and those it will hold.
     if (v.list && write.id === v.list) {

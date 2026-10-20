@@ -83,7 +83,15 @@ export class MemoryRecords extends Map<string, Record> implements RecordSet {
   }
 
   byKey(key: string, value: Json, level?: string): Record[] {
-    const want = serialize(value);
-    return [...this.values()].filter((r) => (level === undefined || r.level === level) && r.values[key] !== undefined && serialize(r.values[key] as Json) === want);
+    // Holds the value: equal to it, or a list holding it (or every item of it), as the store's containment answers.
+    const wanted = Array.isArray(value) ? value.map(serialize) : [serialize(value)];
+    const holds = (v: Json) => {
+      const s = serialize(v);
+      if (s === serialize(value)) return true;
+      if (!Array.isArray(v)) return false;
+      const have = new Set(v.map(serialize));
+      return wanted.every((w) => have.has(w));
+    };
+    return [...this.values()].filter((r) => (level === undefined || r.level === level) && r.values[key] !== undefined && holds(r.values[key] as Json));
   }
 }

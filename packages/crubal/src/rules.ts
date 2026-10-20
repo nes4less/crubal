@@ -30,7 +30,10 @@ export type Rule = {
   shortcut?: boolean;
 };
 
-const AGG = /^(join|sum|best|narrow|worst|deduct|replace|keep|count|least|most) of (\S+)$/;
+// An aggregate: `<combine> of <address>`, the address a lower level (`unit::key`), the record's own parts
+// (`parts[*].key`) or the rows of one of its many-valued compounds (`Manifest[*].qty`, 6.11), with an optional
+// row filter (`… where manifestItemType is disc`) read against each row.
+const AGG = /^(join|sum|best|narrow|worst|deduct|replace|keep|count|least|most) of (\S+)(?: where (.+))?$/;
 const isObj = (v: Json | undefined): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);
 
 function production(thenText: string, strength: Strength): Rule["produces"] {
@@ -111,7 +114,12 @@ function readsOf(r: Rule): string[] {
     }
   }
   // A rollup reads its parts' addresses (parts[*].condition), not the key it produces on the whole.
-  if (r.produces?.kind === "rollup") keys.push(r.produces.right.match(AGG)?.[2] ?? "");
+  if (r.produces?.kind === "rollup") {
+    const address = r.produces.right.match(AGG)?.[2] ?? "";
+    // Rows of the record's own compound: the rollup reads that compound (the key before `[*]`).
+    const rows = address.match(/^(\w+)\[\*\](?:\.(\w+))?$/);
+    keys.push(rows && rows[1] !== "parts" ? (rows[1] as string) : address);
+  }
   return keys.map((k) => k.replace(/^\w+::/, ""));
 }
 
@@ -543,11 +551,23 @@ export class Engine {
     if (!m) return undefined;
     const how = m[1] as string;
     const address = m[2] as string;
+    const where = m[3] ? parseCondition(m[3]) : null;
     const lower = address.match(/^(\w+)::(.+)$/);
-    const key = lower ? (lower[2] as string) : address.replace(/^parts\[\*\]\./, "");
-    const raw: (Json | undefined)[] = lower
-      ? this.descendants(rec, lower[1] as string).map((d) => d.values[key])
-      : (rec.parts ?? []).map((p) => (isObj(p) && isObj(p.values) ? p.values[key] : undefined));
+    const rows = lower ? null : address.match(/^(\w+)\[\*\](?:\.(\w+))?$/);
+    const key = lower ? (lower[2] as string) : rows && rows[1] !== "parts" ? (rows[2] as string | undefined) ?? "" : address.replace(/^parts\[\*\]\./, "");
+    let raw: (Json | undefined)[];
+    if (lower) raw = this.descendants(rec, lower[1] as string).map((d) => d.values[key]);
+    else if (rows && rows[1] !== "parts") {
+      // The rows of one of the record's own compounds (6.11): a count needs no child; a filter reads each row.
+      const list = rec.values[rows[1] as string];
+      const all = (Array.isArray(list) ? list : list === undefined ? [] : [list]).filter(isObj);
+      const kept = where ? all.filter((row) => evaluate(where, row, undefined, this.now) === true) : all;
+      raw = kept.map((row) => (key ? row[key] : row));
+    } else {
+      const parts = (rec.parts ?? []).filter((p): p is JsonObject => isObj(p) && isObj(p.values));
+      const kept = where ? parts.filter((p) => evaluate(where, p.values as JsonObject, undefined, this.now) === true) : parts;
+      raw = kept.map((p) => (p.values as JsonObject)[key]);
+    }
     const items = raw.filter((v): v is Json => v !== undefined && !(isObj(v) && "$empty" in v));
     if (how === "count") return String(items.length);
     if (!items.length) return undefined;
