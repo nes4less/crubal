@@ -263,15 +263,30 @@ export class Index {
       } else {
         const all = build();
         total = Number((await this.pool.query(`select count(*) as n from index_rows where ${all.sql}`, all.ps)).rows[0]?.n ?? 0);
+        // The listed filters the picks don't name share one condition (every pick), so they are tallied in one
+        // pass over the buckets document: one scan for all of them, not one each (a catalog of 300,000 rows
+        // with twenty filters took a scan per filter, seconds a page). A picked filter is tallied over the rows
+        // the other picks select, so it keeps a pass of its own; an unlisted one counts only the names asked.
+        const picked = new Set(pickList.map(([f]) => f));
+        const shared = v.filters.filter((f) => this.namesFor(p, f, o) && !this.unlisted(p, f) && !picked.has(f));
+        if (shared.length) {
+          const q = build(undefined, [shared]);
+          const tally = (await this.pool.query(`select e.key as filter, b.value as bucket, count(*) as n from index_rows, jsonb_each(buckets) e, jsonb_array_elements_text(e.value) b where ${q.sql} and e.key = any($${q.ps.length}) group by e.key, b.value`, q.ps)).rows as { filter: string; bucket: string; n: string }[];
+          const by = new Map<string, Map<string, number>>();
+          for (const t of tally) (by.get(t.filter) ?? by.set(t.filter, new Map()).get(t.filter))?.set(t.bucket, Number(t.n));
+          for (const f of shared) counts[f] = Object.fromEntries(this.bucketNames(p, f).map((b) => [b, by.get(f)?.get(b) ?? 0]));
+        }
         for (const f of v.filters) {
           const names = this.namesFor(p, f, o);
           if (!names) continue;
           const but = build(f);
           // An unlisted filter counts only the names asked for, inside the query, not after it.
           const asked = this.unlisted(p, f) ? ` and b.value = any($${but.ps.push(names)})` : "";
-          const tally = (await this.pool.query(`select b.value as bucket, count(*) as n from index_rows, jsonb_array_elements_text(buckets -> '${f.replace(/'/g, "''")}') b where ${but.sql}${asked} group by b.value`, but.ps)).rows as { bucket: string; n: string }[];
-          const by = new Map(tally.map((t) => [t.bucket, Number(t.n)]));
-          counts[f] = Object.fromEntries(names.map((b) => [b, by.get(b) ?? 0]));
+          if (!counts[f]) {
+            const tally = (await this.pool.query(`select b.value as bucket, count(*) as n from index_rows, jsonb_array_elements_text(buckets -> '${f.replace(/'/g, "''")}') b where ${but.sql}${asked} group by b.value`, but.ps)).rows as { bucket: string; n: string }[];
+            const by = new Map(tally.map((t) => [t.bucket, Number(t.n)]));
+            counts[f] = Object.fromEntries(names.map((b) => [b, by.get(b) ?? 0]));
+          }
           // The sums a filter names (12.3): the facet's slot on the row totalled per bucket, money by its amount.
           const summed = (p.views.filters.get(f)?.sums ?? []).map((facet) => ({ facet, slot: this.slotOf(p, v, facet) })).filter((x): x is { facet: string; slot: string } => !!x.slot);
           if (summed.length) {
