@@ -278,8 +278,14 @@ async function respond(host: Host, req: Req, res: Res, seen: Seen): Promise<void
       const index = new Index(host.pool);
       await index.apply(store, name);
       const picks: { [filter: string]: string[] } = {};
-      for (const [k, val] of url.searchParams) if (!["page", "q", "shape"].includes(k)) picks[k] = val.split(",").map((x) => x.trim()).filter(Boolean);
-      const page = await index.serve(store, name, { ...(q("page") ? { page: Number(q("page")) } : {}), ...(Object.keys(picks).length ? { picks } : {}), ...(q("q") ? { q: q("q") as string } : {}), ...(q("shape") ? { shape: q("shape") as string } : {}), ...(callerId ? { caller: callerId } : {}) });
+      for (const [k, val] of url.searchParams) if (!["page", "q", "shape", "count"].includes(k)) picks[k] = val.split(",").map((x) => x.trim()).filter(Boolean);
+      // `count=<filter>:<bucket>,<bucket>`: the buckets to count for a filter with no list (12.3), one parameter per filter.
+      const only: { [filter: string]: string[] } = {};
+      for (const c of url.searchParams.getAll("count")) {
+        const at = c.indexOf(":");
+        if (at > 0) only[c.slice(0, at)] = c.slice(at + 1).split(",").map((x) => x.trim()).filter(Boolean);
+      }
+      const page = await index.serve(store, name, { ...(q("page") ? { page: Number(q("page")) } : {}), ...(Object.keys(picks).length ? { picks } : {}), ...(Object.keys(only).length ? { only } : {}), ...(q("q") ? { q: q("q") as string } : {}), ...(q("shape") ? { shape: q("shape") as string } : {}), ...(callerId ? { caller: callerId } : {}) });
       const th = termsHeaders(readTerms((await store.definitions()).info.terms));
       const robots = [page.indexable ? "all" : "noindex", ...(th["x-robots-tag"] ? th["x-robots-tag"].split(", ") : [])].filter((t, i, a) => a.indexOf(t) === i && !(t === "all" && a.includes("noindex")));
       res.setHeader("x-robots-tag", robots.join(", "));

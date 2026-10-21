@@ -4,7 +4,7 @@
 // truth: a contract checks the store, and the index can be dropped and rebuilt from the stream.
 
 import { facetOf, Access } from "@cruba/crubal";
-import type { Json, JsonObject } from "@cruba/crubal";
+import type { Json, JsonObject, Sums } from "@cruba/crubal";
 import { type Nested, partitionOf, type StreamEntry, type View } from "@cruba/crubal";
 import type { Pool } from "@cruba/crubal-postgres";
 import type { PgStore } from "@cruba/crubal-postgres";
@@ -24,8 +24,35 @@ function textOf(row: JsonObject): string {
   return out.join(" ");
 }
 
-export type Serve = { page?: number; picks?: { [filter: string]: string[] }; q?: string; caller?: string; /** A further shape the view names (12.1): its output serves in place of the row. */ shape?: string };
-export type Page = { view: string; version: string; audience: string; seq: number; page: number; pages: number; rows: JsonObject[]; counts: { [filter: string]: { [bucket: string]: number } }; nested?: Nested; indexable: boolean };
+export type Serve = {
+  page?: number;
+  picks?: { [filter: string]: string[] };
+  q?: string;
+  caller?: string;
+  /** A further shape the view names (12.1): its output serves in place of the row. */
+  shape?: string;
+  /**
+   * For a filter with no bucket list (12.3: a link into a vocabulary, buckets by the values records carry), the
+   * bucket names a page wants counted; a tree has thousands, so an unlisted filter is counted only when asked.
+   */
+  only?: { [filter: string]: string[] };
+};
+export type Page = { view: string; version: string; audience: string; seq: number; page: number; pages: number; rows: JsonObject[]; counts: { [filter: string]: { [bucket: string]: number } }; sums?: Sums; nested?: Nested; indexable: boolean };
+
+/** A row's slot as a number, in SQL: money by its amount, a quantity by its count, a number as it is, a numeric text read, else nothing. */
+const numericSql = (slot: string) =>
+  `coalesce((${slot} ->> '$money')::numeric, (${slot} ->> '$qty')::numeric, case when jsonb_typeof(${slot}) = 'number' then (${slot})::text::numeric when jsonb_typeof(${slot}) = 'string' and (${slot} #>> '{}') ~ '^-?[0-9]+(\\.[0-9]+)?$' then (${slot} #>> '{}')::numeric end, 0)`;
+/** The same reading in memory, for the partitioned path. */
+function numberIn(v: unknown): number {
+  if (typeof v === "number") return v;
+  if (typeof v === "string") return /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : 0;
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    const o = v as { [k: string]: unknown };
+    if (typeof o.$money === "string") return Number(o.$money) || 0;
+    if (o.$qty !== undefined) return Number(o.$qty) || 0;
+  }
+  return 0;
+}
 
 export class Index {
   readonly pool: Pool;
@@ -111,6 +138,26 @@ export class Index {
     return (facetOf(f.facet, p.dict)?.values ?? []).map((v) => v.value);
   }
 
+  /** Does the filter bucket by the values records carry, with no list known in advance (12.3)? */
+  private unlisted(p: Awaited<ReturnType<PgStore["definitions"]>>, filter: string): boolean {
+    const f = p.views.filters.get(filter);
+    return !!f && !f.buckets && !facetOf(f.facet, p.dict)?.values?.length;
+  }
+
+  /** The slot of the view's first shape that carries a facet (`price -> price`, `unit::price -> price`), for a sum over the rows. */
+  private slotOf(p: Awaited<ReturnType<PgStore["definitions"]>>, v: View, facet: string): string | undefined {
+    const shape = p.views.shapes.get(v.shapes[0] ?? "");
+    const bare = facet.replace(/^\w+::/, "");
+    return shape?.slots.find((sl) => sl.from.replace(/^!/, "").replace(/^\w+::/, "") === bare)?.to;
+  }
+
+  /** The names a filter's counts list: its buckets, or for an unlisted filter the ones the page asked for. */
+  private namesFor(p: Awaited<ReturnType<PgStore["definitions"]>>, filter: string, o: Serve): string[] | undefined {
+    if (!this.unlisted(p, filter)) return this.bucketNames(p, filter);
+    const asked = o.only?.[filter];
+    return asked?.length ? asked : undefined;
+  }
+
   /** Serve a page of a view (12.2, 12.3, 12.5) to a caller, from the rows the index holds. */
   async serve(store: PgStore, view: string, o: Serve = {}): Promise<Page> {
     const p = await store.definitions();
@@ -179,8 +226,9 @@ export class Index {
     let onPage: Row[];
     let total: number;
     const counts: Page["counts"] = {};
+    const sums: Sums = {};
     const nested: Nested = {};
-    const key = `${owner}|${view}|${version}|${v.show}|${seq}|${JSON.stringify(pickList)}|${o.q ?? ""}|${standsOn ? standsOn.join(",") : ""}`;
+    const key = `${owner}|${view}|${version}|${v.show}|${seq}|${JSON.stringify(pickList)}|${o.q ?? ""}|${standsOn ? standsOn.join(",") : ""}|${JSON.stringify(o.only ?? {})}`;
     if (standsOn && o.caller) {
       const caller = o.caller;
       const all = (await this.pool.query(`select record, row, buckets, marks, ancestors, sort, pin from index_rows where ${baseWhere} order by ${order}`, params)).rows as Row[];
@@ -192,26 +240,61 @@ export class Index {
       const inPick = (r: Row, f: string, chosen: string[]) => chosen.some((c) => (((r.buckets as JsonObject)?.[f] as string[] | undefined) ?? []).includes(c));
       const passes = (r: Row, except?: string) => pickList.every(([f, chosen]) => f === except || inPick(r, f, chosen));
       for (const f of v.filters) {
+        const names = this.namesFor(p, f, o);
+        if (!names) continue;
         const pool = served.filter((r) => passes(r, f));
-        counts[f] = Object.fromEntries(this.bucketNames(p, f).map((b) => [b, pool.filter((r) => inPick(r, f, [b])).length]));
+        counts[f] = Object.fromEntries(names.map((b) => [b, pool.filter((r) => inPick(r, f, [b])).length]));
+        const summed = p.views.filters.get(f)?.sums ?? [];
+        if (summed.length)
+          sums[f] = Object.fromEntries(
+            names.map((b) => [b, Object.fromEntries(summed.map((facet) => [facet, pool.filter((r) => inPick(r, f, [b])).reduce((t, r) => t + numberIn((r.row as JsonObject)?.[this.slotOf(p, v, facet) ?? ""]), 0)]))]),
+          );
       }
       const chosen = served.filter((r) => passes(r));
       total = chosen.length;
       onPage = chosen.slice((page - 1) * v.page, page * v.page);
     } else {
-      const cached = this.cache.get(key) as { total: number; counts: Page["counts"]; nested: Nested } | undefined;
+      const cached = this.cache.get(key) as { total: number; counts: Page["counts"]; sums: Sums; nested: Nested } | undefined;
       if (cached) {
         total = cached.total;
         Object.assign(counts, cached.counts);
+        Object.assign(sums, cached.sums ?? {});
         Object.assign(nested, cached.nested);
       } else {
         const all = build();
         total = Number((await this.pool.query(`select count(*) as n from index_rows where ${all.sql}`, all.ps)).rows[0]?.n ?? 0);
+        // The listed filters the picks don't name share one condition (every pick), so they are tallied in one
+        // pass over the buckets document: one scan for all of them, not one each (a catalog of 300,000 rows
+        // with twenty filters took a scan per filter, seconds a page). A picked filter is tallied over the rows
+        // the other picks select, so it keeps a pass of its own; an unlisted one counts only the names asked.
+        const picked = new Set(pickList.map(([f]) => f));
+        const shared = v.filters.filter((f) => this.namesFor(p, f, o) && !this.unlisted(p, f) && !picked.has(f));
+        if (shared.length) {
+          const q = build(undefined, [shared]);
+          const tally = (await this.pool.query(`select e.key as filter, b.value as bucket, count(*) as n from index_rows, jsonb_each(buckets) e, jsonb_array_elements_text(e.value) b where ${q.sql} and e.key = any($${q.ps.length}) group by e.key, b.value`, q.ps)).rows as { filter: string; bucket: string; n: string }[];
+          const by = new Map<string, Map<string, number>>();
+          for (const t of tally) (by.get(t.filter) ?? by.set(t.filter, new Map()).get(t.filter))?.set(t.bucket, Number(t.n));
+          for (const f of shared) counts[f] = Object.fromEntries(this.bucketNames(p, f).map((b) => [b, by.get(f)?.get(b) ?? 0]));
+        }
         for (const f of v.filters) {
+          const names = this.namesFor(p, f, o);
+          if (!names) continue;
           const but = build(f);
-          const tally = (await this.pool.query(`select b.value as bucket, count(*) as n from index_rows, jsonb_array_elements_text(buckets -> '${f.replace(/'/g, "''")}') b where ${but.sql} group by b.value`, but.ps)).rows as { bucket: string; n: string }[];
-          const by = new Map(tally.map((t) => [t.bucket, Number(t.n)]));
-          counts[f] = Object.fromEntries(this.bucketNames(p, f).map((b) => [b, by.get(b) ?? 0]));
+          // An unlisted filter counts only the names asked for, inside the query, not after it.
+          const asked = this.unlisted(p, f) ? ` and b.value = any($${but.ps.push(names)})` : "";
+          if (!counts[f]) {
+            const tally = (await this.pool.query(`select b.value as bucket, count(*) as n from index_rows, jsonb_array_elements_text(buckets -> '${f.replace(/'/g, "''")}') b where ${but.sql}${asked} group by b.value`, but.ps)).rows as { bucket: string; n: string }[];
+            const by = new Map(tally.map((t) => [t.bucket, Number(t.n)]));
+            counts[f] = Object.fromEntries(names.map((b) => [b, by.get(b) ?? 0]));
+          }
+          // The sums a filter names (12.3): the facet's slot on the row totalled per bucket, money by its amount.
+          const summed = (p.views.filters.get(f)?.sums ?? []).map((facet) => ({ facet, slot: this.slotOf(p, v, facet) })).filter((x): x is { facet: string; slot: string } => !!x.slot);
+          if (summed.length) {
+            const cols = summed.map((x, i) => `sum(${numericSql(`row -> '${x.slot.replace(/'/g, "''")}'`)}) as s${i}`).join(", ");
+            const totals = (await this.pool.query(`select b.value as bucket, ${cols} from index_rows, jsonb_array_elements_text(buckets -> '${f.replace(/'/g, "''")}') b where ${but.sql}${asked} group by b.value`, but.ps)).rows as { [k: string]: string }[];
+            const per = new Map(totals.map((t) => [t.bucket, t]));
+            sums[f] = Object.fromEntries(names.map((b) => [b, Object.fromEntries(summed.map((x, i) => [x.facet, Number(per.get(b)?.[`s${i}`] ?? 0)]))]));
+          }
           // Dependent facets (12.3): their values counted inside each of this filter's buckets.
           const deps = p.views.filters.get(f)?.dependent ?? [];
           if (!deps.length) continue;
@@ -225,7 +308,7 @@ export class Index {
           }
           nested[f] = inner;
         }
-        this.remember(key, { total, counts: structuredClone(counts), nested: structuredClone(nested) });
+        this.remember(key, { total, counts: structuredClone(counts), sums: structuredClone(sums), nested: structuredClone(nested) });
       }
       const paged = build(undefined, [v.page, (page - 1) * v.page]);
       onPage = (await this.pool.query(`select record, row, buckets, marks, ancestors, sort, pin from index_rows where ${paged.sql} order by ${order} limit $${paged.ps.length - 1} offset $${paged.ps.length}`, paged.ps)).rows as Row[];
@@ -250,7 +333,7 @@ export class Index {
       delete row.ancestors;
       return row;
     });
-    return { view, version, audience: v.show, seq, page, pages, rows: out, counts, ...(Object.keys(nested).length ? { nested } : {}), indexable };
+    return { view, version, audience: v.show, seq, page, pages, rows: out, counts, ...(Object.keys(sums).length ? { sums } : {}), ...(Object.keys(nested).length ? { nested } : {}), indexable };
   }
 
   /** Counts and totals per index cursor, picks and search: a few hundred recent answers, the oldest going first. */

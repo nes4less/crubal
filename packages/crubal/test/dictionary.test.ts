@@ -75,3 +75,27 @@ test("time facets: marks, offsets, and the 24-hour clock", () => {
   assert.equal(d.facets.get("opens")?.type, "time");
   assert.equal(d.facets.get("wall")?.zone, "local");
 });
+
+test("a class carries its prefixed settings (5.2), through the bundle too", async () => {
+  const d = readDefinitions("title$\nclass: DVD\n  label: DVD\n  for: item\n  cfu:gpc: 543527\n  cfu:hints: format DVD, MiniDVD\n  facets:\n    title\n");
+  assert.deepEqual(d.classes.get("DVD")?.extra, { "cfu:gpc": "543527", "cfu:hints": "format DVD, MiniDVD" });
+  const { publish } = await import("../src/publish.ts");
+  const { readBundle } = await import("../src/bundle.ts");
+  const src = "package: discs /2026-10-21\n  owner: discs.example\n  crubal: 2\n\nkind: item\n  levels: product\n\ntitle$\n\nclass: DVD\n  for: item\n  cfu:gpc: 543527\n  facets:\n    title\n";
+  const { bundle } = publish(src, { date: "2026-10-21" });
+  assert.equal(readBundle(bundle).dict.classes.get("DVD")?.extra["cfu:gpc"], "543527");
+});
+
+test("the period a date falls in (12.3): day, ISO week, month, quarter, year; nothing for a value with no date", async () => {
+  const { periodOf } = await import("../src/views.ts");
+  assert.equal(periodOf("2026-10-21", "day"), "2026-10-21");
+  assert.equal(periodOf("2026-10-21T12:14Z", "month"), "2026-10");
+  assert.equal(periodOf("2026-10-21", "quarter"), "2026-Q4");
+  assert.equal(periodOf("2026-01-01", "year"), "2026");
+  assert.equal(periodOf("2026-10-21", "week"), "2026-W43");
+  assert.equal(periodOf("2026-01-01", "week"), "2026-W01", "a Thursday-led year");
+  assert.equal(periodOf("2027-01-01", "week"), "2026-W53", "a Friday belongs to the old year's last week");
+  assert.equal(periodOf("2026-10", "month"), "2026-10");
+  assert.equal(periodOf("2026-10", "day"), undefined);
+  assert.equal(periodOf("soon", "month"), undefined);
+});

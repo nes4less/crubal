@@ -100,6 +100,8 @@ export type ClassDef = {
   parts: PartSlot[];
   state?: "candidate" | "active" | "retired";
   version?: string;
+  /** Prefixed package settings on the class (5.2, as 4.2 on a facet), carried unchanged: `cfu:gpc`, `cfu:hints`. */
+  extra: { [key: string]: string };
 };
 
 /** A kind as declared (11.2), beyond what the engine indexes by level. */
@@ -532,7 +534,7 @@ export function readClassLine(text: string, line: number, section?: string): Cla
 }
 
 function readClass(node: Node): ClassDef {
-  const c: ClassDef = { name: node.value.trim(), line: node.line, for: [], uses: [], lines: [], parts: [] };
+  const c: ClassDef = { name: node.value.trim(), line: node.line, for: [], uses: [], lines: [], parts: [], extra: {} };
   for (const child of node.children) {
     if (child.kind !== "pair" || !child.key) throw new CrubalError(`expected "setting: value": ${child.text}`, child.line);
     switch (child.key) {
@@ -584,6 +586,7 @@ function readClass(node: Node): ClassDef {
         break;
       default:
         if (!child.key.includes(":")) throw new CrubalError(`unknown class setting ${child.key}`, child.line);
+        c.extra[child.key] = child.value.trim();
     }
   }
   return c;

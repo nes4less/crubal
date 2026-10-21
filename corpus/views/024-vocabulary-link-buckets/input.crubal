@@ -1,0 +1,39 @@
+// A filter over a facet with no value list (12.3): a link into a vocabulary, the product's category path, buckets
+// by the values the records carry, a link's text being `&id`; a pick on one of them selects; the counts tally them.
+view: shop
+pick:
+  branch: &gpc:1
+
+kind: item
+  levels: product
+!title$
+categoryPath&gpc*
+
+filter: branch
+  facet: categoryPath
+
+shape: card
+  slots:
+    !title -> heading
+
+view: shop
+  select:
+    level: product
+  order: title
+  shape: card
+  filters: branch
+  show: public
+
+crubal: 2
+package: test /2026-10-21
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  title: Die Hard
+  categoryPath: &gpc:1, &gpc:2, &gpc:3
+product: P-2 [origin: declared, via: L-1]
+  title: Home Alone
+  categoryPath: &gpc:1, &gpc:2, &gpc:4
+product: P-3 [origin: declared, via: L-1]
+  title: Lamp
+  categoryPath: &gpc:9
