@@ -238,7 +238,7 @@ test("install through the host, then a form run, a send with an adapter and an a
   assert.deepEqual((branch.body.rows as JsonObject[]).map((r) => r.heading), ["Christmas Vacation"]);
   // Buckets by period with a sum (12.3): the months asked for, counted and totalled; a pick on a month selects.
   const months = await call("GET", "/o/shop.example/v/discs?count=month:2026-10,2026-09");
-  assert.deepEqual(months.body.counts.month, { "2026-10": 2, "2026-09": 0 });
+  assert.deepEqual((months.body.counts as JsonObject).month, { "2026-10": 2, "2026-09": 0 });
   assert.deepEqual(months.body.sums, { month: { "2026-10": { amount: 33 }, "2026-09": { amount: 0 } } });
   const october = await call("GET", "/o/shop.example/v/discs?month=2026-10&format=DVD");
   assert.deepEqual((october.body.rows as JsonObject[]).map((r) => r.heading), ["Christmas Vacation"]);
