@@ -75,6 +75,7 @@ kind: person
   base: Person
 title$
 format{DVD|Blu-ray}
+categoryPath&gpc*
 condition{NM|VG|G} ranked
 itemId$
 
@@ -83,6 +84,7 @@ class: Item
   facets:
     !title
     format
+    categoryPath
 class: Person
   for: person
 
@@ -118,12 +120,14 @@ shape: card
     !title -> heading
 filter: format
   facet: format
+filter: branch
+  facet: categoryPath
 view: discs
   select:
     level: product
   order: title
   shape: card
-  filters: format
+  filters: format, branch
   index: format
 view: slow
   select:
@@ -164,7 +168,7 @@ test("install through the host, then a form run, a send with an adapter and an a
   const store = await host.storeFor("shop.example");
   await store.commit({ person: "shop.example" }, (d) => {
     d.records.set("S-1", { id: "S-1", kind: "person", level: "person", owner: "shop.example", values: {} });
-    d.records.set("P-1", { id: "P-1", kind: "item", level: "product", owner: "shop.example", values: { title: "Christmas Vacation", format: "DVD" }, sources: { "*": { origin: "declared", via: "L-1" } } });
+    d.records.set("P-1", { id: "P-1", kind: "item", level: "product", owner: "shop.example", values: { title: "Christmas Vacation", format: "DVD", categoryPath: [{ $link: "gpc:1" }, { $link: "gpc:3" }] }, sources: { "*": { origin: "declared", via: "L-1" } } });
     d.records.set("U-1", { id: "U-1", kind: "item", level: "unit", of: "P-1", owner: "shop.example", values: {}, sources: { "*": { origin: "observed", via: "L-1" } } });
     d.edges.set("E-1", { edge: "E-1", who: "S-1", relation: "staff", mode: "control", on: "U-1", grants: ["staff"], by: "owner" });
   }, "2026-10-15T22:00:01Z");
@@ -207,7 +211,7 @@ test("install through the host, then a form run, a send with an adapter and an a
   assert.deepEqual(((await call("GET", "/o/shop.example/records/U-1", ownerKey)).body.values as JsonObject), {});
   // The reference index: the view's page from the stream, counts over the other picks, search, noindex past page 1.
   await store.commit({ person: "shop.example" }, (d) => {
-    d.records.set("P-2", { id: "P-2", kind: "item", level: "product", owner: "shop.example", values: { title: "Home Alone", format: "Blu-ray" }, sources: { "*": { origin: "declared", via: "L-2" } } });
+    d.records.set("P-2", { id: "P-2", kind: "item", level: "product", owner: "shop.example", values: { title: "Home Alone", format: "Blu-ray", categoryPath: [{ $link: "gpc:1" }, { $link: "gpc:4" }] }, sources: { "*": { origin: "declared", via: "L-2" } } });
   }, "2026-10-15T22:00:05Z");
   const pageRes = await fetch(`${base}/o/shop.example/v/discs`);
   assert.equal(pageRes.headers.get("x-robots-tag"), "all");
@@ -218,6 +222,11 @@ test("install through the host, then a form run, a send with an adapter and an a
   assert.deepEqual((picked.body.rows as JsonObject[]).map((r) => r.heading), ["Home Alone"]);
   assert.deepEqual(picked.body.counts, { format: { DVD: 1, "Blu-ray": 1 } }, "a filter's counts ignore its own pick");
   assert.equal(picked.body.indexable, true, "one index filter, one bucket");
+  // A filter with no bucket list (12.3): counted only for the buckets asked for; a pick on one selects.
+  const asked = await call("GET", "/o/shop.example/v/discs?count=branch:%26gpc:1,%26gpc:3,%26gpc:9");
+  assert.deepEqual(asked.body.counts, { format: { DVD: 1, "Blu-ray": 1 }, branch: { "&gpc:1": 2, "&gpc:3": 1, "&gpc:9": 0 } });
+  const branch = await call("GET", "/o/shop.example/v/discs?branch=%26gpc:3");
+  assert.deepEqual((branch.body.rows as JsonObject[]).map((r) => r.heading), ["Christmas Vacation"]);
   const searched = await call("GET", "/o/shop.example/v/discs?q=alone");
   assert.deepEqual((searched.body.rows as JsonObject[]).map((r) => r.heading), ["Home Alone"]);
   assert.equal(searched.body.indexable, false);

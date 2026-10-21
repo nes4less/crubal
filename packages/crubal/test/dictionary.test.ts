@@ -75,3 +75,13 @@ test("time facets: marks, offsets, and the 24-hour clock", () => {
   assert.equal(d.facets.get("opens")?.type, "time");
   assert.equal(d.facets.get("wall")?.zone, "local");
 });
+
+test("a class carries its prefixed settings (5.2), through the bundle too", async () => {
+  const d = readDefinitions("title$\nclass: DVD\n  label: DVD\n  for: item\n  cfu:gpc: 543527\n  cfu:hints: format DVD, MiniDVD\n  facets:\n    title\n");
+  assert.deepEqual(d.classes.get("DVD")?.extra, { "cfu:gpc": "543527", "cfu:hints": "format DVD, MiniDVD" });
+  const { publish } = await import("../src/publish.ts");
+  const { readBundle } = await import("../src/bundle.ts");
+  const src = "package: discs /2026-10-21\n  owner: discs.example\n  crubal: 2\n\nkind: item\n  levels: product\n\ntitle$\n\nclass: DVD\n  for: item\n  cfu:gpc: 543527\n  facets:\n    title\n";
+  const { bundle } = publish(src, { date: "2026-10-21" });
+  assert.equal(readBundle(bundle).dict.classes.get("DVD")?.extra["cfu:gpc"], "543527");
+});

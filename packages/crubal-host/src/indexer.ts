@@ -24,7 +24,19 @@ function textOf(row: JsonObject): string {
   return out.join(" ");
 }
 
-export type Serve = { page?: number; picks?: { [filter: string]: string[] }; q?: string; caller?: string; /** A further shape the view names (12.1): its output serves in place of the row. */ shape?: string };
+export type Serve = {
+  page?: number;
+  picks?: { [filter: string]: string[] };
+  q?: string;
+  caller?: string;
+  /** A further shape the view names (12.1): its output serves in place of the row. */
+  shape?: string;
+  /**
+   * For a filter with no bucket list (12.3: a link into a vocabulary, buckets by the values records carry), the
+   * bucket names a page wants counted; a tree has thousands, so an unlisted filter is counted only when asked.
+   */
+  only?: { [filter: string]: string[] };
+};
 export type Page = { view: string; version: string; audience: string; seq: number; page: number; pages: number; rows: JsonObject[]; counts: { [filter: string]: { [bucket: string]: number } }; nested?: Nested; indexable: boolean };
 
 export class Index {
@@ -111,6 +123,19 @@ export class Index {
     return (facetOf(f.facet, p.dict)?.values ?? []).map((v) => v.value);
   }
 
+  /** Does the filter bucket by the values records carry, with no list known in advance (12.3)? */
+  private unlisted(p: Awaited<ReturnType<PgStore["definitions"]>>, filter: string): boolean {
+    const f = p.views.filters.get(filter);
+    return !!f && !f.buckets && !facetOf(f.facet, p.dict)?.values?.length;
+  }
+
+  /** The names a filter's counts list: its buckets, or for an unlisted filter the ones the page asked for. */
+  private namesFor(p: Awaited<ReturnType<PgStore["definitions"]>>, filter: string, o: Serve): string[] | undefined {
+    if (!this.unlisted(p, filter)) return this.bucketNames(p, filter);
+    const asked = o.only?.[filter];
+    return asked?.length ? asked : undefined;
+  }
+
   /** Serve a page of a view (12.2, 12.3, 12.5) to a caller, from the rows the index holds. */
   async serve(store: PgStore, view: string, o: Serve = {}): Promise<Page> {
     const p = await store.definitions();
@@ -180,7 +205,7 @@ export class Index {
     let total: number;
     const counts: Page["counts"] = {};
     const nested: Nested = {};
-    const key = `${owner}|${view}|${version}|${v.show}|${seq}|${JSON.stringify(pickList)}|${o.q ?? ""}|${standsOn ? standsOn.join(",") : ""}`;
+    const key = `${owner}|${view}|${version}|${v.show}|${seq}|${JSON.stringify(pickList)}|${o.q ?? ""}|${standsOn ? standsOn.join(",") : ""}|${JSON.stringify(o.only ?? {})}`;
     if (standsOn && o.caller) {
       const caller = o.caller;
       const all = (await this.pool.query(`select record, row, buckets, marks, ancestors, sort, pin from index_rows where ${baseWhere} order by ${order}`, params)).rows as Row[];
@@ -192,8 +217,10 @@ export class Index {
       const inPick = (r: Row, f: string, chosen: string[]) => chosen.some((c) => (((r.buckets as JsonObject)?.[f] as string[] | undefined) ?? []).includes(c));
       const passes = (r: Row, except?: string) => pickList.every(([f, chosen]) => f === except || inPick(r, f, chosen));
       for (const f of v.filters) {
+        const names = this.namesFor(p, f, o);
+        if (!names) continue;
         const pool = served.filter((r) => passes(r, f));
-        counts[f] = Object.fromEntries(this.bucketNames(p, f).map((b) => [b, pool.filter((r) => inPick(r, f, [b])).length]));
+        counts[f] = Object.fromEntries(names.map((b) => [b, pool.filter((r) => inPick(r, f, [b])).length]));
       }
       const chosen = served.filter((r) => passes(r));
       total = chosen.length;
@@ -208,10 +235,14 @@ export class Index {
         const all = build();
         total = Number((await this.pool.query(`select count(*) as n from index_rows where ${all.sql}`, all.ps)).rows[0]?.n ?? 0);
         for (const f of v.filters) {
+          const names = this.namesFor(p, f, o);
+          if (!names) continue;
           const but = build(f);
-          const tally = (await this.pool.query(`select b.value as bucket, count(*) as n from index_rows, jsonb_array_elements_text(buckets -> '${f.replace(/'/g, "''")}') b where ${but.sql} group by b.value`, but.ps)).rows as { bucket: string; n: string }[];
+          // An unlisted filter counts only the names asked for, inside the query, not after it.
+          const asked = this.unlisted(p, f) ? ` and b.value = any($${but.ps.push(names)})` : "";
+          const tally = (await this.pool.query(`select b.value as bucket, count(*) as n from index_rows, jsonb_array_elements_text(buckets -> '${f.replace(/'/g, "''")}') b where ${but.sql}${asked} group by b.value`, but.ps)).rows as { bucket: string; n: string }[];
           const by = new Map(tally.map((t) => [t.bucket, Number(t.n)]));
-          counts[f] = Object.fromEntries(this.bucketNames(p, f).map((b) => [b, by.get(b) ?? 0]));
+          counts[f] = Object.fromEntries(names.map((b) => [b, by.get(b) ?? 0]));
           // Dependent facets (12.3): their values counted inside each of this filter's buckets.
           const deps = p.views.filters.get(f)?.dependent ?? [];
           if (!deps.length) continue;

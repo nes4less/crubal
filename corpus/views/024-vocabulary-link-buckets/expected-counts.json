@@ -1,0 +1,7 @@
+{
+  "records": ["P-1", "P-2"],
+  "counts": {
+    "branch": { "&gpc:1": 2, "&gpc:2": 2, "&gpc:3": 1, "&gpc:4": 1, "&gpc:9": 1 }
+  },
+  "indexable": false
+}

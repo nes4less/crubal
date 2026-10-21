@@ -51,6 +51,11 @@ over a compound's rows take a row filter and rollups over a lower level read the
 reads a compound's rows by child (12); corpus views 021–023 and rules 011. Engine, store and host published
 at 0.3.0 the same evening; the corpus tagged `corpus/2026-10-20`.
 
+**Revision 2026-10-21** (pull request 7): a filter over a facet with no value list, a link into a vocabulary,
+buckets by the values the records carry and an index counts the buckets a page asks for (12.3, 12.6.1); a
+class's prefixed settings are carried unchanged as a facet's are (5.2, the engine had dropped them); corpus
+views/024. Engine, store and host at 0.3.1; the corpus tagged `corpus/2026-10-21`.
+
 The claim was re-run the same day against the corpus dated 2026-10-19, which gained cases for the
 revisions of the day: a state facet moving under `transitions` (exchange/032), a member's form on a record
 they don't own (exchange/033), a class nothing wears (dictionary/010). Reader 25, Dictionary 48, Rules 61,

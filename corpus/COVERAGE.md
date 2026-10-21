@@ -97,6 +97,8 @@ a new MUST or a new case updates this file.
 | 11.8 | a reader never reads above its version; a package never extends a higher one | reader-errors/e08-higher-language-version, package-errors/p04-extends-higher-language |
 | 11.9 | an extension never changes a standard unit | unit: units.test (an extension naming `kg` only adds spellings; the factor stands), dictionary-errors/d10-unknown-unit |
 | 12.4 | a role never exceeds its audience | views-errors/v01-role-exceeds-audience |
+| 12.3 | a filter over a facet with no value list (a link into a vocabulary) buckets by the values the records carry; a pick selects on one; the counts tally them | views/024-vocabulary-link-buckets; host test: the reference index (counts asked for with `only`) |
+| 5.2 | a class's prefixed settings are carried unchanged, through the bundle | crubal: dictionary.test (`cfu:gpc` on a class) |
 | 12.6.1 | an index reads only its streams; serves only matched rows; drops marked slots; pages and counts as 12.2–12.3; says its entry number | views/009-partition, 014-subscriber-partition, 007-roles, 002-filter-counts, 008-paging; host test: the reference index (x-crubal-seq) |
 | 12.8 | refused at publish | views-errors/* |
 | 13.5 | extensions carried, never required | reader/010-unknown-block, dictionary/001 (`me:` settings) |

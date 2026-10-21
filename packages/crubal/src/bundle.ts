@@ -94,6 +94,7 @@ export function classJson(c: ClassDef): JsonObject {
   if (c.parts.length) o.parts = c.parts.map((p: PartSlot): JsonObject => ({ slot: p.slot, wears: p.wears, pick: p.many ? "any" : "1", ...(p.fungible ? { fungible: true } : {}), ...(p.match ? { match: p.match } : {}) }));
   if (c.state && c.state !== "active") o.state = c.state;
   if (c.version) o.version = c.version;
+  for (const [k, v] of Object.entries(c.extra)) o[k] = v;
   return o;
 }
 
@@ -373,6 +374,8 @@ function kindText(k: JsonObject): string[] {
 
 function classText(c: JsonObject): string[] {
   const out = [`class: ${c.class}`, ...kv("  ", "label", c.label), ...kv("  ", "describe", c.describe), ...kv("  ", "for", c.for), ...kv("  ", "uses", c.uses), ...kv("  ", "state", c.state), ...kv("  ", "version", c.version)];
+  // The class's prefixed settings (5.2), as a facet's travel (facetText).
+  for (const [k, v] of Object.entries(c)) if (k.includes(":")) out.push(`  ${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`);
   if (Array.isArray(c.facets)) {
     out.push("  facets:");
     for (const l of c.facets) if (isObj(l)) out.push(typeof l.section === "string" ? `    section: ${q(l.section)}` : `    ${lineText(l)}`);

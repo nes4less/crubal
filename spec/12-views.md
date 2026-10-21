@@ -108,7 +108,9 @@ filter: edition
 ```
 
 - **Buckets are the map.** Each bucket is a name and the values (or a range, `a..b`) it holds. A filter with
-  no `buckets` has one bucket per value of the facet, named by its label.
+  no `buckets` has one bucket per value of the facet, named by its label. A facet with no value list (a link
+  into a vocabulary, a number, a text) buckets by the values the records carry, each its own bucket named by
+  the value; nothing is known in advance, so an index counts the buckets a page asks for (12.6.1).
 - **Only real values are bucketed.** New and unknown values (chapter 9) never reach a bucket, and neither do
   held values.
 - **A record is in a bucket** when any of its values for the facet is (for a level-prefixed facet, when any of
@@ -256,7 +258,9 @@ choice.
   another view's rows, so it can't show anything a view leaves out.
 - It MUST serve only the rows the caller's edges match in a partitioned view, MUST drop role-marked slots
   for callers without the role, and decides nothing else about visibility.
-- Its pages and counts MUST follow 12.2 and 12.3, over the rows it holds.
+- Its pages and counts MUST follow 12.2 and 12.3, over the rows it holds. For a filter whose facet has no
+  value list (12.3), it MAY count only the buckets the request names, since a vocabulary's tree has thousands;
+  it MUST pick on any of them.
 - An index MAY be behind the store, and MUST say which entry number it reflects.
 ### 12.6.2 Subscriptions
 

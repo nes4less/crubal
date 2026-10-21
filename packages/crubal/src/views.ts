@@ -443,7 +443,7 @@ export class Views {
     for (const fname of v.filters) {
       const f = this.set.filters.get(fname);
       if (!f) continue;
-      const names = this.bucketsOf(f).filter((b) => this.inBucket(r, f, b)).map((b) => b.name);
+      const names = this.bucketsOf(f, r).filter((b) => this.inBucket(r, f, b)).map((b) => b.name);
       if (names.length) out[fname] = names;
       // A dependent facet (12.3): its values, one bucket each, so an index can count them inside this filter's.
       for (const dep of f.dependent) {
@@ -513,10 +513,22 @@ export class Views {
     });
   }
 
-  private bucketsOf(f: Filter): Bucket[] {
+  /**
+   * A filter's buckets: the ones it declares, else one per value of the facet's list. A facet with no list (a
+   * link into a vocabulary, a number, a text) buckets by the values the records carry, each its own bucket
+   * named by the value (12.3): given a record, its values; given none, nothing is known in advance.
+   */
+  private bucketsOf(f: Filter, r?: Record): Bucket[] {
     if (f.buckets) return f.buckets;
     const facet = facetOf(f.facet, this.dict);
-    return (facet?.values ?? []).map((v) => ({ name: v.value, values: [v.value] }));
+    if (facet?.values?.length) return facet.values.map((v) => ({ name: v.value, values: [v.value] }));
+    if (!r) return [];
+    return [...new Set(this.valuesAt(r, f.facet).map(plainText).filter(Boolean))].map((t) => ({ name: t, values: [t] }));
+  }
+
+  /** Does the filter bucket by the values records carry, with no list known in advance (12.3)? */
+  private unlisted(f: Filter): boolean {
+    return !f.buckets && !facetOf(f.facet, this.dict)?.values?.length;
   }
 
   /** The records a view selects, curated and ordered, before filters and paging. */
@@ -568,7 +580,7 @@ export class Views {
       Object.entries(picks).every(([fname, chosen]) => {
         if (fname === except) return true;
         const f = this.set.filters.get(fname);
-        return !f || this.bucketsOf(f).some((b) => chosen.includes(b.name) && this.inBucket(r, f, b));
+        return !f || this.bucketsOf(f, r).some((b) => chosen.includes(b.name) && this.inBucket(r, f, b));
       });
     const counts: Projection["counts"] = {};
     if (!opts.all) {
@@ -576,7 +588,12 @@ export class Views {
         const f = this.set.filters.get(fname);
         if (!f) continue;
         const pool = all.filter((r) => passes(r, fname));
-        counts[fname] = Object.fromEntries(this.bucketsOf(f).map((b) => [b.name, pool.filter((r) => this.inBucket(r, f, b)).length]));
+        if (this.unlisted(f)) {
+          // One bucket per value the records carry: a tally over the pool (12.3).
+          const tally: { [name: string]: number } = {};
+          for (const r of pool) for (const b of this.bucketsOf(f, r)) tally[b.name] = (tally[b.name] ?? 0) + 1;
+          counts[fname] = tally;
+        } else counts[fname] = Object.fromEntries(this.bucketsOf(f).map((b) => [b.name, pool.filter((r) => this.inBucket(r, f, b)).length]));
       }
     }
     const nested = opts.all ? {} : this.nestedCounts(v, (fname) => all.filter((r) => passes(r, fname)));
