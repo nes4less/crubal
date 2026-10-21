@@ -1,6 +1,6 @@
 # CRUBAL 2: the specification
 
-**Status:** CRUBAL 2 · 2026-10-21 (revision 2 after the gate: a filter over a facet with no value list buckets by the values records carry, 12.3; a class's prefixed settings carried, 5.2; revision 1 on 2026-10-20: link steps read shared parts, row aggregates with a filter, rows by child). Published at the gate on 2026-10-19 (docs/design/release.md); a dated revision only adds (chapter 11.8). This spec is the source of truth for the language;
+**Status:** CRUBAL 2 · 2026-10-21 (revision 2 after the gate: a filter over a facet with no value list buckets by the values records carry, by period from a date, and sums facets per bucket, 12.3; a class's prefixed settings carried, 5.2; revision 1 on 2026-10-20: link steps read shared parts, row aggregates with a filter, rows by child). Published at the gate on 2026-10-19 (docs/design/release.md); a dated revision only adds (chapter 11.8). This spec is the source of truth for the language;
 the design review that produced it is recorded in Media Encyclopedia's blueprint, which it supersedes.
 
 CRUBAL is a language and engine for data about any kind of thing. Everything is a key and a value. Records

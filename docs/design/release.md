@@ -53,8 +53,9 @@ at 0.3.0 the same evening; the corpus tagged `corpus/2026-10-20`.
 
 **Revision 2026-10-21** (pull request 7): a filter over a facet with no value list, a link into a vocabulary,
 buckets by the values the records carry and an index counts the buckets a page asks for (12.3, 12.6.1); a
-class's prefixed settings are carried unchanged as a facet's are (5.2, the engine had dropped them); corpus
-views/024. Engine, store and host at 0.3.1; the corpus tagged `corpus/2026-10-21`.
+class's prefixed settings are carried unchanged as a facet's are (5.2, the engine had dropped them); a filter's
+buckets by period from a date facet and facets summed per bucket beside the count (12.3, 12.6.1; corpus
+views/025); corpus views/024. Engine, store and host at 0.3.2 (0.3.1 was never published); the corpus tagged `corpus/2026-10-21`.
 
 The claim was re-run the same day against the corpus dated 2026-10-19, which gained cases for the
 revisions of the day: a state facet moving under `transitions` (exchange/032), a member's form on a record

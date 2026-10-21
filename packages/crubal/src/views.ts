@@ -26,8 +26,46 @@ const rankOf = (a: string) => {
 
 export type Slot = { from: string; to: string; required: boolean; line: number };
 export type Shape = { name: string; slots: Slot[]; line: number };
-export type Bucket = { name: string; values?: string[]; range?: [number, number] };
-export type Filter = { name: string; facet: string; buckets?: Bucket[]; dependent: string[]; line: number; bucketLines: number[] };
+export type Period = "day" | "week" | "month" | "quarter" | "year";
+export const PERIODS: readonly Period[] = ["day", "week", "month", "quarter", "year"];
+export type Bucket = { name: string; values?: string[]; range?: [number, number]; period?: Period };
+export type Filter = {
+  name: string;
+  facet: string;
+  buckets?: Bucket[];
+  /** `buckets: by month`: one bucket per period the facet's dates fall in, named by the period (12.3). */
+  period?: Period;
+  /** Facets totalled per bucket beside the count (12.3 `sum:`). */
+  sums: string[];
+  dependent: string[];
+  line: number;
+  bucketLines: number[];
+};
+
+/**
+ * The period a date or moment falls in, named: a day `2026-10-21`, a week `2026-W43` (ISO, Monday first), a
+ * month `2026-10`, a quarter `2026-Q4`, a year `2026`; undefined for a value with no date in it.
+ */
+export function periodOf(value: string, period: Period): string | undefined {
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})/) ?? value.match(/^(\d{4})-(\d{2})$/) ?? value.match(/^(\d{4})$/);
+  if (!m) return undefined;
+  const y = Number(m[1]);
+  const mo = m[2] !== undefined ? Number(m[2]) : undefined;
+  const d = m[3] !== undefined ? Number(m[3]) : undefined;
+  if (period === "year") return String(y);
+  if (mo === undefined) return undefined;
+  if (period === "month") return `${y}-${String(mo).padStart(2, "0")}`;
+  if (period === "quarter") return `${y}-Q${Math.floor((mo - 1) / 3) + 1}`;
+  if (d === undefined) return undefined;
+  if (period === "day") return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  // ISO week: the week with the year's first Thursday is week 1.
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  const dow = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dow);
+  const jan1 = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((date.getTime() - jan1.getTime()) / 86_400_000 + 1) / 7);
+  return `${date.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
 export type View = {
   name: string;
   line: number;
@@ -75,7 +113,11 @@ export function readViews(source: string): ViewSet {
       set.shapes.set(name, { name, slots, line: n.line });
     } else if (n.key === "filter") {
       const b = get("buckets");
-      const buckets = b?.children.map((c): Bucket => {
+      // `buckets: by month`: the buckets are the periods the facet's dates fall in (12.3).
+      const by = b && !b.children.length ? b.value.trim().match(/^by\s+(\w+)$/) : null;
+      if (b && by && !(PERIODS as readonly string[]).includes(by[1] as string)) throw new CrubalError(`buckets by ${by[1]}: a period is day, week, month, quarter or year`, b.line);
+      const period = by ? (by[1] as Period) : undefined;
+      const buckets = period ? undefined : b?.children.map((c): Bucket => {
         // A bucket line is `name: values`; the name may be quoted, with spaces ("Like new": NM, VG).
         const m = c.text.match(/^("(?:[^"\\]|\\.)*"|[^:]+):\s+(.*)$/);
         if (!m) throw new CrubalError(`a bucket is "name: values": ${c.text}`, c.line);
@@ -88,6 +130,8 @@ export function readViews(source: string): ViewSet {
         name,
         facet: get("facet")?.value ?? name,
         ...(buckets ? { buckets } : {}),
+        ...(period ? { period } : {}),
+        sums: (get("sum")?.value ?? "").split(",").map((s) => s.trim()).filter(Boolean),
         dependent: (get("dependent")?.value ?? "").split(",").map((s) => s.trim()).filter(Boolean),
         line: n.line,
         bucketLines: b?.children.map((c) => c.line) ?? [],
@@ -244,9 +288,11 @@ export type ProjectOptions = {
   all?: boolean;
 };
 export type Counts = { [filter: string]: { [bucket: string]: number } };
+/** Per filter and bucket, the facets a filter sums (12.3): the total of their numeric values over the bucket's records. */
+export type Sums = { [filter: string]: { [bucket: string]: { [facet: string]: number } } };
 /** Dependent counts (12.3): filter → bucket → dependent facet → value → count. */
 export type Nested = { [filter: string]: { [bucket: string]: { [dependent: string]: { [value: string]: number } } } };
-export type Projection = { rows: JsonObject[]; records: string[]; counts: Counts; nested?: Nested; pages: number; indexable: boolean };
+export type Projection = { rows: JsonObject[]; records: string[]; counts: Counts; sums?: Sums; nested?: Nested; pages: number; indexable: boolean };
 /** One entry of a view's projection stream (12.6, 12.7). */
 export type StreamEntry = { projection: string; audience: string; seq: number; record: string; row?: JsonObject; buckets?: JsonObject; sort?: string[]; pin?: number; removed?: true; reset?: true };
 
@@ -507,6 +553,7 @@ export class Views {
   private inBucket(r: Record, f: Filter, b: Bucket): boolean {
     return this.valuesAt(r, f.facet).some((v) => {
       const t = plainText(v);
+      if (b.period) return periodOf(t, b.period) === b.name;
       if (b.values) return b.values.includes(t);
       if (b.range) return Number.parseFloat(t) >= b.range[0] && Number.parseFloat(t) <= b.range[1];
       return false;
@@ -520,15 +567,36 @@ export class Views {
    */
   private bucketsOf(f: Filter, r?: Record): Bucket[] {
     if (f.buckets) return f.buckets;
+    if (f.period) {
+      // The periods the record's dates fall in, each its own bucket (12.3 `by`).
+      if (!r) return [];
+      const period = f.period;
+      const names = new Set<string>();
+      for (const v of this.valuesAt(r, f.facet)) {
+        const name = periodOf(plainText(v), period);
+        if (name) names.add(name);
+      }
+      return [...names].map((name) => ({ name, period }));
+    }
     const facet = facetOf(f.facet, this.dict);
     if (facet?.values?.length) return facet.values.map((v) => ({ name: v.value, values: [v.value] }));
     if (!r) return [];
     return [...new Set(this.valuesAt(r, f.facet).map(plainText).filter(Boolean))].map((t) => ({ name: t, values: [t] }));
   }
 
-  /** Does the filter bucket by the values records carry, with no list known in advance (12.3)? */
+  /** Does the filter bucket by the values records carry, with no list known in advance (12.3): a period, or a facet with no list? */
   private unlisted(f: Filter): boolean {
-    return !f.buckets && !facetOf(f.facet, this.dict)?.values?.length;
+    return !f.buckets && (!!f.period || !facetOf(f.facet, this.dict)?.values?.length);
+  }
+
+  /** A facet's numeric value on a record, summed over its values: money by its amount, a number as it is. */
+  private numberOf(r: Record, facet: string): number {
+    let total = 0;
+    for (const v of this.valuesAt(r, facet)) {
+      const n = isObj(v) && typeof v.$money === "string" ? Number(v.$money) : isObj(v) && "$qty" in v ? Number(v.$qty) : typeof v === "number" ? v : typeof v === "string" ? Number(v) : Number.NaN;
+      if (Number.isFinite(n)) total += n;
+    }
+    return total;
   }
 
   /** The records a view selects, curated and ordered, before filters and paging. */
@@ -583,17 +651,37 @@ export class Views {
         return !f || this.bucketsOf(f, r).some((b) => chosen.includes(b.name) && this.inBucket(r, f, b));
       });
     const counts: Projection["counts"] = {};
+    const sums: Sums = {};
     if (!opts.all) {
       for (const fname of v.filters) {
         const f = this.set.filters.get(fname);
         if (!f) continue;
         const pool = all.filter((r) => passes(r, fname));
+        const totals: Sums[string] = {};
+        const add = (bucket: string, r: Record) => {
+          if (!f.sums.length) return;
+          const t = (totals[bucket] ??= {});
+          for (const facet of f.sums) t[facet] = Math.round(((t[facet] ?? 0) + this.numberOf(r, facet)) * 1e6) / 1e6;
+        };
         if (this.unlisted(f)) {
-          // One bucket per value the records carry: a tally over the pool (12.3).
+          // One bucket per value (or period) the records carry: a tally over the pool (12.3).
           const tally: { [name: string]: number } = {};
-          for (const r of pool) for (const b of this.bucketsOf(f, r)) tally[b.name] = (tally[b.name] ?? 0) + 1;
+          for (const r of pool)
+            for (const b of this.bucketsOf(f, r)) {
+              tally[b.name] = (tally[b.name] ?? 0) + 1;
+              add(b.name, r);
+            }
           counts[fname] = tally;
-        } else counts[fname] = Object.fromEntries(this.bucketsOf(f).map((b) => [b.name, pool.filter((r) => this.inBucket(r, f, b)).length]));
+        } else {
+          const by: { [name: string]: number } = {};
+          for (const b of this.bucketsOf(f)) {
+            const inB = pool.filter((r) => this.inBucket(r, f, b));
+            by[b.name] = inB.length;
+            for (const r of inB) add(b.name, r);
+          }
+          counts[fname] = by;
+        }
+        if (f.sums.length) sums[fname] = totals;
       }
     }
     const nested = opts.all ? {} : this.nestedCounts(v, (fname) => all.filter((r) => passes(r, fname)));
@@ -618,7 +706,7 @@ export class Views {
       if (partition !== "none" && opts.access) row.ancestors = opts.access.ancestors(r.id);
       return row;
     });
-    return { rows, records: onPage.map((r) => r.id), counts, ...(Object.keys(nested).length ? { nested } : {}), pages, indexable };
+    return { rows, records: onPage.map((r) => r.id), counts, ...(Object.keys(sums).length ? { sums } : {}), ...(Object.keys(nested).length ? { nested } : {}), pages, indexable };
   }
 
   /** One record in one shape: a core shape's object, or the shape's slots with their role marks. */

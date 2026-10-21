@@ -76,6 +76,8 @@ kind: person
 title$
 format{DVD|Blu-ray}
 categoryPath&gpc*
+soldAt@ymd
+amount#currency
 condition{NM|VG|G} ranked
 itemId$
 
@@ -85,6 +87,8 @@ class: Item
     !title
     format
     categoryPath
+    soldAt
+    amount
 class: Person
   for: person
 
@@ -118,16 +122,21 @@ ownership:
 shape: card
   slots:
     !title -> heading
+    amount -> amount
 filter: format
   facet: format
 filter: branch
   facet: categoryPath
+filter: month
+  facet: soldAt
+  buckets: by month
+  sum: amount
 view: discs
   select:
     level: product
   order: title
   shape: card
-  filters: format, branch
+  filters: format, branch, month
   index: format
 view: slow
   select:
@@ -168,7 +177,7 @@ test("install through the host, then a form run, a send with an adapter and an a
   const store = await host.storeFor("shop.example");
   await store.commit({ person: "shop.example" }, (d) => {
     d.records.set("S-1", { id: "S-1", kind: "person", level: "person", owner: "shop.example", values: {} });
-    d.records.set("P-1", { id: "P-1", kind: "item", level: "product", owner: "shop.example", values: { title: "Christmas Vacation", format: "DVD", categoryPath: [{ $link: "gpc:1" }, { $link: "gpc:3" }] }, sources: { "*": { origin: "declared", via: "L-1" } } });
+    d.records.set("P-1", { id: "P-1", kind: "item", level: "product", owner: "shop.example", values: { title: "Christmas Vacation", format: "DVD", categoryPath: [{ $link: "gpc:1" }, { $link: "gpc:3" }], soldAt: "2026-10-03", amount: { $money: "24.00", currency: "USD" } }, sources: { "*": { origin: "declared", via: "L-1" } } });
     d.records.set("U-1", { id: "U-1", kind: "item", level: "unit", of: "P-1", owner: "shop.example", values: {}, sources: { "*": { origin: "observed", via: "L-1" } } });
     d.edges.set("E-1", { edge: "E-1", who: "S-1", relation: "staff", mode: "control", on: "U-1", grants: ["staff"], by: "owner" });
   }, "2026-10-15T22:00:01Z");
@@ -211,7 +220,7 @@ test("install through the host, then a form run, a send with an adapter and an a
   assert.deepEqual(((await call("GET", "/o/shop.example/records/U-1", ownerKey)).body.values as JsonObject), {});
   // The reference index: the view's page from the stream, counts over the other picks, search, noindex past page 1.
   await store.commit({ person: "shop.example" }, (d) => {
-    d.records.set("P-2", { id: "P-2", kind: "item", level: "product", owner: "shop.example", values: { title: "Home Alone", format: "Blu-ray", categoryPath: [{ $link: "gpc:1" }, { $link: "gpc:4" }] }, sources: { "*": { origin: "declared", via: "L-2" } } });
+    d.records.set("P-2", { id: "P-2", kind: "item", level: "product", owner: "shop.example", values: { title: "Home Alone", format: "Blu-ray", categoryPath: [{ $link: "gpc:1" }, { $link: "gpc:4" }], soldAt: "2026-10-21", amount: { $money: "9.00", currency: "USD" } }, sources: { "*": { origin: "declared", via: "L-2" } } });
   }, "2026-10-15T22:00:05Z");
   const pageRes = await fetch(`${base}/o/shop.example/v/discs`);
   assert.equal(pageRes.headers.get("x-robots-tag"), "all");
@@ -227,6 +236,12 @@ test("install through the host, then a form run, a send with an adapter and an a
   assert.deepEqual(asked.body.counts, { format: { DVD: 1, "Blu-ray": 1 }, branch: { "&gpc:1": 2, "&gpc:3": 1, "&gpc:9": 0 } });
   const branch = await call("GET", "/o/shop.example/v/discs?branch=%26gpc:3");
   assert.deepEqual((branch.body.rows as JsonObject[]).map((r) => r.heading), ["Christmas Vacation"]);
+  // Buckets by period with a sum (12.3): the months asked for, counted and totalled; a pick on a month selects.
+  const months = await call("GET", "/o/shop.example/v/discs?count=month:2026-10,2026-09");
+  assert.deepEqual(months.body.counts.month, { "2026-10": 2, "2026-09": 0 });
+  assert.deepEqual(months.body.sums, { month: { "2026-10": { amount: 33 }, "2026-09": { amount: 0 } } });
+  const october = await call("GET", "/o/shop.example/v/discs?month=2026-10&format=DVD");
+  assert.deepEqual((october.body.rows as JsonObject[]).map((r) => r.heading), ["Christmas Vacation"]);
   const searched = await call("GET", "/o/shop.example/v/discs?q=alone");
   assert.deepEqual((searched.body.rows as JsonObject[]).map((r) => r.heading), ["Home Alone"]);
   assert.equal(searched.body.indexable, false);

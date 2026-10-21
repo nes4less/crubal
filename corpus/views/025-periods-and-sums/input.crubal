@@ -1,0 +1,49 @@
+// A filter's buckets by period (12.3): one per month the sales fall in, named by the month, with the amount
+// summed per bucket beside the count; a pick on a month selects; a week is an ISO week.
+view: sales
+pick:
+  month: 2026-10
+
+kind: sale
+  levels: sale
+!title$
+soldAt@ymd
+amount#currency
+
+filter: month
+  facet: soldAt
+  buckets: by month
+  sum: amount
+filter: week
+  facet: soldAt
+  buckets: by week
+
+shape: row
+  slots:
+    !title -> heading
+    amount -> amount
+
+view: sales
+  select:
+    level: sale
+  order: title
+  shape: row
+  filters: month, week
+  show: public
+
+crubal: 2
+package: test /2026-10-21
+owner: test.example
+
+sale: S-1 [origin: declared, via: L-1]
+  title: Alien
+  soldAt: 2026-10-21
+  amount: 9.00 USD
+sale: S-2 [origin: declared, via: L-1]
+  title: Die Hard
+  soldAt: 2026-10-03
+  amount: 24.00 USD
+sale: S-3 [origin: declared, via: L-1]
+  title: Home Alone
+  soldAt: 2026-09-30
+  amount: 12.50 USD

@@ -111,6 +111,13 @@ filter: edition
   no `buckets` has one bucket per value of the facet, named by its label. A facet with no value list (a link
   into a vocabulary, a number, a text) buckets by the values the records carry, each its own bucket named by
   the value; nothing is known in advance, so an index counts the buckets a page asks for (12.6.1).
+- **Buckets by period.** `buckets: by day`, `by week`, `by month`, `by quarter` or `by year` on a date or
+  moment facet makes one bucket per period the records' values fall in, named by the period: `2026-10-21`,
+  `2026-W43` (ISO weeks, Monday first), `2026-10`, `2026-Q4`, `2026`. Nothing is listed by hand; like a
+  facet with no list, an index counts the periods a page asks for.
+- **Sums.** `sum: amount, qty` names facets totalled per bucket beside the count: money by its amount, a
+  quantity by its count, a number as it is; a value that is none of these adds nothing. A projection
+  answers `sums[filter][bucket][facet]` beside `counts`.
 - **Only real values are bucketed.** New and unknown values (chapter 9) never reach a bucket, and neither do
   held values.
 - **A record is in a bucket** when any of its values for the facet is (for a level-prefixed facet, when any of
@@ -258,9 +265,10 @@ choice.
   another view's rows, so it can't show anything a view leaves out.
 - It MUST serve only the rows the caller's edges match in a partitioned view, MUST drop role-marked slots
   for callers without the role, and decides nothing else about visibility.
-- Its pages and counts MUST follow 12.2 and 12.3, over the rows it holds. For a filter whose facet has no
-  value list (12.3), it MAY count only the buckets the request names, since a vocabulary's tree has thousands;
-  it MUST pick on any of them.
+- Its pages, counts and sums MUST follow 12.2 and 12.3, over the rows it holds. For a filter whose facet
+  has no value list, or whose buckets are periods (12.3), it MAY count only the buckets the request names,
+  since a vocabulary's tree has thousands and time has no end; it MUST pick on any of them. A sum is read
+  from the slot of the view's first shape that carries the facet, so a summed facet is one the shape shows.
 - An index MAY be behind the store, and MUST say which entry number it reflects.
 ### 12.6.2 Subscriptions
 
@@ -322,7 +330,8 @@ contract: searchIndex
 ```
 
 Shapes use chapter 7.9's map objects for their slots; filters hold `facet`, `buckets` (`[{"name", "values"} or
-{"name", "range"}]`) and `dependent`; roles hold `audience` and `may` (verb → targets).
+{"name", "range"}]`) or `by` (a period), `sum` (the facets totalled per bucket) and `dependent`; roles hold
+`audience` and `may` (verb → targets).
 
 A projection entry, as the stream carries it:
 

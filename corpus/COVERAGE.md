@@ -98,6 +98,7 @@ a new MUST or a new case updates this file.
 | 11.9 | an extension never changes a standard unit | unit: units.test (an extension naming `kg` only adds spellings; the factor stands), dictionary-errors/d10-unknown-unit |
 | 12.4 | a role never exceeds its audience | views-errors/v01-role-exceeds-audience |
 | 12.3 | a filter over a facet with no value list (a link into a vocabulary) buckets by the values the records carry; a pick selects on one; the counts tally them | views/024-vocabulary-link-buckets; host test: the reference index (counts asked for with `only`) |
+| 12.3 | a filter's buckets by period (day, ISO week, month, quarter, year) from a date facet; a facet summed per bucket beside the count; a pick on a period selects | views/025-periods-and-sums; host test: the reference index (`count=` with sums) |
 | 5.2 | a class's prefixed settings are carried unchanged, through the bundle | crubal: dictionary.test (`cfu:gpc` on a class) |
 | 12.6.1 | an index reads only its streams; serves only matched rows; drops marked slots; pages and counts as 12.2–12.3; says its entry number | views/009-partition, 014-subscriber-partition, 007-roles, 002-filter-counts, 008-paging; host test: the reference index (x-crubal-seq) |
 | 12.8 | refused at publish | views-errors/* |

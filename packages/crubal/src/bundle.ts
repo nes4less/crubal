@@ -187,6 +187,9 @@ export function shapeJson(s: Shape): JsonObject {
 export function filterJson(f: Filter): JsonObject {
   const o: JsonObject = { filter: f.name, facet: f.facet };
   if (f.buckets) o.buckets = f.buckets.map((b): JsonObject => (b.range ? { name: b.name, range: { min: String(b.range[0]), max: String(b.range[1]) } } : { name: b.name, values: [...(b.values ?? [])] }));
+  // Buckets by period and the facets summed per bucket (12.3) travel as `by` and `sum`.
+  if (f.period) o.by = f.period;
+  if (f.sums.length) o.sum = [...f.sums];
   if (f.dependent.length) o.dependent = [...f.dependent];
   return o;
 }
@@ -447,6 +450,8 @@ const shapeText = (s: JsonObject): string[] => [`shape: ${s.shape}`, "  slots:",
 function filterText(f: JsonObject): string[] {
   const out = [`filter: ${f.filter}`, `  facet: ${f.facet}`];
   if (Array.isArray(f.buckets)) out.push("  buckets:", ...f.buckets.map((b) => { const bb = b as JsonObject; const name = /[\s:]/.test(String(bb.name)) ? JSON.stringify(bb.name) : String(bb.name); return isObj(bb.range) ? `    ${name}: ${bb.range.min}..${bb.range.max}` : `    ${name}: ${list(bb.values as Json[])}`; }));
+  else if (typeof f.by === "string") out.push(`  buckets: by ${f.by}`);
+  out.push(...kv("  ", "sum", f.sum));
   out.push(...kv("  ", "dependent", f.dependent));
   return out;
 }
