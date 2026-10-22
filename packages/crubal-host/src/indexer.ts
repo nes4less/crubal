@@ -37,7 +37,7 @@ export type Serve = {
    */
   only?: { [filter: string]: string[] };
 };
-export type Page = { view: string; version: string; audience: string; seq: number; page: number; pages: number; rows: JsonObject[]; counts: { [filter: string]: { [bucket: string]: number } }; sums?: Sums; nested?: Nested; indexable: boolean };
+export type Page = { view: string; version: string; audience: string; seq: number; page: number; pages: number; /** The rows the picks (and the search) select, across every page: the figure a report stamps. */ total: number; rows: JsonObject[]; counts: { [filter: string]: { [bucket: string]: number } }; sums?: Sums; nested?: Nested; indexable: boolean };
 
 /** A row's slot as a number, in SQL: money by its amount, a quantity by its count, a number as it is, a numeric text read, else nothing. */
 const numericSql = (slot: string) =>
@@ -203,7 +203,7 @@ export class Index {
       }
     }
     if (standsOn) {
-      if (!standsOn.length) return { view, version, audience: v.show, seq, page, pages: 1, rows: [], counts: Object.fromEntries(v.filters.map((f) => [f, Object.fromEntries(this.bucketNames(p, f).map((b) => [b, 0]))])), indexable: false };
+      if (!standsOn.length) return { view, version, audience: v.show, seq, page, pages: 1, total: 0, rows: [], counts: Object.fromEntries(v.filters.map((f) => [f, Object.fromEntries(this.bucketNames(p, f).map((b) => [b, 0]))])), indexable: false };
       params.push(standsOn);
       where.push(`(record = any($${params.length}) or ancestors && $${params.length}::text[])`);
     }
@@ -333,7 +333,7 @@ export class Index {
       delete row.ancestors;
       return row;
     });
-    return { view, version, audience: v.show, seq, page, pages, rows: out, counts, ...(Object.keys(sums).length ? { sums } : {}), ...(Object.keys(nested).length ? { nested } : {}), indexable };
+    return { view, version, audience: v.show, seq, page, pages, total, rows: out, counts, ...(Object.keys(sums).length ? { sums } : {}), ...(Object.keys(nested).length ? { nested } : {}), indexable };
   }
 
   /** Counts and totals per index cursor, picks and search: a few hundred recent answers, the oldest going first. */
