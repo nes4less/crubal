@@ -15,7 +15,7 @@ import type { Json, JsonObject } from "./model.ts";
 import { type PackageInfo, readPackages, type Utility } from "./packages.ts";
 import { readRules, type Rule } from "./rules.ts";
 import { type Contract, type Keys, readContracts, sha256, keyFor } from "./store.ts";
-import { type Filter, readViews, type Shape, type View, type ViewSet } from "./views.ts";
+import { type Display, emptyViewSet, type Filter, readViews, type Shape, VIEW_SET_KEYS, type View, type ViewSet } from "./views.ts";
 
 const isObj = (v: Json | undefined): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);
 
@@ -184,6 +184,11 @@ export function shapeJson(s: Shape): JsonObject {
   return { shape: s.name, slots: s.slots.map((sl) => ({ ...(sl.from.startsWith('"') ? { template: JSON.parse(sl.from) as string } : { from: sl.from }), to: sl.to, ...(sl.required ? { required: true } : {}) })) };
 }
 
+/** A display's JSON form (12.9): the layout family, the slot lines, the tokens as an object, the words. */
+export function displayJson(d: Display): JsonObject {
+  return { display: d.name, ...(d.label ? { label: d.label } : {}), ...(d.describe ? { describe: d.describe } : {}), layout: d.layout, slots: d.slots.map((sl) => ({ from: sl.from, to: sl.to })), ...(d.tokens.size ? { tokens: Object.fromEntries(d.tokens) } : {}) };
+}
+
 export function filterJson(f: Filter): JsonObject {
   const o: JsonObject = { filter: f.name, facet: f.facet };
   if (f.buckets) o.buckets = f.buckets.map((b): JsonObject => (b.range ? { name: b.name, range: { min: String(b.range[0]), max: String(b.range[1]) } } : { name: b.name, values: [...(b.values ?? [])] }));
@@ -285,6 +290,7 @@ export function bundleOf(p: Parsed): JsonObject {
   if (p.rules.length) o.rules = p.rules.map(ruleJson);
   if (p.contracts.length) o.contracts = p.contracts.map(contractJson);
   if (p.views.shapes.size) o.shapes = [...p.views.shapes.values()].map(shapeJson);
+  if (p.views.displays.size) o.displays = [...p.views.displays.values()].map(displayJson);
   if (p.views.filters.size) o.filters = [...p.views.filters.values()].map(filterJson);
   if (p.views.views.size) o.views = [...p.views.views.values()].map(viewJson);
   const roles = rolesJson(p.perms);
@@ -447,6 +453,15 @@ function recipeText(r: JsonObject): string[] {
 
 const shapeText = (s: JsonObject): string[] => [`shape: ${s.shape}`, "  slots:", ...((s.slots as JsonObject[]) ?? []).map((sl) => `    ${sl.required === true ? "!" : ""}${typeof sl.template === "string" ? JSON.stringify(sl.template) : sl.from} -> ${sl.to}`)];
 
+const displayText = (d: JsonObject): string[] => [
+  `display: ${d.display}`,
+  ...(typeof d.label === "string" ? [`  label: ${d.label}`] : []),
+  ...(typeof d.describe === "string" ? [`  describe: ${d.describe}`] : []),
+  `  layout: ${d.layout}`,
+  ...((d.slots as JsonObject[] | undefined)?.length ? ["  slots:", ...(d.slots as JsonObject[]).map((sl) => `    ${sl.from} -> ${sl.to}`)] : []),
+  ...(isObj(d.tokens) && Object.keys(d.tokens).length ? ["  tokens:", ...Object.entries(d.tokens).map(([k, v]) => `    ${k}: ${String(v)}`)] : []),
+];
+
 function filterText(f: JsonObject): string[] {
   const out = [`filter: ${f.filter}`, `  facet: ${f.facet}`];
   if (Array.isArray(f.buckets)) out.push("  buckets:", ...f.buckets.map((b) => { const bb = b as JsonObject; const name = /[\s:]/.test(String(bb.name)) ? JSON.stringify(bb.name) : String(bb.name); return isObj(bb.range) ? `    ${name}: ${bb.range.min}..${bb.range.max}` : `    ${name}: ${list(bb.values as Json[])}`; }));
@@ -500,6 +515,7 @@ export function printBundle(b: JsonObject): string {
   blocks("recipes", recipeText);
   blocks("instructions", instructionsText);
   blocks("shapes", shapeText);
+  blocks("displays", displayText);
   blocks("filters", filterText);
   blocks("views", viewText);
   blocks("roles", roleText);
@@ -532,7 +548,7 @@ export function readBundleInto(b: JsonObject, into: Dictionary = emptyDictionary
 /** An empty Parsed to read packages onto, in order. */
 export function emptyParsed(): Parsed {
   const { perms } = readAccess("");
-  return { info: { name: "", version: "", owner: "", line: 0, crubal: 2, crubalLine: 0, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {}, utilities: [] }, dict: emptyDictionary(), rules: [], contracts: [], views: { shapes: new Map(), filters: new Map(), views: new Map(), roles: new Map(), shown: new Map(), shownFor: new Map() }, perms, edges: [], recipes: [], instructions: new Map() };
+  return { info: { name: "", version: "", owner: "", line: 0, crubal: 2, crubalLine: 0, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {}, utilities: [] }, dict: emptyDictionary(), rules: [], contracts: [], views: emptyViewSet(), perms, edges: [], recipes: [], instructions: new Map() };
 }
 
 /**
@@ -548,7 +564,7 @@ export function readBundleOnto(bundle: JsonObject, base: Parsed): Parsed {
   base.rules = byName(base.rules, readRules(text));
   base.contracts = byName(base.contracts, readContracts(text));
   const views = readViews(text);
-  for (const k of ["shapes", "filters", "views", "roles", "shown", "shownFor"] as const) for (const [key, val] of views[k]) (base.views[k] as Map<string, unknown>).set(key, val);
+  for (const k of VIEW_SET_KEYS) for (const [key, val] of views[k]) (base.views[k] as Map<string, unknown>).set(key, val);
   const { perms, edges } = readAccess(text);
   if (perms.name) base.perms.name = perms.name;
   // A menu item named by more than one package (platform's `people`, every package's `people: grant …`) is

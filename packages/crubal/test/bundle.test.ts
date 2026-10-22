@@ -92,3 +92,44 @@ permissions: b
   assert.deepEqual(base.perms.menu.get("one")?.verbs, { edit: ["Thing"] });
   assert.deepEqual(base.perms.presets.get("helper")?.items, ["two"]);
 });
+
+test("a display (12.9) round-trips through the bundle with its layout, slots, tokens and words", () => {
+  const src = `package: a.test/d /2026-10-22
+  owner: a.test
+  crubal: 2
+
+kind: item
+  levels: product
+title$
+price#
+shape: card
+  slots:
+    title -> heading
+    price -> price
+display: menu
+  label: Menu
+  describe: Two columns of name and price.
+  layout: menu
+  slots:
+    heading -> name
+    price -> price
+  tokens:
+    columns: 2
+    every: 30s
+display: bare
+  layout: grid
+`;
+  const b = roundTrip(src, "display");
+  const displays = b.displays as { display: string; layout: string; slots: unknown[]; tokens?: unknown; label?: string }[];
+  assert.equal(displays.length, 2);
+  assert.equal(displays[0]?.display, "menu");
+  assert.equal(displays[0]?.label, "Menu");
+  assert.deepEqual(displays[0]?.slots, [{ from: "heading", to: "name" }, { from: "price", to: "price" }]);
+  assert.deepEqual(displays[0]?.tokens, { columns: "2", every: "30s" });
+  assert.equal(displays[1]?.layout, "grid");
+  assert.equal(displays[1]?.slots.length, 0);
+  assert.equal(displays[1]?.tokens, undefined);
+  // Installed onto a base, the display is a member like a shape.
+  const onto = readBundleOnto(b, emptyParsed());
+  assert.equal(onto.views.displays.get("menu")?.layout, "menu");
+});

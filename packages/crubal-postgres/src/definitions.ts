@@ -28,7 +28,7 @@ export function unitsExtensionOf(definitions: Iterable<JsonObject>): JsonObject[
 export function workingBundle(owner: string, definitions: Iterable<JsonObject>): JsonObject {
   // The member kinds that carry another kind's word come first (a filter names its facet, a view its shape,
   // a contract its kind), so each define is filed under what it is (G11).
-  const sections: { [member: string]: string } = { filter: "filters", view: "views", contract: "contracts", facet: "facets", class: "classes", rule: "rules", kind: "kinds", shape: "shapes" };
+  const sections: { [member: string]: string } = { filter: "filters", view: "views", contract: "contracts", facet: "facets", class: "classes", rule: "rules", kind: "kinds", shape: "shapes", display: "displays" };
   const b: JsonObject = { crubal: "2", package: "working", version: "working", owner, id: `${owner}/working` };
   // In log order, by member key: a later define of the same member replaces the earlier, a retired one
   // (8.5, 11.4) takes it out, so the working package holds each member once as it now stands.

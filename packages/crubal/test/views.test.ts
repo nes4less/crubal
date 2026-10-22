@@ -183,3 +183,51 @@ view: v
   assert.deepEqual(p.counts.language, { English: 1, French: 1, Spanish: 1 });
   assert.deepEqual(v.project("v", { picks: { language: ["French"] } }).records, ["P-1"]);
 });
+
+// ─── Displays (12.9): a template for a screen over a view, carried like a shape ───
+
+const displaySrc = `
+kind: item
+  levels: product
+title$
+price#
+shape: card
+  slots:
+    title -> heading
+    price -> price
+display: menu
+  label: Menu
+  describe: Two columns of name and price, for a board above a counter.
+  layout: menu
+  slots:
+    heading -> name
+    price -> price
+  tokens:
+    columns: 2
+    every: 30s
+    scale: large
+display: bare
+  layout: grid
+`;
+
+test("a display is read: its layout, slots, tokens and words", () => {
+  const set = readViews(displaySrc);
+  const d = set.displays.get("menu");
+  assert.ok(d);
+  assert.equal(d.label, "Menu");
+  assert.equal(d.layout, "menu");
+  assert.deepEqual(d.slots.map((s) => [s.from, s.to]), [["heading", "name"], ["price", "price"]]);
+  assert.deepEqual(Object.fromEntries(d.tokens), { columns: "2", every: "30s", scale: "large" });
+  const bare = set.displays.get("bare");
+  assert.ok(bare);
+  assert.equal(bare.slots.length, 0);
+  assert.equal(bare.tokens.size, 0);
+  checkViews(set, readDefinitions(displaySrc));
+});
+
+test("a display without a layout, with a malformed slot, or filling one slot twice is refused", () => {
+  assert.throws(() => readViews("display: x\n  slots:\n    a -> b\n"), (e: unknown) => e instanceof CrubalError && /names no layout/.test(e.message));
+  assert.throws(() => readViews("display: x\n  layout: menu\n  slots:\n    a b\n"), (e: unknown) => e instanceof CrubalError && /shapeSlot -> displaySlot/.test(e.message));
+  const twice = readViews("display: x\n  layout: menu\n  slots:\n    a -> n\n    b -> n\n");
+  assert.throws(() => checkViews(twice, readDefinitions("kind: item\n  levels: product\n")), (e: unknown) => e instanceof CrubalError && /fills the slot n twice/.test(e.message));
+});

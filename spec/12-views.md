@@ -353,6 +353,9 @@ position among the pinned, so an index orders rows without reading records. In a
 view with its version when it has one (`"dvds /2026-11-01"`), and the first entry of a new version carries
 `"reset": true` (12.6.2).
 
+A display (12.9) is `{"display", "label", "describe", "layout", "slots": [{"from", "to"}], "tokens":
+{name: value}}` under `displays`, its slots in order and its tokens as the words they were written.
+
 ## 12.8 Well-formed views
 
 A package MUST be refused at publish when:
@@ -363,4 +366,42 @@ A package MUST be refused at publish when:
 3. a filter's bucket values aren't real values of its facet, or two buckets of one filter overlap;
 4. an `index` filter isn't among the view's `filters`;
 5. a role grants anything its audience can't see, or names a target that doesn't exist;
-6. a public view's slots or filters read a facet that `show` rules hide from `public`.
+6. a public view's slots or filters read a facet that `show` rules hide from `public`;
+7. a display names no layout, has a slot line that isn't `shapeSlot -> displaySlot`, or fills one of its
+   slots twice.
+
+## 12.9 Displays
+
+A **display** is a template for a screen over a view: a menu board above a counter, a grid of covers in a
+window, a scoreboard. It is designed once and carried by a package, so a tenant adopts it with the package
+or the utility that brings it, and a deployment's screens list the displays its packages carry.
+
+```crubal
+display: menu
+  label: Menu
+  describe: Two columns of name and price, for a board above a counter.
+  layout: menu
+  slots:
+    heading -> name
+    price -> price
+    line -> detail
+  tokens:
+    columns: 2
+    every: 30s
+    scale: large
+```
+
+- `layout:` names the **family** the display is built on. A family is a way of drawing that the app
+  knows (the first three are `menu`, `grid` and `board`); the engine stores the word and checks nothing
+  else about it, so a package may name a family a later app will draw.
+- `slots:` lines read `shapeSlot -> displaySlot`: the left side is a slot of the view's shape (12.1), the
+  right a slot the family draws (`name`, `price`, `detail`, `image`, `figure`). A display fills a slot once.
+  A display with no slots takes the family's defaults.
+- `tokens:` are `name: value` words for the app that draws it: columns, the interval between redraws or
+  slides, a type scale, colours. The engine carries them as written and computes nothing from them.
+- `label:` and `describe:` are its words on the screen that offers it.
+- A display is a member like a shape: published in the bundle under `displays` (11.6, 12.7), installed
+  with its package, replaced by a later package's member of the same name (11.4). The host serves nothing
+  new for it: the app reads the definition and draws.
+- A display never widens what a view shows. The screen it draws reads the view at the audience the display
+  is for, which is never wider than the view's own (12.4).

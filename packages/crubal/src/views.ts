@@ -26,6 +26,13 @@ const rankOf = (a: string) => {
 
 export type Slot = { from: string; to: string; required: boolean; line: number };
 export type Shape = { name: string; slots: Slot[]; line: number };
+/**
+ * A display (12.9): a template for a screen over a view, designed once and carried by a package. It names
+ * the layout family it is built on, the slots it fills from the view's shape (`shapeSlot -> displaySlot`),
+ * its tokens (columns, interval, scale, colours: words the app reads, nothing the engine computes) and the
+ * words a screen shows for it.
+ */
+export type Display = { name: string; label?: string; describe?: string; layout: string; slots: { from: string; to: string; line: number }[]; tokens: Map<string, string>; line: number };
 export type Period = "day" | "week" | "month" | "quarter" | "year";
 export const PERIODS: readonly Period[] = ["day", "week", "month", "quarter", "year"];
 export type Bucket = { name: string; values?: string[]; range?: [number, number]; period?: Period };
@@ -92,11 +99,16 @@ export type View = {
 export type RoleDef = { name: string; audience: string; see: string[]; seeLine: number; line: number };
 /** A show rule with a `for`: it decides for the records its class, kind or level covers (12.4). */
 export type ShownFor = { for: string; audience: string };
-export type ViewSet = { shapes: Map<string, Shape>; filters: Map<string, Filter>; views: Map<string, View>; roles: Map<string, RoleDef>; shown: Map<string, string>; shownFor: Map<string, ShownFor[]> };
+export type ViewSet = { shapes: Map<string, Shape>; displays: Map<string, Display>; filters: Map<string, Filter>; views: Map<string, View>; roles: Map<string, RoleDef>; shown: Map<string, string>; shownFor: Map<string, ShownFor[]> };
+/** The member maps of a view set, for merging one set onto another. */
+export const VIEW_SET_KEYS = ["shapes", "displays", "filters", "views", "roles", "shown", "shownFor"] as const;
 
-/** Read shapes, filters, views (with a body), roles and `shown to` rules. */
+/** An empty view set. */
+export const emptyViewSet = (): ViewSet => ({ shapes: new Map(), displays: new Map(), filters: new Map(), views: new Map(), roles: new Map(), shown: new Map(), shownFor: new Map() });
+
+/** Read shapes, displays, filters, views (with a body), roles and `shown to` rules. */
 export function readViews(source: string): ViewSet {
-  const set: ViewSet = { shapes: new Map(), filters: new Map(), views: new Map(), roles: new Map(), shown: new Map(), shownFor: new Map() };
+  const set: ViewSet = emptyViewSet();
   for (const n of readTree(source)) {
     if (n.kind !== "pair" || !n.key) continue;
     const name = n.value.trim();
@@ -111,6 +123,25 @@ export function readViews(source: string): ViewSet {
         return { from, to: l.text.slice(at + 4).trim(), required, line: l.line };
       });
       set.shapes.set(name, { name, slots, line: n.line });
+    } else if (n.key === "display") {
+      // A display (12.9): `layout:` names the family; `slots:` lines read `shapeSlot -> displaySlot`; `tokens:`
+      // lines are `name: value` words for the app; `label:` and `describe:` are its words on a screen.
+      const layout = get("layout")?.value.trim();
+      if (!layout) throw new CrubalError(`the display ${name} names no layout`, n.line);
+      const slots = (get("slots")?.children ?? []).map((l) => {
+        const at = l.text.lastIndexOf(" -> ");
+        if (at < 0) throw new CrubalError(`a display slot is "shapeSlot -> displaySlot": ${l.text}`, l.line);
+        const from = l.text.slice(0, at).trim();
+        const to = l.text.slice(at + 4).trim();
+        if (!from || !to) throw new CrubalError(`a display slot is "shapeSlot -> displaySlot": ${l.text}`, l.line);
+        return { from, to, line: l.line };
+      });
+      const tokens = new Map<string, string>();
+      for (const t of get("tokens")?.children ?? []) {
+        if (t.kind !== "pair" || !t.key) throw new CrubalError(`a display token is "name: value": ${t.text}`, t.line);
+        tokens.set(t.key, t.value.trim());
+      }
+      set.displays.set(name, { name, ...(get("label") ? { label: get("label")?.value.trim() as string } : {}), ...(get("describe") ? { describe: get("describe")?.value.trim() as string } : {}), layout, slots, tokens, line: n.line });
     } else if (n.key === "filter") {
       const b = get("buckets");
       // `buckets: by month`: the buckets are the periods the facet's dates fall in (12.3).
@@ -245,6 +276,14 @@ export function checkViews(set: ViewSet, dict: Dictionary): void {
     }
   }
   for (const f of set.filters.values()) for (const d of f.dependent) if (!defined(d)) throw new CrubalError(`the filter ${f.name} depends on ${d}, which isn't a facet`, f.line);
+  // A display (12.9) fills its slots from a shape's slots; two of its lines may not fill one display slot.
+  for (const d of set.displays.values()) {
+    const filled = new Set<string>();
+    for (const sl of d.slots) {
+      if (filled.has(sl.to)) throw new CrubalError(`the display ${d.name} fills the slot ${sl.to} twice`, sl.line);
+      filled.add(sl.to);
+    }
+  }
   for (const v of set.views.values()) {
     for (const s of v.shapes) if (!CORE_SHAPES.includes(s) && !set.shapes.has(s)) throw new CrubalError(`${v.name} names the shape ${s}, which doesn't exist`, v.line);
     // A list is the whole selection (12.2): a level, classes, a condition or curation would contradict it.

@@ -14,7 +14,7 @@ const same = (a: Json | undefined, b: Json | undefined) => serialize((a ?? null)
 export type Change = { member: string; kind: "unchanged" | "safe" | "minor" | "breaking" | "new" | "retired"; why: string[]; recipe?: string[] };
 
 /** Where a member's JSON lives in a bundle, by its `member:name` key. */
-const SECTIONS: { [member: string]: [string, string] } = { facet: ["facets", "facet"], class: ["classes", "class"], rule: ["rules", "rule"], contract: ["contracts", "contract"], view: ["views", "view"], shape: ["shapes", "shape"], filter: ["filters", "filter"], kind: ["kinds", "kind"], utility: ["utilities", "utility"] };
+const SECTIONS: { [member: string]: [string, string] } = { facet: ["facets", "facet"], class: ["classes", "class"], rule: ["rules", "rule"], contract: ["contracts", "contract"], view: ["views", "view"], shape: ["shapes", "shape"], display: ["displays", "display"], filter: ["filters", "filter"], kind: ["kinds", "kind"], utility: ["utilities", "utility"] };
 
 function membersOf(b: JsonObject): Map<string, JsonObject> {
   const out = new Map<string, JsonObject>();

@@ -38,7 +38,7 @@ package: me /2026-10-13
 | `terms` | how each audience may use what it's shown: `public: search yes, answer yes, train no` (chapter 12.5.1) |
 
 The rest of the package is its member files: `facet:`, `class:`, `rule:`, `contract:`, `kind:`, `view:`,
-`shape:`, `filter:`, `role:` (chapter 12), `migration:`, `permissions:` and `ownership:` (chapter 14) and
+`shape:`, `display:`, `filter:`, `role:` (chapter 12), `migration:`, `permissions:` and `ownership:` (chapter 14) and
 `utility:` blocks, in any number of files. A package MAY also publish **reference records** (data files in
 the text form, chapter 2) that others read but don't own copies of: the units table is one.
 
@@ -210,9 +210,9 @@ A published version MUST NOT change. A mistake is fixed by a new version.
 }
 ```
 
-The member sections (`kinds`, `facets`, `classes`, `rules`, `contracts`, `views`, `shapes`, `filters`,
-`roles`, `permissions`, `ownership`, `recipes`, `utilities`) each hold their members' JSON forms as the
-chapters define them.
+The member sections (`kinds`, `facets`, `classes`, `rules`, `contracts`, `views`, `shapes`, `displays`,
+`filters`, `roles`, `permissions`, `ownership`, `recipes`, `utilities`) each hold their members' JSON forms
+as the chapters define them.
 
 ## 11.7 The home: crubal.com
 
