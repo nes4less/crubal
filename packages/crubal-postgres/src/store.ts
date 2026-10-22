@@ -13,6 +13,7 @@ import { entryHash, verifyChain, writeHash, type Keys } from "@cruba/crubal";
 import { type Client, type Pool, transaction } from "./db.ts";
 import { isObj, loadState, persist, wipeState, recordOf } from "./state.ts";
 import { type Facet, type Parsed, readBundle, readBundleOnto, verifyBundle } from "@cruba/crubal";
+import { classify } from "@cruba/crubal";
 import { dryRun, restamp, type StepStats } from "@cruba/crubal";
 import { checkAll, definitionsOf, unitsExtensionOf, workingBundle } from "./definitions.ts";
 import { decideReview, type Decision, openItems } from "@cruba/crubal";
@@ -77,6 +78,44 @@ function ownRecordsOf(records: { forTarget(name: string): Record[] }, own: Parse
     }
   }
   return out;
+}
+
+/**
+ * The views a pin move can have changed, so only those are marked stale (12.6): a view whose own
+ * definition, a shape or a filter it names changed between the two versions, or that reads a facet that
+ * changed (in its order, pins, index, a slot, a filter, its condition); every view when a rule or the
+ * permissions changed, since rows carry what rules produce and are cut per audience. What the recipes
+ * restamped the commit marked itself. Marking every view of a million-record store for a version that
+ * moved nothing queued 2.4 million rows to rebuild (Media Encyclopedia's storefront install, 2026-10-22).
+ */
+function viewsChangedBy(previous: JsonObject, next: JsonObject, p: Projecting): View[] | "all" {
+  if (serialize((previous.permissions ?? {}) as Json) !== serialize((next.permissions ?? {}) as Json)) return "all";
+  const changed = classify(previous, next).filter((c) => c.kind !== "unchanged").map((c) => c.member);
+  if (!changed.length) return [];
+  const of = (member: string) => new Set(changed.filter((m) => m.startsWith(`${member}:`)).map((m) => m.slice(member.length + 1)));
+  if (of("rule").size) return "all";
+  const facets = of("facet");
+  const shapes = of("shape");
+  const filters = of("filter");
+  const views = of("view");
+  // The facet an address starts from: `audioTracks[*].language` reads audioTracks.
+  const keyOf = (address: string) => address.split(/[.[]/)[0] ?? address;
+  const touched = (v: View): boolean => {
+    if (views.has(v.name) || v.shapes.some((n) => shapes.has(n)) || v.filters.some((n) => filters.has(n))) return true;
+    if (!facets.size) return false;
+    const reads = new Set<string>([...v.order.map((o) => keyOf(o.key)), ...v.pin.map(keyOf), ...v.hide.map(keyOf), ...v.index.map(keyOf)]);
+    if (v.list) reads.add(keyOf(v.list));
+    for (const n of v.shapes) for (const slot of p.views.shapes.get(n)?.slots ?? []) reads.add(keyOf(slot.from));
+    for (const n of v.filters) {
+      const f = p.views.filters.get(n);
+      if (!f) continue;
+      reads.add(f.facet);
+      for (const x of [...f.sums, ...f.dependent]) reads.add(keyOf(x));
+    }
+    for (const k of reads) if (facets.has(k)) return true;
+    return !!v.when && [...facets].some((k) => new RegExp(`(^|[^A-Za-z0-9_])${k}([^A-Za-z0-9_]|$)`).test(v.when as string));
+  };
+  return [...p.views.views.values()].filter(touched);
 }
 
 /** The recipes of a package that lie between two versions, oldest first (10.1): `from` at or after the installed version, `to` at or before the new one. */
@@ -265,6 +304,7 @@ export class PgStore {
     }
     const previous = have(String(bundle.id)).at(-1);
     if (previous === bundle.version) throw new Error(`${bundle.id} /${bundle.version} is already installed`);
+    const prevBundle = previous ? ((await this.pool.query("select json from bundles where owner = $1 and package = $2 and version = $3", [this.owner, bundle.id, previous])).rows[0] as { json: JsonObject } | undefined)?.json : undefined;
     // The definitions that would result must pass every publish check before anything is written.
     const current = await this.definitions(true);
     const next = readBundleOnto(bundle, current);
@@ -276,8 +316,7 @@ export class PgStore {
       // Against each other package's version in force; a key this package's installed version already
       // defined the same way is no new collision (so two packages can unwind one, each in its turn).
       const { rows: others } = await this.pool.query("select distinct on (package) package, json from bundles where owner = $1 and package <> $2 order by package, version desc", [this.owner, bundle.id]);
-      const { rows: mine } = previous ? await this.pool.query("select json from bundles where owner = $1 and package = $2 and version = $3", [this.owner, bundle.id, previous]) : { rows: [] };
-      const before = mine[0] ? readBundle((mine[0] as { json: JsonObject }).json).dict.facets : new Map<string, { type: string }>();
+      const before = prevBundle ? readBundle(prevBundle).dict.facets : new Map<string, { type: string }>();
       for (const o of others as { package: string; json: JsonObject }[]) {
         const theirs = readBundle(o.json).dict.facets;
         for (const [key, f] of own.dict.facets) {
@@ -290,8 +329,7 @@ export class PgStore {
     }
     // A version may not take away a preset or item that live edges still grant (14.12): lapse or regrant first.
     if (previous) {
-      const { rows: prevRows } = await this.pool.query("select json from bundles where owner = $1 and package = $2 and version = $3", [this.owner, bundle.id, previous]);
-      const was = prevRows[0] ? readBundle((prevRows[0] as { json: JsonObject }).json).perms : current.perms;
+      const was = prevBundle ? readBundle(prevBundle).perms : current.perms;
       const own = readBundle(bundle).perms;
       const gone = new Set([...was.presets.keys(), ...was.menu.keys()].filter((n) => !own.presets.has(n) && !own.menu.has(n)));
       if (gone.size) {
@@ -336,7 +374,11 @@ export class PgStore {
     }
     if (!result.entry) throw new Error("the install wrote nothing");
     this.defsCache = undefined;
-    if (previous) await this.staleAll((sql, params) => this.pool.query(sql, params), await this.projecting());
+    if (previous) {
+      const p = await this.projecting();
+      const which = prevBundle && p ? viewsChangedBy(prevBundle, bundle, p) : "all";
+      if (which === "all" || which.length) await this.staleAll((sql, params) => this.pool.query(sql, params), p, which === "all" ? undefined : which);
+    }
     return result.entry;
   }
 
@@ -346,9 +388,9 @@ export class PgStore {
    * rows instead, as before 0.1.16, made the next publish a first one, which announces no removals, so an
    * index kept rows nothing ever removed: ME's index held three versions of its shop.)
    */
-  private async staleAll(run: (sql: string, params: unknown[]) => Promise<unknown>, p: Projecting | undefined): Promise<void> {
+  private async staleAll(run: (sql: string, params: unknown[]) => Promise<unknown>, p: Projecting | undefined, only?: View[]): Promise<void> {
     if (!p) return;
-    for (const v of p.views.views.values()) {
+    for (const v of only ?? p.views.views.values()) {
       await run(`insert into stale (owner, view, record, since) select $1, $2, id, 0 from records where owner = $1${v.level ? " and level = $3" : ""} on conflict do nothing`, v.level ? [this.owner, v.name, v.level] : [this.owner, v.name]);
       await run("insert into stale (owner, view, record, since) select owner, view, record, 0 from projections where owner = $1 and view = $2 on conflict do nothing", [this.owner, v.name]);
     }

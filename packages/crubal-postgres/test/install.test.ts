@@ -240,3 +240,72 @@ test("the dry run and the restamp read the package's own records by kind and cla
   await store.install(v2, undefined, "2026-10-17T00:00:02Z");
   assert.equal((await store.records({ kind: "thing" }))[0]?.values.size, "Small", "the restamp moved the value from the package's own records");
 });
+
+const shelf = (v: string, noteLabel: string, extraFacet = "", extraClassFacet = "") => `package: shelf /${v}
+  owner: lab.example
+  label: Shelf
+  crubal: 2
+
+kind: book
+  levels: book
+  base: Book
+
+title$200
+facet: note
+  type: text
+  label: ${noteLabel}
+${extraFacet}
+class: Book
+  label: Book
+  for: book
+  facets:
+    title
+    note
+${extraClassFacet}
+shape: titled
+  slots:
+    title -> title
+shape: noted
+  slots:
+    note -> title
+view: byTitle
+  select:
+    level: book
+  shape: titled
+view: byNote
+  select:
+    level: book
+  shape: noted
+
+permissions: shelf
+  menu:
+    shelving: edit title
+  presets:
+    shelver: shelving                      audience: staff
+  relations: operator, staff, customer
+`;
+
+test("a pin move marks stale only the views the version can have changed; a version that touches nothing they read marks none", { skip: !url }, async () => {
+  const owner = "shelf.example";
+  const store = new PgStore(pool, owner, { allowUnsigned: true });
+  const v1 = publish(shelf("2026-10-01", "Note"), { date: "2026-10-01" }).bundle;
+  const v2 = publish(shelf("2026-10-02", "Remark"), { date: "2026-10-02", previous: v1 }).bundle;
+  const v3 = publish(shelf("2026-10-03", "Remark", "color$", "    color"), { date: "2026-10-03", previous: v2 }).bundle;
+  await store.install(v1, undefined, "2026-10-17T00:00:00Z");
+  await store.commit(
+    { person: owner },
+    (d) => {
+      d.records.set("B-1", { id: "B-1", kind: "book", level: "book", owner, values: { title: "Dune", note: "worn" }, sources: { "*": { origin: "declared", via: "L-1" } } });
+    },
+    "2026-10-17T00:00:01Z",
+  );
+  const marks = async () => (await pool.query("select view, record from stale where owner = $1 order by view, record", [owner])).rows.map((r: { view: string; record: string }) => `${r.view}:${r.record}`);
+  await pool.query("delete from stale where owner = $1", [owner]);
+  // The note's label changes: the view whose shape reads note rebuilds; the view over titles is untouched.
+  await store.install(v2, undefined, "2026-10-17T00:00:02Z");
+  assert.deepEqual(await marks(), ["byNote:B-1"], "only the view reading the changed facet is marked");
+  await pool.query("delete from stale where owner = $1", [owner]);
+  // A new facet nothing reads: no view rebuilds.
+  await store.install(v3, undefined, "2026-10-17T00:00:03Z");
+  assert.deepEqual(await marks(), [], "a version that changes nothing a view reads marks no view");
+});
