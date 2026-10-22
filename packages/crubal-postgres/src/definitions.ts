@@ -64,11 +64,16 @@ export function workingBundle(owner: string, definitions: Iterable<JsonObject>):
 const parsedShared = new Map<string, Parsed>();
 const PARSED_SHARED_MAX = 64;
 
-/** Build the definitions in force: installed bundles in order, then the working package. */
-export async function definitionsOf(client: Client, owner: string, extra: JsonObject[] = []): Promise<Parsed> {
+/**
+ * Build the definitions in force: installed bundles in order, then the working package. `own` asks for a
+ * copy of the caller's own, never the shared one: a dry run or an install reads the next bundle onto what it
+ * is given, and read onto the shared object that became every store's definitions until the key changed
+ * (a dry run run three times reported its recipe three times, 2026-10-22).
+ */
+export async function definitionsOf(client: Client, owner: string, extra: JsonObject[] = [], own = false): Promise<Parsed> {
   const installed = (await client.query("select json from installed where owner = $1 order by ord", [owner])).rows as Row[];
   const defs = (await client.query("select json from definitions where owner = $1 order by ord", [owner])).rows as Row[];
-  const key = extra.length ? undefined : `${installed.map((r) => `${(r.json as JsonObject).package}/${(r.json as JsonObject).version}`).join(",")}|${createHash("sha256").update(JSON.stringify(defs.map((r) => r.json))).digest("hex")}`;
+  const key = extra.length || own ? undefined : `${installed.map((r) => `${(r.json as JsonObject).package}/${(r.json as JsonObject).version}`).join(",")}|${createHash("sha256").update(JSON.stringify(defs.map((r) => r.json))).digest("hex")}`;
   const shared = key ? parsedShared.get(key) : undefined;
   if (shared) {
     parsedShared.delete(key as string);

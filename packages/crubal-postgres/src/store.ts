@@ -60,6 +60,25 @@ function ownRecord(own: Parsed, r: { kind: string; wears?: string[] }): boolean 
   return own.dict.kinds.has(r.kind) || (r.wears ?? []).some((w) => own.dict.classes.has(w));
 }
 
+/**
+ * The records a package's recipes restamp (10.4), asked for by name from a working set: the records of
+ * each kind it defines and the wearers of each class, so a draft loads those and nothing else. Reading the
+ * catalog whole and filtering it down read a million records into memory for a recipe over a dozen
+ * (Media Encyclopedia's storefront install, 2026-10-22).
+ */
+function ownRecordsOf(records: { forTarget(name: string): Record[] }, own: Parsed): Record[] {
+  const seen = new Set<string>();
+  const out: Record[] = [];
+  for (const name of [...own.dict.kinds.keys(), ...own.dict.classes.keys()]) {
+    for (const r of records.forTarget(name)) {
+      if (seen.has(r.id) || !ownRecord(own, r)) continue;
+      seen.add(r.id);
+      out.push(r);
+    }
+  }
+  return out;
+}
+
 /** The recipes of a package that lie between two versions, oldest first (10.1): `from` at or after the installed version, `to` at or before the new one. */
 function recipesBetween<R extends { from: string; to: string }>(recipes: R[], pkg: string, installed: string, target: string): R[] {
   const version = (s: string) => s.slice(s.lastIndexOf("/") + 1);
@@ -199,9 +218,9 @@ export class PgStore {
     }
   }
 
-  /** `fresh` builds a copy to try a change on (a trial reads onto it and must not touch the cache). */
+  /** `fresh` builds the caller's own copy to try a change on (a trial reads onto it and must not touch the shared cache). */
   private async definitionsFrom(client: Client, fresh = false): Promise<Parsed> {
-    if (fresh) return definitionsOf(client, this.owner);
+    if (fresh) return definitionsOf(client, this.owner, [], true);
     const { rows } = await client.query("select head_seq from chains where owner = $1 and chain = $2", [this.owner, this.chain]);
     const seq = rows.length ? Number((rows[0] as { head_seq: string | number }).head_seq) : 0;
     if (this.defsCache && this.defsCache.seq === seq) return this.defsCache.parsed;
@@ -294,7 +313,7 @@ export class PgStore {
         const parsedRecipes = recipesBetween(next.recipes, String(bundle.package), previous, String(bundle.version));
         for (const recipe of parsedRecipes) {
           // A recipe restamps what the store holds for the package (10.4): records of its kinds and records wearing its classes.
-          const records = draft.records.all().filter((r) => ownRecord(own, r));
+          const records = ownRecordsOf(draft.records, own);
           const { records: after, review } = restamp(records, recipe, next.dict);
           for (const r of after) draft.records.set(r.id, r);
           for (const item of review) draft.review.push({ ...item, step: item.step, migration: `${recipe.from} -> ${recipe.to}` });
@@ -536,9 +555,18 @@ export class PgStore {
     if (!previous) return { recipes: [], records: 0 };
     const next = readBundleOnto(bundle, await this.definitions(true));
     const own = readBundle(bundle);
-    const records = (await this.wholeState()).records.all().filter((r) => ownRecord(own, r));
+    const records = await this.ownRecords(own);
     const recipes = recipesBetween(next.recipes, String(bundle.package), previous, String(bundle.version)).map((r) => { const d = dryRun(records, r, next.dict); return { from: r.from, to: r.to, steps: d.steps, review: d.review }; });
     return { recipes, records: records.length };
+  }
+
+  /** The records the package's recipes restamp (10.4): of its kinds or wearing its classes, one query on the kind and wears indexes; never the catalog whole. */
+  private async ownRecords(own: Parsed): Promise<Record[]> {
+    const kinds = [...own.dict.kinds.keys()];
+    const classes = [...own.dict.classes.keys()];
+    if (!kinds.length && !classes.length) return [];
+    const { rows } = await this.pool.query("select * from records where owner = $1 and (kind = any($2::text[]) or wears && $3::text[]) order by ord", [this.owner, kinds, classes]);
+    return (rows as { [column: string]: unknown }[]).map((r) => recordOf(r));
   }
 
   /** A define write (8.5, 11.4): one member of the working package as it now stands, checked with the rest first. */

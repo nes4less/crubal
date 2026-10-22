@@ -1,6 +1,6 @@
 {
   "name": "@cruba/crubal-host",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "The reference CRUBAL host: identity, secrets, adapters, signing, the loops, the platform index and the HTTP surface over the Postgres store.",
   "license": "Apache-2.0",
   "type": "module",
@@ -29,8 +29,8 @@
     "prepublishOnly": "npm run typecheck && npm run build"
   },
   "dependencies": {
-    "@cruba/crubal": "0.3.4",
-    "@cruba/crubal-postgres": "0.3.4",
+    "@cruba/crubal": "0.3.5",
+    "@cruba/crubal-postgres": "0.3.5",
     "pg": "^8.13.0"
   },
   "devDependencies": {

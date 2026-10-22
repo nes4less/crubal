@@ -216,3 +216,27 @@ migration: roots /2026-10-01 -> roots /2026-10-02
   assert.equal(s.records.get("K-1")?.values.from, "here", "the place's value, another package's record, stayed");
 });
 
+
+test("the dry run and the restamp read the package's own records by kind and class, never the catalog whole", { skip: !url }, async () => {
+  const store = new PgStore(pool, "narrow.example", { allowUnsigned: true });
+  const v1 = publish(text("2026-10-01", "S|M|L"), { date: "2026-10-01" }).bundle;
+  const v2 = publish(text("2026-10-02", "Small|M|L", RECIPE_12), { date: "2026-10-02", previous: v1 }).bundle;
+  await store.install(v1, undefined, "2026-10-17T00:00:00Z");
+  await store.commit(
+    { person: "narrow.example" },
+    (d) => {
+      d.records.set("T-1", { id: "T-1", kind: "thing", level: "thing", owner: "narrow.example", values: { size: "S" }, sources: { "*": { origin: "declared", via: "L-1" } } });
+    },
+    "2026-10-17T00:00:01Z",
+  );
+  // A million-record owner's install read every record into memory for a recipe over a dozen (2026-10-22):
+  // from here, reading the catalog whole is the failure.
+  (store as unknown as { wholeState: () => Promise<never> }).wholeState = async () => {
+    throw new Error("the catalog was read whole");
+  };
+  const dry = await store.dryRun(v2);
+  assert.equal(dry.records, 1, "the dry run counts the package's own records without the whole state");
+  assert.deepEqual(dry.recipes.map((r) => r.steps.map((s) => s.changed)), [[1]]);
+  await store.install(v2, undefined, "2026-10-17T00:00:02Z");
+  assert.equal((await store.records({ kind: "thing" }))[0]?.values.size, "Small", "the restamp moved the value from the package's own records");
+});
