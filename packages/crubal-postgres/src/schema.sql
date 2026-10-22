@@ -55,6 +55,9 @@ create index if not exists records_ancestors on records using gin (ancestors);
 create index if not exists records_values on records using gin ((doc -> 'values'));
 create index if not exists records_kind on records (owner, kind);
 create index if not exists records_wears on records using gin (wears);
+-- The few records holding a suggestion or a held value, for the review queue: without it the question was a
+-- sequential scan of the catalog on every signed-in page (a million rows, 1.3 s, Media Encyclopedia 2026-10-22).
+create index if not exists records_awaiting on records (owner, ord) where (doc ? 'suggestions' or doc ? 'held');
 
 create table if not exists definitions (
   owner text not null,
