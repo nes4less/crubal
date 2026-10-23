@@ -3,6 +3,7 @@
 // pages, counts, partitions, role marks, search and indexability over the rows it holds. It is never the
 // truth: a contract checks the store, and the index can be dropped and rebuilt from the stream.
 
+import { createHash } from "node:crypto";
 import { facetOf, Access } from "@cruba/crubal";
 import type { Json, JsonObject, Sums } from "@cruba/crubal";
 import { type Nested, partitionOf, type StreamEntry, type View } from "@cruba/crubal";
@@ -254,7 +255,19 @@ export class Index {
       total = chosen.length;
       onPage = chosen.slice((page - 1) * v.page, page * v.page);
     } else {
-      const cached = this.cache.get(key) as { total: number; counts: Page["counts"]; sums: Sums; nested: Nested } | undefined;
+      type Tally = { total: number; counts: Page["counts"]; sums: Sums; nested: Nested };
+      // The tally kept in this process, or in the host's table by any process, under the same key (the
+      // index head is in it, so a moved index never answers from an old tally).
+      const hashed = createHash("sha256").update(key).digest("hex");
+      let cached = this.cache.get(key) as Tally | undefined;
+      await this.talliesReady();
+      if (!cached) {
+        const stored = (await this.pool.query("select json from index_tallies where key = $1", [hashed])).rows[0] as { json: Tally } | undefined;
+        if (stored) {
+          cached = stored.json;
+          this.remember(key, cached);
+        }
+      }
       if (cached) {
         total = cached.total;
         Object.assign(counts, cached.counts);
@@ -308,7 +321,11 @@ export class Index {
           }
           nested[f] = inner;
         }
-        this.remember(key, { total, counts: structuredClone(counts), sums: structuredClone(sums), nested: structuredClone(nested) });
+        const made: Tally = { total, counts: structuredClone(counts), sums: structuredClone(sums), nested: structuredClone(nested) };
+        this.remember(key, made);
+        // Kept for every process; the tallies of earlier heads of this view go with it.
+        await this.pool.query("insert into index_tallies (key, owner, view, version, audience, seq, json) values ($1, $2, $3, $4, $5, $6, $7) on conflict (key) do nothing", [hashed, owner, view, version, v.show, seq, made]);
+        await this.pool.query("delete from index_tallies where owner = $1 and view = $2 and version = $3 and audience = $4 and seq < $5", [owner, view, version, v.show, seq]);
       }
       const paged = build(undefined, [v.page, (page - 1) * v.page]);
       onPage = (await this.pool.query(`select record, row, buckets, marks, ancestors, sort, pin from index_rows where ${paged.sql} order by ${order} limit $${paged.ps.length - 1} offset $${paged.ps.length}`, paged.ps)).rows as Row[];
@@ -337,6 +354,17 @@ export class Index {
   }
 
   /** Counts and totals per index cursor, picks and search: a few hundred recent answers, the oldest going first. */
+  private tallies: Promise<void> | undefined;
+  /** The tally table, made once per process for a store migrated before it existed (the schema carries it from 0.3.8). */
+  private talliesReady(): Promise<void> {
+    this.tallies ??= this.pool
+      .query(
+        "create table if not exists index_tallies (key text primary key, owner text not null, view text not null, version text not null, audience text not null, seq bigint not null, json jsonb not null, at timestamptz not null default now()); create index if not exists index_tallies_view on index_tallies (owner, view, version, audience, seq)",
+      )
+      .then(() => undefined, () => undefined);
+    return this.tallies;
+  }
+
   private readonly cache = new Map<string, unknown>();
   private remember(key: string, value: unknown): void {
     this.cache.set(key, value);

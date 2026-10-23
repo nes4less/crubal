@@ -43,6 +43,21 @@ create index if not exists index_rows_order on index_rows (owner, view, version,
 create index if not exists index_rows_ancestors on index_rows using gin (ancestors);
 create index if not exists index_rows_record on index_rows (record);
 
+-- The counts, sums and nested counts of a view under its picks at one index head (the filter tally): one pass
+-- over the view's rows, kept here so every process answers the same question from the table until the index
+-- moves (3.1 s per pass on a 347,000-row view, paid by every function instance and every pick, 2026-10-23).
+create table if not exists index_tallies (
+  key text primary key,
+  owner text not null,
+  view text not null,
+  version text not null,
+  audience text not null,
+  seq bigint not null,
+  json jsonb not null,
+  at timestamptz not null default now()
+);
+create index if not exists index_tallies_view on index_tallies (owner, view, version, audience, seq);
+
 create table if not exists index_cursors (
   owner text not null,
   view text not null,

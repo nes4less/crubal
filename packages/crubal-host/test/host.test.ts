@@ -7,6 +7,7 @@ import { after, before, test } from "node:test";
 import { publish, STANDARD_PACKAGES } from "@cruba/crubal";
 import { verifyChain } from "@cruba/crubal";
 import type { JsonObject } from "@cruba/crubal";
+import { Index } from "../src/indexer.ts";
 import { connect, PgStore, testSchema, type Pool } from "@cruba/crubal-postgres";
 import { Host } from "../src/host.ts";
 import { serve } from "../src/server.ts";
@@ -227,6 +228,11 @@ test("install through the host, then a form run, a send with an adapter and an a
   const page = (await pageRes.json()) as JsonObject;
   assert.deepEqual((page.rows as JsonObject[]).map((r) => r.heading), ["Christmas Vacation", "Home Alone"]);
   assert.deepEqual(page.counts, { format: { DVD: 1, "Blu-ray": 1 } });
+  // The tally is kept in the host's table: a fresh index over the same pool, with nothing in memory, answers it.
+  const fresh = new Index(pool);
+  const again = await fresh.serve(store, "discs", {});
+  assert.deepEqual(again.counts, page.counts, "the same counts from the table");
+  assert.ok(Number((await pool.query("select count(*)::int as n from index_tallies where owner = $1 and view = $2", ["shop.example", "discs"])).rows[0].n) >= 1, "a tally row kept");
   const picked = await call("GET", "/o/shop.example/v/discs?format=Blu-ray");
   assert.deepEqual((picked.body.rows as JsonObject[]).map((r) => r.heading), ["Home Alone"]);
   assert.deepEqual(picked.body.counts, { format: { DVD: 1, "Blu-ray": 1 } }, "a filter's counts ignore its own pick");
