@@ -7,7 +7,7 @@ import { Access, type Permissions } from "@cruba/crubal";
 import { serialize } from "@cruba/crubal";
 import type { Dictionary } from "@cruba/crubal";
 import type { State } from "@cruba/crubal";
-import type { Json, JsonObject, Record } from "@cruba/crubal";
+import type { Json, JsonObject, Record, View } from "@cruba/crubal";
 import { type StreamEntry, Views, type ViewSet } from "@cruba/crubal";
 import type { Client } from "./db.ts";
 import { Needs, settle, workingState, loadWhole } from "./working.ts";
@@ -59,10 +59,28 @@ export async function publish(client: Client, owner: string, p: Projecting, name
   const anyVersion = marker.length ? marker : ((await client.query("select distinct version from projections where owner = $1 and view = $2 and audience = $3", [owner, name, aud])).rows as Row[]);
   const published = anyVersion.length > 0;
   const reset = published && !anyVersion.some((r) => r.version === version);
-  const marked = (await client.query("select record from stale where owner = $1 and view = $2", [owner, name])).rows as Row[];
+  const marked = (await client.query("select record from stale where owner = $1 and view = $2 order by record", [owner, name])).rows as Row[];
   const full = !published || reset;
-  const only = full ? undefined : marked.map((r) => String(r.record));
-  if (!full && !only?.length) return [];
+  const allMarked = full ? undefined : marked.map((r) => String(r.record));
+  if (!full && !allMarked?.length) return [];
+  // The marked rows are rebuilt in batches under a budget (brief 29, rule 2): a view with 347,000 rows marked
+  // by an install was rebuilt in one working set and ran the function out of memory on every tick
+  // (Media Encyclopedia, 2026-10-23). Each batch's marks go when its rows are written, so a run that stops at
+  // the budget leaves the rest marked for the next; a full publish (first or reset) still goes in one.
+  const BATCH = Math.max(1, Number(process.env.CRUBAL_PUBLISH_BATCH ?? "2000"));
+  const BUDGET_MS = Number(process.env.CRUBAL_PUBLISH_BUDGET_MS ?? "45000");
+  const started = Date.now();
+  const all: StreamEntry[] = [];
+  const batches: (string[] | undefined)[] = allMarked ? Array.from({ length: Math.ceil(allMarked.length / BATCH) }, (_, i) => allMarked.slice(i * BATCH, (i + 1) * BATCH)) : [undefined];
+  for (const [i, only] of batches.entries()) {
+    if (i > 0 && Date.now() - started > BUDGET_MS) break;
+    all.push(...(await publishSet(client, owner, p, name, aud, version, projection, v, reset && i === 0, full, only)));
+  }
+  return all;
+}
+
+/** One set of a view's rows published: every row when `only` is undefined, else those records. */
+async function publishSet(client: Client, owner: string, p: Projecting, name: string, aud: string, version: string, projection: string, v: View, reset: boolean, full: boolean, only: string[] | undefined): Promise<StreamEntry[]> {
   const stored = (
     full
       ? await client.query("select record, row, buckets, sort, pin, seq from projections where owner = $1 and view = $2 and audience = $3 and version = $4 order by seq", [owner, name, aud, version])
@@ -134,7 +152,8 @@ export async function publish(client: Client, owner: string, p: Projecting, name
     await client.query("delete from projection_stream where owner = $1 and view = $2 and audience = $3 and version <> $4", [owner, name, aud, version]);
   }
   await client.query("insert into published (owner, view, audience, version) values ($1, $2, $3, $4) on conflict (owner, view, audience) do update set version = excluded.version", [owner, name, aud, version]);
-  await client.query("delete from stale where owner = $1 and view = $2", [owner, name]);
+  if (only) await client.query("delete from stale where owner = $1 and view = $2 and record = any($3)", [owner, name, only]);
+  else await client.query("delete from stale where owner = $1 and view = $2", [owner, name]);
   return entries;
 }
 

@@ -308,4 +308,13 @@ test("a pin move marks stale only the views the version can have changed; a vers
   // A new facet nothing reads: no view rebuilds.
   await store.install(v3, undefined, "2026-10-17T00:00:03Z");
   assert.deepEqual(await marks(), [], "a version that changes nothing a view reads marks no view");
+  // A new rule naming note: the view reading note rebuilds, the other does not (a rule once marked every view).
+  const v4 = publish(shelf("2026-10-04", "Remark", "color$", "    color") + `
+rule: noteIsStaff
+  for: Book
+  strength: must
+  then: note shown to staff
+`, { date: "2026-10-04", previous: v3 }).bundle;
+  await store.install(v4, undefined, "2026-10-17T00:00:04Z");
+  assert.deepEqual(await marks(), ["byNote:B-1"], "a rule marks the views reading the facets it names");
 });

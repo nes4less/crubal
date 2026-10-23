@@ -93,8 +93,17 @@ function viewsChangedBy(previous: JsonObject, next: JsonObject, p: Projecting): 
   const changed = classify(previous, next).filter((c) => c.kind !== "unchanged").map((c) => c.member);
   if (!changed.length) return [];
   const of = (member: string) => new Set(changed.filter((m) => m.startsWith(`${member}:`)).map((m) => m.slice(member.length + 1)));
-  if (of("rule").size) return "all";
   const facets = of("facet");
+  // A rule that changed names its facets in its words (`then: note shown to staff`, `when: qty is 0`): the
+  // views reading those facets rebuild; a rule naming no facet of the dictionary marks nothing more.
+  const members = new Map<string, JsonObject>();
+  for (const b of [previous, next]) for (const r of (b.rules as JsonObject[] | undefined) ?? []) if (r && typeof r.rule === "string") members.set(`rule:${r.rule}`, r);
+  const keys = new Set<string>([...p.dict.facets.keys()]);
+  for (const name of of("rule")) {
+    const r = members.get(`rule:${name}`);
+    const words = JSON.stringify(r ?? {}).match(/[A-Za-z_][A-Za-z0-9_]*/g) ?? [];
+    for (const w of words) if (keys.has(w)) facets.add(w);
+  }
   const shapes = of("shape");
   const filters = of("filter");
   const views = of("view");

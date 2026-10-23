@@ -198,11 +198,29 @@ test("projections and the stream match the memory views, rebuilding only stale r
     const was = records.find((r) => r.id === w.id) as Record;
     memory.put(own({ ...was, values: { ...was.values, ...w.values } }));
   }
-  const second = await store.project("discs");
+  // Batched (brief 29): one record a batch and no budget past the first, so one call rebuilds one marked row
+  // and leaves the other marked; the next call finishes. The stream the index reads is the same in the end.
+  process.env.CRUBAL_PUBLISH_BATCH = "1";
+  process.env.CRUBAL_PUBLISH_BUDGET_MS = "0";
+  let second: StreamEntry[];
+  try {
+    const part = await store.project("discs");
+    assert.equal(part.length >= 1, true, "the first batch published");
+    const leftMarked = (await pool.query("select count(*)::int as n from stale where owner = $1 and view = 'discs'", [owner])).rows[0].n as number;
+    assert.equal(leftMarked, 1, "the other mark waits for the next run");
+    const rest = await store.project("discs");
+    second = [...part, ...rest];
+  } finally {
+    delete process.env.CRUBAL_PUBLISH_BATCH;
+    delete process.env.CRUBAL_PUBLISH_BUDGET_MS;
+  }
   const wantSecond = memory.stream("discs");
-  assert.ok(same(second, wantSecond), `second publish differs:\n pg  ${serialize(second as unknown as JsonObject)}\n mem ${serialize(wantSecond as unknown as JsonObject)}`);
+  // Two batches order their entries by batch, not by the view's order, so the streams are compared as sets of
+  // changes; an index applies upserts by record, and lands the same rows either way.
+  const byRecord = (list: StreamEntry[]) => [...list].map((e) => ({ ...e, seq: 0 })).sort((a, b) => `${a.record}|${a.removed ? 1 : 0}`.localeCompare(`${b.record}|${b.removed ? 1 : 0}`));
+  assert.ok(same(byRecord(second) as unknown as JsonObject[], byRecord(wantSecond) as unknown as JsonObject[]), `second publish differs:\n pg  ${serialize(second as unknown as JsonObject)}\n mem ${serialize(wantSecond as unknown as JsonObject)}`);
   assert.equal((await pool.query("select count(*)::int as n from stale where owner = $1", [owner])).rows[0].n, 0, "the marks are cleared");
-  assert.ok(same(await store.entriesSince("discs", first.length), second), "an index resuming from its cursor gets the second batch");
+  assert.ok(same(byRecord(await store.entriesSince("discs", first.length)) as unknown as JsonObject[], byRecord(second) as unknown as JsonObject[]), "an index resuming from its cursor gets the second batch");
 
   // Erasure (views/013): P-1 loses its title, the required slot, so its row leaves the view.
   await store.commit({ person: "staff-1" }, (d) => {
