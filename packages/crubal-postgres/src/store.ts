@@ -41,6 +41,8 @@ export type StoreOptions = {
   projecting?: Projecting;
   /** Install an unsigned bundle (development only; refused by default, docs/design/publishing.md). */
   allowUnsigned?: boolean;
+  /** How many of the package's own records a dry run reads at a time (5,000 unless said). */
+  restampBatch?: number;
   /** Sign each entry's hash with the owner's key (8.5): the host holds the key, the store never sees it. */
   signer?: (hash: string) => string;
   /** Publish every view right after each write commits (`fresh: write`); else the host calls `project`. */
@@ -359,6 +361,9 @@ export class PgStore {
       if (previous) {
         const parsedRecipes = recipesBetween(next.recipes, String(bundle.package), previous, String(bundle.version));
         for (const recipe of parsedRecipes) {
+          // A recipe with no steps (a pin move, 10.1) restamps nothing and reads nothing: a package whose kinds
+          // are the catalog (994,000 items and works at one owner, 2026-10-23) must not be loaded to move a pin.
+          if (!recipe.steps.length) continue;
           // A recipe restamps what the store holds for the package (10.4): records of its kinds and records wearing its classes.
           const records = ownRecordsOf(draft.records, own);
           const { records: after, review } = restamp(records, recipe, next.dict);
@@ -606,18 +611,50 @@ export class PgStore {
     if (!previous) return { recipes: [], records: 0 };
     const next = readBundleOnto(bundle, await this.definitions(true));
     const own = readBundle(bundle);
-    const records = await this.ownRecords(own);
-    const recipes = recipesBetween(next.recipes, String(bundle.package), previous, String(bundle.version)).map((r) => { const d = dryRun(records, r, next.dict); return { from: r.from, to: r.to, steps: d.steps, review: d.review }; });
-    return { recipes, records: records.length };
+    const between = recipesBetween(next.recipes, String(bundle.package), previous, String(bundle.version));
+    // A recipe with no steps (a pin move) restamps nothing, so no record is read for it, however many the package
+    // owns. With steps, the package's own records are walked in batches by ord and each recipe's figures are
+    // summed over the batches: never all of them in memory at once.
+    const stepped = between.filter((r) => r.steps.length);
+    const out = new Map(between.map((r) => [r, { from: r.from, to: r.to, steps: [] as StepStats[], review: 0 }]));
+    let records = 0;
+    if (stepped.length)
+      await this.walkOwnRecords(own, (batch) => {
+        records += batch.length;
+        for (const r of stepped) {
+          const d = dryRun(batch, r, next.dict);
+          const sum = out.get(r) as { steps: StepStats[]; review: number };
+          sum.review += d.review;
+          d.steps.forEach((st, i) => {
+            const have = sum.steps[i];
+            if (have) {
+              have.changed += st.changed;
+              have.review += st.review;
+            } else sum.steps[i] = { ...st };
+          });
+        }
+      });
+    return { recipes: between.map((r) => out.get(r) as { from: string; to: string; steps: StepStats[]; review: number }), records };
   }
 
-  /** The records the package's recipes restamp (10.4): of its kinds or wearing its classes, one query on the kind and wears indexes; never the catalog whole. */
-  private async ownRecords(own: Parsed): Promise<Record[]> {
+  /**
+   * The records the package's recipes restamp (10.4): of its kinds or wearing its classes, read on the kind and
+   * wears indexes in batches by ord, never the catalog whole and never all of them at once.
+   */
+  private async walkOwnRecords(own: Parsed, fn: (records: Record[]) => void): Promise<void> {
     const kinds = [...own.dict.kinds.keys()];
     const classes = [...own.dict.classes.keys()];
-    if (!kinds.length && !classes.length) return [];
-    const { rows } = await this.pool.query("select * from records where owner = $1 and (kind = any($2::text[]) or wears && $3::text[]) order by ord", [this.owner, kinds, classes]);
-    return (rows as { [column: string]: unknown }[]).map((r) => recordOf(r));
+    if (!kinds.length && !classes.length) return;
+    const size = Math.max(1, this.options.restampBatch ?? 5000);
+    let after = -1;
+    for (;;) {
+      const { rows } = await this.pool.query("select * from records where owner = $1 and (kind = any($2::text[]) or wears && $3::text[]) and ord > $4 order by ord limit $5", [this.owner, kinds, classes, after, size]);
+      if (!rows.length) return;
+      const list = rows as { [column: string]: unknown }[];
+      fn(list.map((r) => recordOf(r)));
+      after = Number(list[list.length - 1]?.ord);
+      if (rows.length < size) return;
+    }
   }
 
   /** A define write (8.5, 11.4): one member of the working package as it now stands, checked with the rest first. */

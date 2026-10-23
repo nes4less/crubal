@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { publish } from "@cruba/crubal";
+import pg from "pg";
 import { connect, type Pool, testSchema } from "../src/db.ts";
 import { PgStore } from "../src/store.ts";
 
@@ -239,6 +240,70 @@ test("the dry run and the restamp read the package's own records by kind and cla
   assert.deepEqual(dry.recipes.map((r) => r.steps.map((s) => s.changed)), [[1]]);
   await store.install(v2, undefined, "2026-10-17T00:00:02Z");
   assert.equal((await store.records({ kind: "thing" }))[0]?.values.size, "Small", "the restamp moved the value from the package's own records");
+});
+
+/** Every SQL text any client runs while `fn` runs (the pool's own queries and a working set's loads alike). */
+async function sqlDuring(fn: () => Promise<void>): Promise<string[]> {
+  const seen: string[] = [];
+  const proto = pg.Client.prototype as unknown as { query: (...a: unknown[]) => unknown };
+  const real = proto.query;
+  proto.query = function (this: unknown, ...a: unknown[]) {
+    const first = a[0];
+    seen.push(typeof first === "string" ? first : String((first as { text?: string } | undefined)?.text ?? ""));
+    return real.apply(this, a);
+  };
+  try {
+    await fn();
+  } finally {
+    proto.query = real;
+  }
+  return seen;
+}
+const readsOwnRecords = (sql: string) => sql.includes("wears && $3") || sql.includes("any(wears)");
+
+test("a recipe with no steps (a pin move) reads no record at all, on the dry run or the install, however many the package owns", { skip: !url }, async () => {
+  const store = new PgStore(pool, "pin.example", { allowUnsigned: true });
+  const v1 = publish(text("2026-10-01", "S|M|L"), { date: "2026-10-01" }).bundle;
+  // The migration names the move and nothing under it: the pin moves, nothing is restamped.
+  const v2 = publish(text("2026-10-02", "S|M|L", "\nmigration: thing /2026-10-01 -> thing /2026-10-02\n"), { date: "2026-10-02", previous: v1 }).bundle;
+  await store.install(v1, undefined, "2026-10-17T00:00:00Z");
+  await store.commit(
+    { person: "pin.example" },
+    (d) => {
+      for (const n of [1, 2, 3]) d.records.set(`T-${n}`, { id: `T-${n}`, kind: "thing", level: "thing", owner: "pin.example", values: { size: "S" }, sources: { "*": { origin: "declared", via: "L-1" } } });
+    },
+    "2026-10-17T00:00:01Z",
+  );
+  let dry: Awaited<ReturnType<typeof store.dryRun>> | undefined;
+  const sql = await sqlDuring(async () => {
+    dry = await store.dryRun(v2);
+    await store.install(v2, undefined, "2026-10-17T00:00:02Z");
+  });
+  assert.deepEqual(dry, { recipes: [{ from: "thing /2026-10-01", to: "thing /2026-10-02", steps: [], review: 0 }], records: 0 });
+  assert.equal(sql.filter(readsOwnRecords).length, 0, `no record read for a pin move; ran: ${sql.filter(readsOwnRecords).join(" | ")}`);
+  assert.deepEqual((await store.installed()).filter((i) => i.package === "lab.example/thing").map((i) => String(i.version)), ["2026-10-01", "2026-10-02"]);
+  assert.equal((await store.records({ kind: "thing" })).length, 3);
+});
+
+test("a dry run with steps walks the package's own records in batches and sums each step's figures; nothing holds them all at once", { skip: !url }, async () => {
+  const store = new PgStore(pool, "batch.example", { allowUnsigned: true, restampBatch: 2 });
+  const v1 = publish(text("2026-10-01", "S|M|L"), { date: "2026-10-01" }).bundle;
+  const v2 = publish(text("2026-10-02", "Small|M|L", RECIPE_12), { date: "2026-10-02", previous: v1 }).bundle;
+  await store.install(v1, undefined, "2026-10-17T00:00:00Z");
+  await store.commit(
+    { person: "batch.example" },
+    (d) => {
+      for (const n of [1, 2, 3, 4, 5]) d.records.set(`T-${n}`, { id: `T-${n}`, kind: "thing", level: "thing", owner: "batch.example", values: { size: n === 5 ? "M" : "S" }, sources: { "*": { origin: "declared", via: "L-1" } } });
+    },
+    "2026-10-17T00:00:01Z",
+  );
+  let dry: Awaited<ReturnType<typeof store.dryRun>> | undefined;
+  const sql = await sqlDuring(async () => {
+    dry = await store.dryRun(v2);
+  });
+  assert.equal(dry?.records, 5, "every own record counted across the batches");
+  assert.deepEqual(dry?.recipes.map((r) => [r.review, r.steps.map((s) => s.changed)]), [[0, [4]]], "the step's changed count is the sum over the batches");
+  assert.equal(sql.filter((q) => q.includes("wears && $3")).length, 3, "five records in batches of two: three reads");
 });
 
 const shelf = (v: string, noteLabel: string, extraFacet = "", extraClassFacet = "") => `package: shelf /${v}
