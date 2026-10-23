@@ -254,6 +254,15 @@ finally reads decides its visibility, wherever it is read from.
   commits, in log order. **`fresh: 5m`** lets rebuilds batch, and the stream is never further behind than
   that.
 - A new version of a view, shape or filter rebuilds its projection in full, and its stream starts over.
+- **Follow and adopt (revision 4).** A record MAY name another owner's public record by that record's
+  platform-wide number in a facet the host recognises as a follow (`follows`), and carry no facts of its own.
+  Its public projection is then the followed record's public values beneath whatever it produces: the host
+  reads them through from the followed owner's store at serve, under that owner's `show` rules, and copies
+  nothing into the follower's log; a fact the follower produces stands first and is never covered. Lifting
+  the follow (clearing the facet) leaves the record with what it produced. A record MAY likewise name a fold
+  by its number in a facet the host recognises as an adoption (`adopts`) and read the fold's merged reading
+  beneath its own; what the fold merges is the maps' business, so a fold with no maps reads nothing through.
+  Neither facet moves a fact between logs; both are reads the host performs.
 
 ### 12.6.1 Indexes
 
