@@ -203,6 +203,9 @@ export class Index {
         standsOn = await store.read((st) => [...new Set([...st.edges.values()].filter((e) => e.who === caller).map((e) => String(e.on)))]);
       }
     }
+    // An edge on the owner's root covers every record of the owner (14.2, 12.6): no partition clause at all,
+    // so the rows of a store from before ancestors ended at ROOT match as well as the rows written since.
+    if (standsOn?.includes("ROOT")) standsOn = undefined;
     if (standsOn) {
       if (!standsOn.length) return { view, version, audience: v.show, seq, page, pages: 1, total: 0, rows: [], counts: Object.fromEntries(v.filters.map((f) => [f, Object.fromEntries(this.bucketNames(p, f).map((b) => [b, 0]))])), indexable: false };
       params.push(standsOn);

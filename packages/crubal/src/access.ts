@@ -202,14 +202,20 @@ export class Access {
     for (const e of edges) this.edges.set(e.edge, e);
   }
 
-  /** The records up a record's `within` chain, nearest first (14.2). */
+  /**
+   * The records up a record's `within` chain, nearest first (14.2). The owner's root is the last ancestor of
+   * every record of the owner: a record whose chain does not reach `ROOT` is within it all the same, so an
+   * edge on the root covers every record of the owner (12.6), never another person's own records (14.1).
+   */
   ancestors(id: string): string[] {
     const out: string[] = [];
-    let cur = this.records.get(id)?.within;
+    const r = this.records.get(id);
+    let cur = r?.within;
     while (cur && !out.includes(cur) && out.length < 1000) {
       out.push(cur);
       cur = this.records.get(cur)?.within;
     }
+    if (r && id !== "ROOT" && !out.includes("ROOT") && r.owner === this.owner && this.records.get("ROOT")) out.push("ROOT");
     return out;
   }
 

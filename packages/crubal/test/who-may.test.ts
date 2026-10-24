@@ -76,6 +76,25 @@ test("staff holding the item through a control edge run it; a member with consum
   assert.equal(own.receiveRun("profile", "P-9", JSON.stringify({ name: "Sam Ortiz" }), "P-9").stopped, undefined);
 });
 
+test("the root is the last ancestor (14.2): an admin on ROOT runs on a record that sits within nothing; without a root record nothing is added", () => {
+  const ex = fresh([{ who: "person:cashierfu.com:P-1", mode: "admin", on: "ROOT" }]);
+  assert.deepEqual(ex.access?.ancestors("P-9"), ["ROOT"], "a record with no within is within the root all the same");
+  assert.deepEqual(ex.access?.ancestors("ROOT"), [], "the root is above itself never");
+  assert.equal(ex.access?.may("person:cashierfu.com:P-1", "run", "profile", "P-9"), true);
+  assert.equal(ex.access?.standsIn("person:cashierfu.com:P-1", "P-9", "controlled"), true);
+  const r = ex.receiveRun("profile", "P-9", JSON.stringify({ name: "Sam Ortiz" }), "person:cashierfu.com:P-1");
+  assert.equal(r.stopped, undefined, JSON.stringify(r));
+  assert.equal(ex.get("P-9")?.values.name, "Sam Ortiz");
+  // A member's consume edge on the root reaches no more than before: the mode on P-9 is consume, and the
+  // settings form's who still refuses them (the test above).
+  const member = fresh([{ who: "person:cashierfu.com:P-3", mode: "consume", on: "ROOT" }]);
+  assert.equal(member.access?.effective("person:cashierfu.com:P-3", "P-9").mode, "consume");
+  // A store with no root record keeps the chain as written.
+  const bare = fresh([{ who: "person:cashierfu.com:P-1", mode: "admin", on: "ROOT" }]);
+  (bare.records as Map<string, unknown>).delete("ROOT");
+  assert.deepEqual(bare.access?.ancestors("P-9"), []);
+});
+
 test("a who over roles on the caller's record still works beside it", () => {
   const dict = readDefinitions(`kind: person\n  levels: person\nname$\nroles$*\n`);
   const ex = new Exchange(dict, readContracts(`contract: rename\n  kind: form\n  origin: declared\n  who: caller may edit name\n  needs:\n    !name\n`), [{ name: "editor", may: { edit: ["name"] }, line: 0 } as never], []);

@@ -923,3 +923,73 @@ permissions: shopperms
   assert.equal(await host.secret("conn.example", "legacy"), "plain_old_key");
 });
 
+test("the root is the last ancestor (14.2, 12.6): a staff view served to a caller whose edge is on ROOT lists the records that name no within, as it lists those within ROOT; a member is still refused the view", async () => {
+  await host.createOwner("root.example");
+  const dev = new PgStore(pool, "root.example", { allowUnsigned: true });
+  const store = await host.storeFor("root.example");
+  for (const text of [STANDARD_PACKAGES.core, STANDARD_PACKAGES.units, STANDARD_PACKAGES.party])
+    await dev.install(publish(text, { date: text.match(/^package: \S+ \/(\S+)/m)?.[1] ?? "2026-10-16" }).bundle, undefined, clock);
+  const pkg = `package: rootshelf /2026-10-01
+  owner: root.example
+  label: Shelf
+  crubal: 2
+  extends: crubal.com/party /2026-10-16
+
+kind: shop
+  levels: shop
+  base: Shop
+kind: item
+  levels: product
+  base: Item
+
+shopName$
+title$
+
+class: Shop
+  for: shop
+  facets:
+    shopName
+class: Item
+  for: item
+  facets:
+    !title
+
+shape: card
+  slots:
+    !title -> heading
+view: shelf
+  select:
+    level: product
+  order: title
+  shape: card
+  show: staff
+
+permissions: rootshelf
+  menu:
+    keep: edit title
+  presets:
+    keeper: keep   audience: staff
+  relations: operator, staff, customer
+`;
+  await dev.install(publish(pkg, { date: "2026-10-01" }).bundle, undefined, clock);
+  await store.commit({ person: "root.example" }, (d) => {
+    d.records.set("ROOT", { id: "ROOT", kind: "shop", level: "shop", owner: "root.example", values: { shopName: "Root" }, sources: { "*": { origin: "declared", via: "L-1" } } });
+    d.edges.set("E-a", { edge: "E-a", who: "person:cashierfu.com:P-1", relation: "operator", mode: "admin", on: "ROOT", grants: [], by: "owner" });
+    d.edges.set("E-k", { edge: "E-k", who: "person:cashierfu.com:P-2", relation: "staff", mode: "control", on: "ROOT", grants: ["keeper"], by: "E-a" });
+    d.edges.set("E-m", { edge: "E-m", who: "person:cashierfu.com:P-3", relation: "customer", mode: "consume", on: "ROOT", grants: [], by: "E-a" });
+    // P-1 names no within, as a converted catalog's records do; P-2 was made within ROOT, as the app makes them.
+    d.records.set("P-1", { id: "P-1", kind: "item", level: "product", owner: "root.example", values: { title: "Gremlins" }, sources: { "*": { origin: "declared", via: "L-1" } } });
+    d.records.set("P-2", { id: "P-2", kind: "item", level: "product", owner: "root.example", within: "ROOT", values: { title: "Home Alone" }, sources: { "*": { origin: "declared", via: "L-1" } } });
+  }, clock);
+  const index = new Index(pool);
+  await index.apply(store, "shelf");
+  const headings = async (caller: string) => ((await index.serve(store, "shelf", { caller })).rows as JsonObject[]).map((r) => r.heading);
+  assert.deepEqual(await headings("root.example"), ["Gremlins", "Home Alone"], "the owner reads everything");
+  assert.deepEqual(await headings("person:cashierfu.com:P-1"), ["Gremlins", "Home Alone"], "the admin on ROOT sees the record that names no within");
+  assert.deepEqual(await headings("person:cashierfu.com:P-2"), ["Gremlins", "Home Alone"], "staff with control on ROOT too");
+  await assert.rejects(headings("person:cashierfu.com:P-3"), /shelf is for staff/, "a member is below the view");
+  // The row written for P-1 carries ROOT as its ancestor, so a fresh index over the rows matches it as well.
+  const row = (await pool.query("select ancestors from index_rows where owner = $1 and view = 'shelf' and record = 'P-1'", ["root.example"])).rows[0] as { ancestors: string[] } | undefined;
+  assert.deepEqual(row?.ancestors, ["ROOT"]);
+});
+
