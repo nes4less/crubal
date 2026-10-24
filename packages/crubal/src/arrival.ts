@@ -67,7 +67,10 @@ export function arrive(
   const refText = ref === undefined ? undefined : typeof ref === "string" ? ref : serialize(ref);
   const bindKey = refText === undefined ? undefined : `${c.name}|${refText}`;
   const source: Source = opts.source ?? { origin: c.origin, via: intake.intake };
-  const atLevel = store.records.atLevel(level);
+  // The records that hold a key's value at this level, asked by key (the scale rule, brief 18): a working set
+  // answers it with one containment query, never the level whole, which on a catalog is hundreds of
+  // thousands of records; the exact compare on top keeps the answer what a scan of the level gave.
+  const holding = (key: string): Record[] => store.records.byKey(key, values[key] as Json, level).filter((r) => r.level === level && same(r.values[key], values[key]));
   const active = (r: Record) => !r.status || r.status.state === "active";
   const finish = (arrival: Arrival, record: Record | undefined) => {
     if (record) {
@@ -87,7 +90,7 @@ export function arrive(
   // 2. A strong key matches one record, active or archived; a merged one resolves through `into`.
   for (const key of dict.identify.get(level) ?? []) {
     if (values[key] === undefined) continue;
-    const hits = [...new Set(atLevel.filter((r) => same(r.values[key], values[key])).map((r) => surviving(store, r.id)))];
+    const hits = [...new Set(holding(key).map((r) => surviving(store, r.id)))];
     if (hits.length === 1) return finish({ outcome: "matched", by: `identify:${key}` }, store.records.get(hits[0] as string));
     if (hits.length > 1) return finish({ outcome: "held", candidates: hits.sort(), by: `identify:${key}` }, undefined);
   }
@@ -98,7 +101,7 @@ export function arrive(
   const hows: string[] = [];
   for (const group of dict.match.get(level) ?? []) {
     if (group.some((k) => values[k] === undefined)) continue;
-    const hits = atLevel.filter((r) => r.status?.reason !== "merged" && group.every((k) => same(r.values[k], values[k])));
+    const hits = holding(group[0] as string).filter((r) => r.status?.reason !== "merged" && group.every((k) => same(r.values[k], values[k])));
     if (hits.length) {
       for (const h of hits) {
         candidates.add(h.id);

@@ -20,7 +20,7 @@ import { readText } from "@cruba/crubal";
 import { readViews, type StreamEntry, Views } from "@cruba/crubal";
 import { connect, testSchema, type Pool } from "../src/db.ts";
 import { publish } from "@cruba/crubal";
-import { PgBorder } from "../src/border.ts";
+import { borderOptions, PgBorder } from "../src/border.ts";
 import { Needs, WorkingRecords } from "../src/working.ts";
 import { PgStore } from "../src/store.ts";
 
@@ -851,4 +851,68 @@ test("load (brief 18 step 1): a thousand records land in two entries with their 
   assert.ok(ms < 30_000, `a thousand records loaded in ${ms} ms`);
   console.log(`load: a thousand records in ${ms} ms, ${out.published} rows published`);
   await dropBulk();
+});
+
+const KEYED = `package: keyed /2026-10-14
+  owner: keyed.example
+  crubal: 2
+
+kind: item
+  levels: product, unit
+  base: Item
+  identify:
+    product: asin
+  match:
+    product: gtin; title + format
+asin$ unique
+gtin$
+title$
+format{DVD|Blu-ray|4K}
+class: Item
+  for: item
+  facets:
+    !title
+    format
+    asin
+    gtin
+
+contract: addProduct
+  kind: form
+  origin: declared
+  needs:
+    !title
+    format
+    asin
+    gtin
+`;
+
+test("arrival on a store that refuses whole reads (engine 0.3.13, the scale rule): a strong key matches, weak keys hold, a new one mints, and none of them asks for the level whole", { skip: !url }, async () => {
+  const dropKeyed = await testSchema(pool);
+  const store = new PgStore(pool, "keyed.example", { allowUnsigned: true, wholeState: "refuse" });
+  await store.install(publishPackage(KEYED, { date: "2026-10-14" }).bundle);
+  const records: Record[] = [];
+  for (let i = 1; i <= 500; i++) records.push({ id: `P-${i}`, kind: "item", level: "product", owner: "keyed.example", values: { title: `Title ${i}`, format: "DVD", asin: `B${String(i).padStart(6, "0")}`, gtin: `0${String(i).padStart(11, "0")}` } } as Record);
+  await store.load(records, { migration: "conversion" }, { origin: "reported" });
+  const border = new PgBorder(store, await borderOptions(store));
+  const noLevel = (what: string) => {
+    const asked = [...(store.trace?.answered ?? []), ...(store.trace?.pending ?? [])];
+    assert.ok(asked.every((k) => !k.startsWith("level:") && k !== "all"), `${what} asked ${asked.filter((k) => k.startsWith("level:") || k === "all").join(", ")} for the level whole`);
+    assert.ok((store.trace?.loaded.size ?? 0) < 20, `${what} loaded ${store.trace?.loaded.size} records`);
+  };
+  // The strong key finds P-7 and lands the value there.
+  const matched = await border.arrive("addProduct", JSON.stringify({ title: "Title 7 (again)", format: "DVD", asin: "B000007", gtin: "000000000007" }), "product", undefined, undefined, "2026-10-14T10:00:00Z");
+  assert.equal((matched.arrival as { outcome: string; record?: string }).outcome, "matched", JSON.stringify(matched));
+  assert.equal((matched.arrival as { record?: string }).record, "P-7");
+  noLevel("the strong key");
+  // Weak keys hold with the candidate, nothing minted.
+  const held = await border.arrive("addProduct", JSON.stringify({ title: "Title 9", format: "DVD", asin: "B999999", gtin: "000000000009" }), "product", undefined, undefined, "2026-10-14T10:00:01Z");
+  assert.equal((held.arrival as { outcome: string }).outcome, "held", JSON.stringify(held));
+  assert.deepEqual((held.arrival as { candidates?: string[] }).candidates, ["P-9"]);
+  noLevel("the weak keys");
+  // Nothing matches: a new record, minted.
+  const fresh = await border.arrive("addProduct", JSON.stringify({ title: "Brand new", format: "4K", asin: "B777777", gtin: "000000000777" }), "product", undefined, undefined, "2026-10-14T10:00:02Z");
+  assert.equal((fresh.arrival as { outcome: string }).outcome, "new", JSON.stringify(fresh));
+  noLevel("a new one");
+  assert.equal((await store.records({ level: "product" })).length, 501);
+  await dropKeyed();
 });
