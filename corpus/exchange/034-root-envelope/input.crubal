@@ -1,0 +1,28 @@
+// The root is the last ancestor (14.2): a deployment's own record is ROOT, and a record of the owner that
+// names no `within` is within it all the same. The operator's admin edge on ROOT covers the item, as a
+// record made within ROOT would be covered; a store with no root record adds nothing (exchange/010-edges).
+kind: person
+  levels: person
+kind: deployment
+  levels: deployment
+kind: item
+  levels: product
+name$
+deploymentName$
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+person: C-OP [origin: declared, via: L-1]
+  name: Operator
+person: C-ST [origin: declared, via: L-1]
+  name: Staff
+
+deployment: ROOT [origin: declared, via: L-1]
+  deploymentName: Shop
+product: I-1 [origin: declared, via: L-1]
+  name: Gremlins
+product: I-2 [origin: declared, via: L-1]
+  name: Home Alone
+  crubal:within: ROOT

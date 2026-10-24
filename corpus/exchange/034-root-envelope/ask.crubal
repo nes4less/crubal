@@ -1,0 +1,10 @@
+ancestors: I-1
+ancestors: I-2
+ancestors: ROOT
+may: C-OP edit name on I-1
+may: C-OP edit name on I-2
+mode: C-OP on I-1
+stands: C-OP controlled on I-1
+may: C-ST edit name on I-2
+may: C-ST edit name on I-1
+stands: C-ST controlled on I-1

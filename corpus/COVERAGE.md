@@ -105,6 +105,7 @@ a new MUST or a new case updates this file.
 | 13.5 | extensions carried, never required | reader/010-unknown-block, dictionary/001 (`me:` settings) |
 | 13.6 | the same results whatever the store's choices | pg test: every corpus log rebuilds to the same state in Postgres as in memory |
 | 14.2 | `within` never cycles, never crosses owners; ancestors kept | exchange-errors/e11-within-cycle, e13-within-another-owner, views/009-partition (ancestors) |
+| 14.2 | the root is the last ancestor: an edge on ROOT covers a record that names no `within`; no root record, nothing added | exchange/034-root-envelope, exchange/010-edges (ancestors without a root) |
 | 14.6 | an item naming nothing refused | exchange-errors/x02-undefined-facet |
 | 14.6 | a preset may name items of the packages its package extends; a menu item of one name in several packages is one item with every package's verbs; checked when the packages are in force together | unit: bundle.test (a menu item two packages name is one item; a preset of the same name is the later one); the install check is `definitionsOf` + `checkAll` in crubal-postgres, exercised by every install in install.test |
 | 14.4 | each mode includes the ones below it; a `see` below admin is the audience's by the show rules (capped at member) or an item's | unit: audit-forms-access.test; host.test 14.8 |

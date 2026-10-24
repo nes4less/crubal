@@ -1,0 +1,21 @@
+permissions: shop
+  menu:
+    keep: edit name
+  presets:
+    keeper: keep audience: staff
+  relations: operator, staff
+
+edge: E-1
+  who: C-OP
+  relation: operator
+  mode: admin
+  on: ROOT
+  by: owner
+
+edge: E-2
+  who: C-ST
+  relation: staff
+  mode: control
+  on: I-2
+  grants: keeper
+  by: E-1

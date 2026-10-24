@@ -57,6 +57,12 @@ class's prefixed settings are carried unchanged as a facet's are (5.2, the engin
 buckets by period from a date facet and facets summed per bucket beside the count (12.3, 12.6.1; corpus
 views/025); corpus views/024. Engine, store and host at 0.3.2 (0.3.1 was never published); the corpus tagged `corpus/2026-10-21`.
 
+**Revision 2026-10-24** (pull request 10): the root is the last ancestor (14.2, 14.3): a record of the owner whose
+`within` chain does not reach `ROOT` is within it all the same, so an edge on the root covers every record of the
+owner, as 12.6 already said of a partition, and never another person's own records. Found when a converted
+catalog of 994,000 records with no `within` refused its own Controller every run and served them an empty staff
+view; the engine had read 14.2 literally. Corpus exchange/034-root-envelope. Engine, store and host at 0.3.12.
+
 The claim was re-run the same day against the corpus dated 2026-10-19, which gained cases for the
 revisions of the day: a state facet moving under `transitions` (exchange/032), a member's form on a record
 they don't own (exchange/033), a class nothing wears (dictionary/010). Reader 25, Dictionary 48, Rules 61,
