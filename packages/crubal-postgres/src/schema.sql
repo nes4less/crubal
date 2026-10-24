@@ -276,3 +276,20 @@ alter table log add column if not exists ord bigint generated always as identity
 
 -- The platform index reads a caller's edges across owners (14.8, docs/design/host.md).
 create index if not exists edges_who on edges ((json->>'who'));
+
+-- A restamp deferred by an install over more records than one batch holds (10.4, 0.3.11): the pin moved in
+-- the install's entry, the records walked afterwards in batches, each its own entry; the walk's progress here.
+create table if not exists restamps (
+  owner text not null,
+  package text not null,
+  version text not null,
+  from_version text not null,
+  after_ord bigint not null default -1,
+  restamped integer not null default 0,
+  review integer not null default 0,
+  done boolean not null default false,
+  started text,
+  finished text,
+  primary key (owner, package, version)
+);
+

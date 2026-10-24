@@ -383,3 +383,51 @@ rule: noteIsStaff
   await store.install(v4, undefined, "2026-10-17T00:00:04Z");
   assert.deepEqual(await marks(), ["byNote:B-1"], "a rule marks the views reading the facets it names");
 });
+
+test("an install over more records than one batch holds moves the pin in its entry and restamps the records afterwards in batches, each its own entry, within a budget and resumable; nothing holds the catalog", { skip: !url }, async () => {
+  const store = new PgStore(pool, "deferred.example", { allowUnsigned: true, restampBatch: 2 });
+  const v1 = publish(text("2026-10-01", "S|M|L"), { date: "2026-10-01" }).bundle;
+  const v2 = publish(text("2026-10-02", "Small|M|L", RECIPE_12), { date: "2026-10-02", previous: v1 }).bundle;
+  await store.install(v1, undefined, "2026-10-17T00:00:00Z");
+  await store.commit(
+    { person: "deferred.example" },
+    (d) => {
+      for (const n of [1, 2, 3, 4, 5]) d.records.set(`T-${n}`, { id: `T-${n}`, kind: "thing", level: "thing", owner: "deferred.example", values: { size: n === 5 ? "M" : "S" }, sources: { "*": { origin: "declared", via: "L-1" } } });
+    },
+    "2026-10-17T00:00:01Z",
+  );
+  (store as unknown as { wholeState: () => Promise<never> }).wholeState = async () => {
+    throw new Error("the catalog was read whole");
+  };
+  const entriesBefore = (await pool.query("select count(*)::int as n from log where owner = $1", ["deferred.example"])).rows[0] as { n: number };
+  // A budget of nothing: the install's entry, then one batch, then it stops and says so.
+  const entry = await store.install(v2, undefined, "2026-10-17T00:00:02Z", { budgetMs: 0 });
+  assert.ok(entry.log);
+  assert.deepEqual((await store.installed()).filter((i) => i.package === "lab.example/thing").map((i) => String(i.version)), ["2026-10-01", "2026-10-02"], "the pin moved at once");
+  const pending = await store.pendingRestamps();
+  assert.equal(pending.length, 1);
+  assert.equal(pending[0]?.package, "lab.example/thing");
+  assert.equal(pending[0]?.version, "2026-10-02");
+  assert.equal(pending[0]?.from, "2026-10-01");
+  assert.equal(pending[0]?.restamped, 2, "the first batch of two restamped before the budget stopped it");
+  const sizes = async () => (await store.records({ kind: "thing" })).map((r) => r.values.size).sort();
+  assert.deepEqual(await sizes(), ["M", "S", "S", "Small", "Small"]);
+  // Carried on without a budget: the rest in batches, then done; the walk never reads the whole catalog.
+  const rest = await store.continueRestamp("lab.example/thing", "2026-10-02", { at: "2026-10-17T00:00:03Z" });
+  assert.equal(rest.done, true);
+  assert.equal(rest.restamped, 4, "four of five changed; the M stayed");
+  assert.equal(rest.review, 0);
+  assert.ok(rest.batches >= 2, `the rest came in batches: ${rest.batches}`);
+  assert.deepEqual(await sizes(), ["M", "Small", "Small", "Small", "Small"]);
+  assert.deepEqual(await store.pendingRestamps(), []);
+  const again = await store.continueRestamp("lab.example/thing", "2026-10-02");
+  assert.deepEqual([again.done, again.batches], [true, 0], "done stays done");
+  const entriesAfter = (await pool.query("select count(*)::int as n from log where owner = $1", ["deferred.example"])).rows[0] as { n: number };
+  assert.ok(entriesAfter.n - entriesBefore.n >= 3, `the install's entry and a batch entry per batch that changed something: ${entriesAfter.n - entriesBefore.n}`);
+  // The entries carry the records' changes, not creations: the log replays to the same state.
+  const chain = await pool.query("select entry from log where owner = $1 order by ord", ["deferred.example"]);
+  const writes = (chain.rows as { entry: { writes: { record?: string; address?: string; value?: unknown }[] } }[]).flatMap((r) => r.entry.writes);
+  assert.ok(writes.some((w) => w.record === "T-1" && w.address === "size" && w.value === "Small"), "a value write for the restamped record");
+  await assert.rejects(store.continueRestamp("lab.example/thing", "2026-10-09"), /no restamp is pending/);
+});
+

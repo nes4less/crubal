@@ -674,11 +674,22 @@ export class Host {
   }
 
   /** Install a published version for an owner: the publisher's keys from its well-known file, then the store. */
-  async install(owner: string, bundle: JsonObject): Promise<JsonObject> {
+  async install(owner: string, bundle: JsonObject, opts: { budgetMs?: number } = {}): Promise<JsonObject> {
     const store = await this.storeFor(owner);
     const keys = bundle.sig ? await this.resolveKeys(String(bundle.owner)) : undefined;
-    const entry = await store.install(bundle, keys, this.now());
-    return { installed: String(bundle.id), version: String(bundle.version), entry: String(entry.log) };
+    const entry = await store.install(bundle, keys, this.now(), opts);
+    const pending = (await store.pendingRestamps()).some((r) => r.package === String(bundle.id) && r.version === String(bundle.version));
+    return { installed: String(bundle.id), version: String(bundle.version), entry: String(entry.log), ...(pending ? { restamp: "pending" } : {}) };
+  }
+
+  /** The restamps an owner has not finished (0.3.11): installs whose records are still being walked. */
+  async pendingRestamps(owner: string): Promise<{ package: string; version: string; from: string; afterOrd: number; restamped: number; review: number; started?: string }[]> {
+    return (await this.storeFor(owner)).pendingRestamps();
+  }
+
+  /** Carry an owner's deferred restamp on within a budget; done when the walk comes up short. */
+  async continueRestamp(owner: string, pkg: string, version: string, opts: { budgetMs?: number } = {}): Promise<{ done: boolean; restamped: number; review: number; batches: number }> {
+    return (await this.storeFor(owner)).continueRestamp(pkg, version, { ...opts, at: this.now() });
   }
 
   /** A JSON document by URL. */
@@ -699,7 +710,7 @@ export class Host {
    * for or the latest, its bundle fetched from where the file says, what it extends installed first
    * (from their own publishers), every bundle verified against its publisher's published keys.
    */
-  async installFrom(owner: string, pkg: string, version?: string, seen = new Set<string>()): Promise<JsonObject[]> {
+  async installFrom(owner: string, pkg: string, version?: string, seen = new Set<string>(), opts: { budgetMs?: number } = {}): Promise<JsonObject[]> {
     const store = await this.storeFor(owner);
     // A dependency pinned to a version the owner already holds needs no publisher at all (the standard
     // packages a deployment took at provisioning, for one).
@@ -721,11 +732,12 @@ export class Host {
     // A bundle names what it extends by short name within its own publisher, or by id across publishers.
     for (const e of (bundle.extends as JsonObject[] | undefined) ?? []) {
       const dep = String(e.package).includes("/") ? String(e.package) : `${bundle.owner}/${e.package}`;
-      out.push(...(await this.installFrom(owner, dep, String(e.version), seen)));
+      out.push(...(await this.installFrom(owner, dep, String(e.version), seen, opts)));
     }
     const keys = (wk.keys as Keys | undefined) ?? (await this.resolveKeys(domain));
-    const entry = await store.install(bundle, bundle.sig ? keys : undefined, this.now());
-    out.push({ installed: String(bundle.id), version: String(bundle.version), from: url, entry: String(entry.log) });
+    const entry = await store.install(bundle, bundle.sig ? keys : undefined, this.now(), opts);
+    const pending = (await store.pendingRestamps()).some((r) => r.package === String(bundle.id) && r.version === String(bundle.version));
+    out.push({ installed: String(bundle.id), version: String(bundle.version), from: url, entry: String(entry.log), ...(pending ? { restamp: "pending" } : {}) });
     return out;
   }
 

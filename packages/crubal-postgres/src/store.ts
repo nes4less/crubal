@@ -301,7 +301,7 @@ export class PgStore {
    * the install entry and keep the bundle, restamp through the recipes when an earlier version was
    * installed, and check the definitions that result. Refused whole on any failure.
    */
-  async install(bundle: JsonObject, keys?: Keys, at?: string): Promise<Entry> {
+  async install(bundle: JsonObject, keys?: Keys, at?: string, opts: { budgetMs?: number } = {}): Promise<Entry> {
     if (!bundle.sig && !this.options.allowUnsigned) throw new Error(`${bundle.id}: unsigned bundles are refused; a store may allow them for development`);
     const v = verifyBundle(bundle, bundle.sig ? keys : undefined);
     if (!v.valid) throw new Error(`${bundle.id}: the bundle doesn't verify (${v.reason})`);
@@ -349,6 +349,13 @@ export class PgStore {
         if (holding.length) throw new Error(`${bundle.id} /${bundle.version} drops ${[...gone].join(", ")}, which ${holding.map((e) => String(e.edge)).join(", ")} still grant; lapse or regrant them first`);
       }
     }
+    // A restamp over more records than one batch holds (a package whose kinds are the catalog) does not run
+    // inside the install's entry: the pin moves in that entry, and the records are restamped afterwards in
+    // batches, each its own entry, resumable after any interruption (`continueRestamp`), so no function ever
+    // holds the catalog, and a budget can stop between batches and the next pass carry on.
+    const batchSize = Math.max(1, this.options.restampBatch ?? 5000);
+    const steppedRecipes = previous ? recipesBetween(next.recipes, String(bundle.package), previous, String(bundle.version)).filter((r) => r.steps.length) : [];
+    const deferred = steppedRecipes.length > 0 && (await this.countOwnRecords(own, batchSize + 1)) > batchSize;
     // The bundle goes in first: the entry's own transaction rebuilds definitions from it. A refused install takes it out again.
     await this.pool.query("insert into bundles (owner, package, version, hash, json) values ($1, $2, $3, $4, $5) on conflict (owner, package, version) do update set hash = excluded.hash, json = excluded.json", [this.owner, bundle.id, bundle.version, bundle.hash, bundle]);
     let result: { entry: Entry | null; out: null };
@@ -358,7 +365,7 @@ export class PgStore {
       const extra: JsonObject[] = [{ install: { package: String(bundle.id), version: String(bundle.version), hash: String(bundle.hash) } }];
       // A pin move restamps through every recipe between the installed version and this one (10.1, 10.4),
       // in order: a store two versions behind takes both steps, never only the first.
-      if (previous) {
+      if (previous && !deferred) {
         const parsedRecipes = recipesBetween(next.recipes, String(bundle.package), previous, String(bundle.version));
         for (const recipe of parsedRecipes) {
           // A recipe with no steps (a pin move, 10.1) restamps nothing and reads nothing: a package whose kinds
@@ -393,7 +400,113 @@ export class PgStore {
       const which = prevBundle && p ? viewsChangedBy(prevBundle, bundle, p) : "all";
       if (which === "all" || which.length) await this.staleAll((sql, params) => this.pool.query(sql, params), p, which === "all" ? undefined : which);
     }
+    if (deferred && previous) {
+      await this.restampsReady();
+      await this.pool.query(
+        "insert into restamps (owner, package, version, from_version, after_ord, restamped, review, done, started) values ($1, $2, $3, $4, -1, 0, 0, false, $5) on conflict (owner, package, version) do update set from_version = excluded.from_version, after_ord = -1, restamped = 0, review = 0, done = false, started = excluded.started, finished = null",
+        [this.owner, bundle.id, bundle.version, previous, at ?? new Date().toISOString()],
+      );
+      await this.continueRestamp(String(bundle.id), String(bundle.version), { ...(opts.budgetMs !== undefined ? { budgetMs: opts.budgetMs } : {}), ...(at ? { at } : {}) });
+    }
     return result.entry;
+  }
+
+  /** How many records the package's recipes would restamp, up to a limit: enough to know whether one batch holds them. */
+  private async countOwnRecords(own: Parsed, limit: number): Promise<number> {
+    const kinds = [...own.dict.kinds.keys()];
+    const classes = [...own.dict.classes.keys()];
+    if (!kinds.length && !classes.length) return 0;
+    const { rows } = await this.pool.query("select count(*)::int as n from (select 1 from records where owner = $1 and (kind = any($2::text[]) or wears && $3::text[]) limit $4) t", [this.owner, kinds, classes, limit]);
+    return Number((rows[0] as { n: number }).n);
+  }
+
+  /** The table of restamps in progress, made once per process for a store migrated before it existed. */
+  private restampsTable: Promise<void> | undefined;
+  private restampsReady(): Promise<void> {
+    this.restampsTable ??= this.pool
+      .query("create table if not exists restamps (owner text not null, package text not null, version text not null, from_version text not null, after_ord bigint not null default -1, restamped integer not null default 0, review integer not null default 0, done boolean not null default false, started text, finished text, primary key (owner, package, version))")
+      .then(() => undefined);
+    return this.restampsTable;
+  }
+
+  /** The restamps this owner has not finished: an install whose records are still being walked. */
+  async pendingRestamps(): Promise<{ package: string; version: string; from: string; afterOrd: number; restamped: number; review: number; started?: string }[]> {
+    await this.restampsReady();
+    const { rows } = await this.pool.query("select package, version, from_version, after_ord, restamped, review, started from restamps where owner = $1 and not done order by started", [this.owner]);
+    return (rows as { package: string; version: string; from_version: string; after_ord: string | number; restamped: number; review: number; started: string | null }[]).map((r) => ({ package: r.package, version: r.version, from: r.from_version, afterOrd: Number(r.after_ord), restamped: Number(r.restamped), review: Number(r.review), ...(r.started ? { started: r.started } : {}) }));
+  }
+
+  /**
+   * Carry a deferred restamp on (10.4): the package's own records after the last one done, in batches by ord,
+   * each batch through every stepped recipe between the versions and committed as one entry (the records
+   * that changed and the items for review), the progress written after each; it stops when the budget is
+   * spent and picks up where it left off next time. Done when a batch comes up short.
+   */
+  async continueRestamp(pkg: string, version: string, opts: { budgetMs?: number; at?: string } = {}): Promise<{ done: boolean; restamped: number; review: number; batches: number }> {
+    await this.restampsReady();
+    const { rows: progress } = await this.pool.query("select from_version, after_ord, restamped, review, done from restamps where owner = $1 and package = $2 and version = $3", [this.owner, pkg, version]);
+    const row = progress[0] as { from_version: string; after_ord: string | number; restamped: number; review: number; done: boolean } | undefined;
+    if (!row) throw new Error(`${pkg} /${version}: no restamp is pending for ${this.owner}`);
+    let restamped = Number(row.restamped);
+    let review = Number(row.review);
+    if (row.done) return { done: true, restamped, review, batches: 0 };
+    const { rows: bundles } = await this.pool.query("select json from bundles where owner = $1 and package = $2 and version = $3", [this.owner, pkg, version]);
+    const bundle = (bundles[0] as { json: JsonObject } | undefined)?.json;
+    if (!bundle) throw new Error(`${pkg} /${version} is not installed for ${this.owner}`);
+    const p = await this.definitions(true);
+    const own = readBundle(bundle);
+    const recipes = recipesBetween(p.recipes, String(bundle.package), row.from_version, version).filter((r) => r.steps.length);
+    const kinds = [...own.dict.kinds.keys()];
+    const classes = [...own.dict.classes.keys()];
+    const size = Math.max(1, this.options.restampBatch ?? 5000);
+    const migration = `${bundle.package} /${row.from_version} -> ${bundle.package} /${version}`;
+    const started = Date.now();
+    let after = Number(row.after_ord);
+    let batches = 0;
+    const finish = async (done: boolean) => {
+      await this.pool.query("update restamps set after_ord = $4, restamped = $5, review = $6, done = $7, finished = case when $7 then $8 else null end where owner = $1 and package = $2 and version = $3", [this.owner, pkg, version, after, restamped, review, done, opts.at ?? new Date().toISOString()]);
+      return { done, restamped, review, batches };
+    };
+    this.walking = true;
+    try {
+      for (;;) {
+        if (opts.budgetMs !== undefined && batches > 0 && Date.now() - started >= opts.budgetMs) return await finish(false);
+        const { rows } = await this.pool.query("select * from records where owner = $1 and (kind = any($2::text[]) or wears && $3::text[]) and ord > $4 order by ord limit $5", [this.owner, kinds, classes, after, size]);
+        if (!rows.length) return await finish(true);
+        const list = rows as { [column: string]: unknown }[];
+        const before = list.map((r) => recordOf(r));
+        const was = new Map(before.map((r) => [r.id, JSON.stringify([r.values, r.wears ?? []])]));
+        let current = before;
+        const items: JsonObject[] = [];
+        for (const recipe of recipes) {
+          const r = restamp(current, recipe, p.dict);
+          current = r.records;
+          for (const item of r.review) items.push({ ...item, step: item.step, migration });
+        }
+        const changed = current.filter((r) => was.get(r.id) !== JSON.stringify([r.values, r.wears ?? []]));
+        if (changed.length || items.length)
+          await this.commit(
+            { migration },
+            (d) => {
+              // The record is read into the working set before it is set, so the entry's writes are the change and not a creation.
+              for (const r of changed) {
+                d.records.get(r.id);
+                d.records.set(r.id, r);
+              }
+              for (const item of items) d.review.push(item);
+            },
+            opts.at,
+          );
+        restamped += changed.length;
+        review += items.length;
+        batches += 1;
+        after = Number(list[list.length - 1]?.ord);
+        if (rows.length < size) return await finish(true);
+        await finish(false);
+      }
+    } finally {
+      this.walking = false;
+    }
   }
 
   /**
