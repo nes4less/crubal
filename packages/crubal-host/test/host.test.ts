@@ -372,7 +372,7 @@ contract: distTake
   // The stream pushed: the loop POSTs the distributor's entries to the shop's inbox, signed; the cursor moves.
   const pushed = await call("POST", "/push", undefined, { owner: "dist.example" }, { "x-host-key": "hk" });
   assert.equal(pushed.status, 200, JSON.stringify(pushed.body));
-  assert.deepEqual(pushed.body, [{ owner: "dist.example", contract: "toShop", acted: true, cursor: { discs: 1 } }]);
+  assert.deepEqual(pushed.body, [{ owner: "dist.example", contract: "toShop", pages: 1, acted: true, cursor: { discs: 1 } }]);
   const rows = (await pool.query("select record, row from index_rows where owner = $1 and view = 'discs'", ["dist.example"])).rows as { record: string; row: JsonObject }[];
   assert.deepEqual(rows.map((r) => [r.record, r.row.heading]), [["D-1", "Gremlins"]], "the inbox put the presenter's rows in the index under its name");
   assert.deepEqual((await call("POST", "/push", undefined, { owner: "dist.example" }, { "x-host-key": "hk" })).body, [], "nothing new since the acknowledged cursor");

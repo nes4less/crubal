@@ -856,11 +856,12 @@ export class Views {
     return out;
   }
 
-  /** The current version's entries after `seq`, for an index resuming from its cursor (12.6.2). */
-  entriesSince(name: string, seq: number, audience?: string): StreamEntry[] {
+  /** The current version's entries after `seq`, for an index resuming from its cursor (12.6.2); at most `limit` when given. */
+  entriesSince(name: string, seq: number, audience?: string, limit?: number): StreamEntry[] {
     const v = this.set.views.get(name);
     const s = this.streams.get(`${name}|${audience ?? v?.show ?? "public"}`);
-    return (s?.log ?? []).filter((e) => e.seq > seq);
+    const all = (s?.log ?? []).filter((e) => e.seq > seq);
+    return limit && limit > 0 ? all.slice(0, Math.floor(limit)) : all;
   }
 
   /** The portable shape (12.1): key, label, type and value for every value the audience may see. */

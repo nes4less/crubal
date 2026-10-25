@@ -283,6 +283,15 @@ test("stream contracts read the projection stream and keep the index's cursor; s
   assert.ok(String(push.key).startsWith("idx|discs||1-3"));
   // Until the index acknowledges, the same entries come again; after, nothing.
   assert.equal((await border.streamRun("idx")).entries && ((await border.streamRun("idx")).entries as { discs: StreamEntry[] }).discs.length, 3);
+  // 0.3.14: a page at a time: two of three with more, then the last one without, each acknowledged.
+  const page1 = await border.streamRun("idx", undefined, undefined, "2026-10-15T18:00:01Z", { limit: 2 });
+  assert.equal((page1.entries as { discs: StreamEntry[] }).discs.length, 2);
+  assert.deepEqual(page1.cursor, { discs: 2 });
+  assert.equal(page1.more, true);
+  await border.ack("idx", { discs: 2 });
+  const page2 = await border.streamRun("idx", undefined, undefined, "2026-10-15T18:00:01Z", { limit: 2 });
+  assert.equal((page2.entries as { discs: StreamEntry[] }).discs.length, 1);
+  assert.equal(page2.more, undefined);
   await border.ack("idx", { discs: 3 });
   assert.deepEqual(((await border.streamRun("idx")).entries as { discs: StreamEntry[] }).discs, []);
   await store.commit({ person: "staff-1" }, (d) => {

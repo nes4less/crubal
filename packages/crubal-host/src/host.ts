@@ -572,37 +572,53 @@ export class Host {
   /**
    * Push streams (12.6.2): every stream contract with `when: entry` sends its entries since the cursor to
    * the party it names (its adapter, else a signed POST to that host's inbox), and the acknowledgement
-   * moves the cursor.
+   * moves the cursor. With `o.limit` the stream goes a page at a time, each acknowledged before the next
+   * is read, until the stream is drained or `o.until` (a clock in ms) has passed; the result says `pages`
+   * and `more: true` when it stopped short, so the next pass resumes from the cursor (the scale rule: a
+   * catalog-sized stream never comes back whole).
    */
-  async push(now = this.now(), owner?: string): Promise<JsonObject[]> {
+  async push(now = this.now(), owner?: string, o: { limit?: number; until?: number } = {}): Promise<JsonObject[]> {
     const out: JsonObject[] = [];
-    for await (const o of owner ? [{ owner }] : this.eachOwner()) {
-      const store = await this.storeFor(o.owner);
-      const border = await this.borderFor(o.owner, store);
+    for await (const own of owner ? [{ owner }] : this.eachOwner()) {
+      const store = await this.storeFor(own.owner);
+      const border = await this.borderFor(own.owner, store);
       for (const c of border.contracts.values()) {
         if (!c.stream.length || c.when !== "entry") continue;
-        const r = await border.streamRun(c.name, undefined, undefined, now);
-        const entries = (r.entries ?? {}) as { [view: string]: StreamEntry[] };
-        if (!Object.values(entries).some((l) => l.length)) continue;
-        const adapter = this.o.adapters?.[c.name];
-        const payload: JsonObject = { contract: c.name, from: o.owner, entries: entries as unknown as Json };
+        let pages = 0;
         let acted = false;
         let failed: string | undefined;
-        if (adapter) {
-          const a = await adapter(c, payload, String(r.log ?? ""));
-          acted = "acted" in a && a.acted === true;
-          if ("failed" in a) failed = a.failed;
-        } else {
-          const url = c.parts["host:url"] ?? (c.to ? `${this.hostOf(c.to)}/o/${c.to}/inbox/${c.name}` : undefined);
-          if (!url) { failed = "nowhere to push: no to and no host:url"; }
-          else {
-            const res = await this.signedFetch(o.owner, "POST", url, JSON.stringify(payload));
-            acted = res.ok;
-            if (!res.ok) failed = `http ${res.status}`;
+        let cursor: Json | undefined;
+        let more = false;
+        for (;;) {
+          const r = await border.streamRun(c.name, undefined, undefined, now, o.limit ? { limit: o.limit } : undefined);
+          const entries = (r.entries ?? {}) as { [view: string]: StreamEntry[] };
+          if (!Object.values(entries).some((l) => l.length)) break;
+          pages += 1;
+          const adapter = this.o.adapters?.[c.name];
+          const payload: JsonObject = { contract: c.name, from: own.owner, entries: entries as unknown as Json };
+          acted = false;
+          failed = undefined;
+          if (adapter) {
+            const a = await adapter(c, payload, String(r.log ?? ""));
+            acted = "acted" in a && a.acted === true;
+            if ("failed" in a) failed = a.failed;
+          } else {
+            const url = c.parts["host:url"] ?? (c.to ? `${this.hostOf(c.to)}/o/${c.to}/inbox/${c.name}` : undefined);
+            if (!url) { failed = "nowhere to push: no to and no host:url"; }
+            else {
+              const res = await this.signedFetch(own.owner, "POST", url, JSON.stringify(payload));
+              acted = res.ok;
+              if (!res.ok) failed = `http ${res.status}`;
+            }
           }
+          if (!acted) break;
+          cursor = r.cursor as Json;
+          await border.ack(c.name, r.cursor as { [view: string]: number });
+          if (r.more !== true) break;
+          if (o.until !== undefined && Date.now() >= o.until) { more = true; break; }
         }
-        if (acted) await border.ack(c.name, r.cursor as { [view: string]: number });
-        out.push({ owner: o.owner, contract: c.name, ...(acted ? { acted: true, cursor: r.cursor as Json } : { failed: failed ?? "not acted" }) });
+        if (!pages) continue;
+        out.push({ owner: own.owner, contract: c.name, pages, ...(acted ? { acted: true, cursor: (cursor ?? {}) as Json, ...(more ? { more: true } : {}) } : { failed: failed ?? "not acted" }) });
       }
     }
     return out;

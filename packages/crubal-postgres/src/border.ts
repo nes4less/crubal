@@ -341,9 +341,11 @@ export class PgBorder {
   /**
    * A stream contract's run (12.6.2): the entries of each view since the cursor, pushed (the stored
    * cursor) or pulled (the caller's). A view above public goes only to a party holding `run` for the
-   * contract. A batch with entries is logged as a run keyed by the contract, the views and the ranges.
+   * contract. A batch with entries is logged as a run keyed by the contract, the views and the ranges. With
+   * `o.limit`, at most that many entries per view and `more: true` when a view had that many: a page, never
+   * the stream whole (the scale rule; a catalog of 347,000 rows had come back as one payload).
    */
-  async streamRun(name: string, callerId?: string, cursor?: { [view: string]: number }, at?: string): Promise<RunResult> {
+  async streamRun(name: string, callerId?: string, cursor?: { [view: string]: number }, at?: string, o?: { limit?: number }): Promise<RunResult> {
     const c = this.contracts.get(name);
     if (!c) throw new Error(`no contract ${name}`);
     if (!c.stream.length) throw new Error(`${name} carries no stream`);
@@ -362,21 +364,23 @@ export class PgBorder {
     const entries: JsonObject = {};
     const out: JsonObject = {};
     const batches: string[] = [];
+    let more = false;
     for (const v of c.stream) {
       const view = p.views.views.get(v);
       if (!view) throw new Error(`no view ${v}`);
       const version = view.version ?? "";
       const since = cursor?.[v] ?? (await this.cursorOf(name, v, version, view.show)) ?? 0;
-      const list: StreamEntry[] = await this.store.entriesSince(v, since);
+      const list: StreamEntry[] = await this.store.entriesSince(v, since, undefined, o?.limit);
       entries[v] = list as unknown as Json;
       out[v] = list.at(-1)?.seq ?? since;
       if (list.length) batches.push(`${name}|${v}|${version}|${list[0]?.seq}-${list.at(-1)?.seq}`);
+      if (o?.limit && list.length >= o.limit) more = true;
     }
     if (!batches.length) return { ...head, entries, cursor: out };
     const { runs } = await this.past();
     const log = `L-R${runs + 1}`;
     await this.store.commitFrom(() => ({ by: { contract: name, run: log }, extra: [{ run: log, contract: name, key: batches.join(" "), state: "acted" }], out: null }), at);
-    return { ...head, entries, cursor: out, key: batches.join(" "), log };
+    return { ...head, entries, cursor: out, key: batches.join(" "), ...(more ? { more: true } : {}), log };
   }
 
   /** An index acknowledges the last `seq` it holds per view (12.6.2); the store resumes from the next. */

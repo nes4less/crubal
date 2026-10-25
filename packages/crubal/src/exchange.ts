@@ -673,9 +673,11 @@ export class Exchange {
   /**
    * A stream contract's run (12.6.2): the entries of each view since the cursor, in order. Pushed (the
    * stored cursor, acknowledged by the index) or pulled (the caller's cursor). A view above `public` goes
-   * only to a party holding `run` for the contract.
+   * only to a party holding `run` for the contract. With `o.limit`, at most that many entries per view, and
+   * `more: true` when a view had that many (the scale rule: a run never reads a catalog whole; the index
+   * acknowledges each page and asks again).
    */
-  streamRun(name: string, callerId?: string, cursor?: { [view: string]: number }): RunResult {
+  streamRun(name: string, callerId?: string, cursor?: { [view: string]: number }, o?: { limit?: number }): RunResult {
     const c = this.contracts.get(name);
     if (!c) throw new Error(`no contract ${name}`);
     if (!c.stream.length) throw new Error(`${name} carries no stream`);
@@ -691,17 +693,19 @@ export class Exchange {
     const entries: JsonObject = {};
     const out: JsonObject = {};
     const batches: string[] = [];
+    let more = false;
     for (const v of c.stream) {
       this.views.stream(v);
       const version = this.views.versionOf(v);
       const held = stored[v];
       const since = cursor?.[v] ?? (held && held.version === version ? held.seq : 0);
-      const list: StreamEntry[] = this.views.entriesSince(v, since);
+      const list: StreamEntry[] = this.views.entriesSince(v, since, undefined, o?.limit);
       entries[v] = list as unknown as Json;
       out[v] = list.at(-1)?.seq ?? since;
       if (list.length) batches.push(`${name}|${v}|${version}|${list[0]?.seq}-${list.at(-1)?.seq}`);
+      if (o?.limit && list.length >= o.limit) more = true;
     }
-    return { ...head, entries, cursor: out, ...(batches.length ? { key: batches.join(" ") } : {}), log };
+    return { ...head, entries, cursor: out, ...(batches.length ? { key: batches.join(" ") } : {}), ...(more ? { more: true } : {}), log };
   }
 
   private lastTick = new Map<string, string>();
