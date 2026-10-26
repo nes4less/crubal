@@ -153,10 +153,16 @@ export function checkRecipe(r: Recipe, dict: Dictionary): void {
     }
     if (s.verb === "convert" && convert("1", s.from, s.to) === null) throw new CrubalError(`can't convert ${s.from} to ${s.to}`, s.line);
     if (s.verb === "parts") {
-      if (!f || f.type !== "compound") throw new CrubalError(`${s.facet} is not a compound of ${r.to}`, s.line);
+      // The compound and the part's facets may be an extended package's (11.4: a recipe over the baseline's
+      // manifest in a kind's package): the publish check sees only the package's own definitions, so a facet it
+      // does not hold is left to the install, which reads the recipe under the merged dictionary.
+      if (f && f.type !== "compound") throw new CrubalError(`${s.facet} is not a compound of ${r.to}`, s.line);
       const slot = [...dict.classes.values()].flatMap((c) => c.parts).find((p) => p.slot === s.to);
       if (!slot) throw new CrubalError(`no class of ${r.to} declares a part slot ${s.to}`, s.line);
-      for (const [, to] of s.map) if (to !== "crubal:count" && !dict.facets.has(to)) throw new CrubalError(`${to} is not a facet of ${r.to}`, s.line);
+      for (const [, to] of s.map) {
+        const t = dict.facets.get(to);
+        if (t && t.type === "compound") throw new CrubalError(`${to} is a compound; a part's child takes a plain facet`, s.line);
+      }
       if (s.when) parseCondition(s.when, s.line);
     }
     if (s.verb === "fill") {
