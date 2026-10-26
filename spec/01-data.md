@@ -197,7 +197,11 @@ own `wears` and its own values. Shared parts are not parts: they are records of 
 facet, and read through.
 
 **Units mirror parts.** A record at a lower level holds parts with the same row keys as the record above,
-carrying only the values that vary at its level (1.7).
+carrying only the values that vary at its level (1.7). Read through, a lower record's part is the part
+above with the lower record's own values over it; a row the record above lacks is the lower record's own.
+The keys a record owns on a part are its level's vary step and the part classes' `level::` lines at its
+level (1.7); every other key of the part is folded, read from above, and a form at the lower level asks only
+the owned ones (5.6).
 
 **Notables.** Every record MAY hold `crubal:notables`, a core compound (`key` text, `value` text, any number,
 rows matched by `key`) for facts that are true of this record and that no class asks for: signed, misprint,

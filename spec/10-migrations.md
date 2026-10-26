@@ -60,6 +60,7 @@ its target.
 | `recompute` | `recompute` | produced values (rollups, derivations) are rebuilt by the new rules | no |
 | `retype` | `retype: text -> choice` | a facet's values are read under its new type; values that fit land, the rest go to review | the leftovers |
 | `fill` | `fill: 1` with `for: unit::` and an optional `when:` beneath | records lacking the key, at the level named, where the condition holds, get the value read under the facet; a record that has one is left alone. A backfill for a key the new version adds | no |
+| `parts` | `parts: -> slot` under a compound, with an optional `when:` and `child -> facet` lines beneath | the compound's rows the condition picks become parts of the slot (5.6), keyed as the rows were, wearing the slot's class, each named child read into the facet named; a row whose key the record already holds as a part is left alone; the compound stays as it was | no |
 
 A key never renames: keys are identity (chapter 4.1). A new label is not a migration. Moving values to a new
 key is `move`.
