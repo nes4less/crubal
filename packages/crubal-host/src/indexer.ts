@@ -249,6 +249,9 @@ export class Index {
     const sums: Sums = {};
     const nested: Nested = {};
     const key = `${owner}|${view}|${version}|${v.show}|${seq}|${JSON.stringify(pickList)}|${o.q ?? ""}|${standsOn ? standsOn.join(",") : ""}|${JSON.stringify(o.only ?? {})}`;
+    // A standard ask (no search, page one, no pick or one pick on an indexable filter): its tally is kept a
+    // week, any other's a day (pruneTallies), so crawlers walking combinations never fill the table.
+    const standardAsk = !o.q && page === 1 && (pickList.length === 0 || (pickList.length === 1 && v.index.includes(pickList[0]?.[0] as string) && pickList[0]?.[1].length === 1));
     if (standsOn && o.caller) {
       const caller = o.caller;
       const all = (await this.pool.query(`select record, row, buckets, marks, ancestors, sort, pin from index_rows where ${baseWhere} order by ${order}`, params)).rows as Row[];
@@ -297,6 +300,7 @@ export class Index {
         const all = build();
         total = Number((await this.pool.query(`select count(*) as n from index_rows where ${all.sql}`, all.ps)).rows[0]?.n ?? 0);
       } else {
+        try {
         const all = build();
         total = Number((await this.pool.query(`select count(*) as n from index_rows where ${all.sql}`, all.ps)).rows[0]?.n ?? 0);
         // The listed filters the picks don't name share one condition (every pick), so they are tallied in one
@@ -347,8 +351,15 @@ export class Index {
         const made: Tally = { total, counts: structuredClone(counts), sums: structuredClone(sums), nested: structuredClone(nested) };
         this.remember(key, made);
         // Kept for every process; the tallies of earlier heads of this view go with it.
-        await this.pool.query("insert into index_tallies (key, owner, view, version, audience, seq, json) values ($1, $2, $3, $4, $5, $6, $7) on conflict (key) do nothing", [hashed, owner, view, version, v.show, seq, made]);
+        await this.pool.query("insert into index_tallies (key, owner, view, version, audience, seq, json, standard) values ($1, $2, $3, $4, $5, $6, $7, $8) on conflict (key) do nothing", [hashed, owner, view, version, v.show, seq, made, standardAsk]);
         await this.pool.query("delete from index_tallies where owner = $1 and view = $2 and version = $3 and audience = $4 and seq < $5", [owner, view, version, v.show, seq]);
+        } catch {
+          // A tally that cannot be built within the statement's time (a catalog under load) leaves the page
+          // served with its rows, a bounded total and no counts, never an error (the scale rule, 2026-10-26).
+          for (const k of Object.keys(counts)) delete counts[k];
+          const all = build();
+          total = Number((await this.pool.query(`select count(*) as n from (select 1 from index_rows where ${all.sql} limit 10001) t`, all.ps)).rows[0]?.n ?? 0);
+        }
       }
       const paged = build(undefined, [v.page, (page - 1) * v.page]);
       onPage = (await this.pool.query(`select record, row, buckets, marks, ancestors, sort, pin from index_rows where ${paged.sql} order by ${order} limit $${paged.ps.length - 1} offset $${paged.ps.length}`, paged.ps)).rows as Row[];
@@ -380,12 +391,46 @@ export class Index {
   private tallies: Promise<void> | undefined;
   /** The tally table, made once per process for a store migrated before it existed (the schema carries it from 0.3.8). */
   private talliesReady(): Promise<void> {
+    // The column and the index a store from before them lacks: looked for first, since an add-if-not-exists
+    // takes the table's lock before it looks (a lesson of 2026-10-25) and the table is hot.
+    const upgrade = async (): Promise<void> => {
+      const col = await this.pool.query("select 1 from information_schema.columns where table_schema = current_schema() and table_name = 'index_tallies' and column_name = 'standard'");
+      if (!col.rows.length) await this.pool.query("alter table index_tallies add column standard boolean not null default false");
+      const idx = await this.pool.query("select 1 from pg_indexes where schemaname = current_schema() and tablename = 'index_tallies' and indexname = 'index_tallies_at'");
+      if (!idx.rows.length) await this.pool.query("create index index_tallies_at on index_tallies (at)");
+    };
     this.tallies ??= this.pool
       .query(
         "create table if not exists index_tallies (key text primary key, owner text not null, view text not null, version text not null, audience text not null, seq bigint not null, json jsonb not null, at timestamptz not null default now()); create index if not exists index_tallies_view on index_tallies (owner, view, version, audience, seq)",
       )
+      .then(upgrade)
       .then(() => undefined, () => undefined);
     return this.tallies;
+  }
+
+  /**
+   * The tallies gone stale, deleted in batches within a budget: a standard ask's after `standardHours`
+   * (a week), any other's after `otherHours` (a day). How many went. The scale rule, 2026-10-26: crawlers
+   * walking filter combinations left 274,000 tallies (1.5 GB, more than the records) in three days.
+   */
+  async pruneTallies(o: { now?: string; standardHours?: number; otherHours?: number; batch?: number; budgetMs?: number } = {}): Promise<number> {
+    await this.talliesReady();
+    const now = o.now ? Date.parse(o.now) : Date.now();
+    const std = new Date(now - (o.standardHours ?? 24 * 7) * 3_600_000).toISOString();
+    const other = new Date(now - (o.otherHours ?? 24) * 3_600_000).toISOString();
+    const batch = o.batch ?? 5000;
+    const until = Date.now() + (o.budgetMs ?? 60_000);
+    let gone = 0;
+    for (;;) {
+      const r = await this.pool.query(
+        "delete from index_tallies where key in (select key from index_tallies where (standard and at < $1) or (not standard and at < $2) limit $3)",
+        [std, other, batch],
+      );
+      gone += r.rowCount ?? 0;
+      if ((r.rowCount ?? 0) < batch || Date.now() > until) break;
+    }
+    this.cache.clear();
+    return gone;
   }
 
   private readonly cache = new Map<string, unknown>();

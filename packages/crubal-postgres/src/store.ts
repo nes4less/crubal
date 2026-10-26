@@ -625,6 +625,13 @@ export class PgStore {
     return rows[0] ? recordOf(rows[0] as { [column: string]: unknown }) : undefined;
   }
 
+  /** Several records by id in one statement, in no particular order; ids with no record are left out. */
+  async getMany(ids: string[]): Promise<Record[]> {
+    if (!ids.length) return [];
+    const { rows } = await this.pool.query("select * from records where owner = $1 and id = any($2)", [this.owner, ids]);
+    return rows.map((r) => recordOf(r as { [column: string]: unknown }));
+  }
+
   /** The review items still open (9.5). */
   async review(): Promise<JsonObject[]> {
     const { rows } = await this.pool.query("select json from review where owner = $1 order by ord", [this.owner]);
@@ -692,6 +699,9 @@ export class PgStore {
    * how many still wait.
    */
   async drain(rate = 100, at?: string): Promise<{ applied: string[]; remaining: number }> {
+    // Nothing pending at all: no walk. The planner cannot tell that an empty issuer list makes the exists
+    // below false for every row, so it read ME's 994,000 records for 27 s a tick for nothing (2026-10-26).
+    if (!(await this.pool.query("select 1 from instructions where owner = $1 limit 1", [this.owner])).rows.length) return { applied: [], remaining: 0 };
     const dict = (await this.definitions()).dict;
     // The records with an instruction still to apply, found by the tables (lifecycle.ts issuersFor: the
     // parent's instructions, a kind's, a class's worn by the record or its parent), oldest first; never a

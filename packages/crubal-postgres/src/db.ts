@@ -14,12 +14,22 @@ const SCHEMA_SQL = readFileSync(new URL("./schema.sql", import.meta.url), "utf8"
  * project the store and host tables live in their own schema, never in `public`, which the database's own
  * API serves to its anonymous role.
  */
-export function connect(url = process.env.CRUBAL_PG_URL, schema = process.env.CRUBAL_PG_SCHEMA): Pool {
+export function connect(
+  url = process.env.CRUBAL_PG_URL,
+  schema = process.env.CRUBAL_PG_SCHEMA,
+  o: { statementTimeoutMs?: number } = {},
+): Pool {
   if (!url) throw new Error("no Postgres URL: pass one or set CRUBAL_PG_URL");
   if (schema && !/^[a-z_][a-z0-9_]*$/.test(schema)) throw new Error(`a schema is a lower-case word: ${schema}`);
+  // A statement timeout (the argument, or `CRUBAL_PG_STATEMENT_TIMEOUT` in milliseconds) rides the same way:
+  // one statement that runs away fails alone instead of holding a connection for everyone (2026-10-26).
+  const env = process.env.CRUBAL_PG_STATEMENT_TIMEOUT;
+  const timeout = o.statementTimeoutMs ?? (env ? Number(env) : undefined);
+  if (timeout !== undefined && !(Number.isInteger(timeout) && timeout > 0)) throw new Error(`a statement timeout is a count of milliseconds: ${timeout}`);
   // The schema rides as a startup parameter, which Postgres and the Supabase session pooler both honour; a
   // query on each connection's open would race the first statement (pg warns, and will refuse).
-  return new pg.Pool({ connectionString: url, ...(schema ? { options: `-c search_path=${schema}` } : {}) });
+  const options = [...(schema ? [`-c search_path=${schema}`] : []), ...(timeout ? [`-c statement_timeout=${timeout}`] : [])].join(" ");
+  return new pg.Pool({ connectionString: url, ...(options ? { options } : {}) });
 }
 
 /** Create or update the store's tables in the current search path. Idempotent. */
