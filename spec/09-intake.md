@@ -25,9 +25,12 @@ A payload is folded in a fixed order. Rules run only on the result.
 A value that no step can make fit is not changed: it goes to step 4 as it is, and the check reports it.
 
 **Rows and parts are matched before they are minted.** Incoming rows of a compound, and incoming parts, bind
-to existing ones in this order: by identity child; else by the fold key of the declared `match` child
-(chapter 1.6); else, when the record already holds rows that could be the same, the row goes to review
-instead of becoming a new row. A contract MAY propose a consolidation ("disc hub" and "inner tray" are one
+to existing ones in this order: by the row key the part names (an incoming part MAY carry `row`, the key of
+a row the record holds, which binds it there, or makes that row when the record lacks it); else by identity
+child; else by the fold key of the declared `match` child (chapter 1.6); else, when the record already holds
+rows that could be the same, the row goes to review instead of becoming a new row. Incoming parts travel as
+the body's `parts` list, each a `slot`, an optional `row`, and the part's values by facet; a value lands on
+the part at `parts[row].key` under the trust order like any other (9.3). A contract MAY propose a consolidation ("disc hub" and "inner tray" are one
 part); it lands as a suggestion. Re-deriving the same record MUST NOT grow its rows by renaming them.
 
 4. **Check** each value against its facet (chapter 4.9), its worn classes (chapter 5.3.1) and the `must`
