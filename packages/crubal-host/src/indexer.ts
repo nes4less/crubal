@@ -37,6 +37,14 @@ export type Serve = {
    * bucket names a page wants counted; a tree has thousands, so an unlisted filter is counted only when asked.
    */
   only?: { [filter: string]: string[] };
+  /**
+   * Whether a tally this process and the host's table do not hold may be built on this request: "always" (the
+   * default) scans the index for it and keeps it; "stored" serves the page with its total alone, the counts
+   * empty, when none is kept, so an ask nobody standard makes (a search, several picks) never scans a catalog
+   * of hundreds of thousands of rows on a request (the scale rule, 2026-10-26: crawlers walking filter
+   * combinations minted ten thousand tallies an hour, a scan each, and the site answered in thirty seconds).
+   */
+  counts?: "always" | "stored";
 };
 export type Page = { view: string; version: string; audience: string; seq: number; page: number; pages: number; /** The rows the picks (and the search) select, across every page: the figure a report stamps. */ total: number; rows: JsonObject[]; counts: { [filter: string]: { [bucket: string]: number } }; sums?: Sums; nested?: Nested; indexable: boolean };
 
@@ -276,6 +284,10 @@ export class Index {
         Object.assign(counts, cached.counts);
         Object.assign(sums, cached.sums ?? {});
         Object.assign(nested, cached.nested);
+      } else if (o.counts === "stored") {
+        // No tally kept and none to be built here: the page's total, and the counts left empty.
+        const all = build();
+        total = Number((await this.pool.query(`select count(*) as n from index_rows where ${all.sql}`, all.ps)).rows[0]?.n ?? 0);
       } else {
         const all = build();
         total = Number((await this.pool.query(`select count(*) as n from index_rows where ${all.sql}`, all.ps)).rows[0]?.n ?? 0);
