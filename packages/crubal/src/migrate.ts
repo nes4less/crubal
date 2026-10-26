@@ -273,8 +273,10 @@ export function restamp(records: Record[], recipe: Recipe, dict: Dictionary, sta
           // the parts wear is the slot's, from the class the record wears that declares it (any class, standing
           // alone). The compound stays as it was.
           const rows = (Array.isArray(v) ? v : [v]).filter(isObj);
+          // Only a record wearing a class that declares the slot takes parts in it (5.6): a release that wears
+          // no DVD class keeps its rows until it does.
           const declaring = [...dict.classes.values()].filter((c) => c.parts.some((p) => p.slot === s.to));
-          const cls = declaring.find((c) => (rec.wears ?? []).includes(c.name)) ?? declaring[0];
+          const cls = declaring.find((c) => (rec.wears ?? []).includes(c.name));
           const slot = cls?.parts.find((p) => p.slot === s.to);
           if (!slot) break;
           const have = (parts ?? []).filter(isObj);
