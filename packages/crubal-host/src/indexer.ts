@@ -74,10 +74,10 @@ export class Index {
    * Pull a view's stream since the cursor into the rows, for the view's own audience. With `unlessBehind`,
    * a backlog past that many entries is left where it is and the cursor comes back as it stands: a page
    * served on a request applies a handful of entries, never a restamp's hundreds of thousands (the scale
-   * rule, 2026-10-26: a shop's home spent its thirty seconds inserting index rows); the projecting loop
-   * catches the view up.
+   * rule, 2026-10-26: a shop's home spent its thirty seconds inserting index rows); the host's index loop
+   * catches the view up (`behind`, brief 40), applying with `budgetMs` a tick at a time.
    */
-  async apply(store: PgStore, view: string, o: { unlessBehind?: number } = {}): Promise<number> {
+  async apply(store: PgStore, view: string, o: { unlessBehind?: number; budgetMs?: number } = {}): Promise<number> {
     const p = await store.definitions();
     const v = p.views.views.get(view);
     if (!v) throw new Error(`no view ${view}`);
@@ -89,16 +89,40 @@ export class Index {
     // rebuilt before 0.1.16 wiped its streams): the index takes the stream from its start again.
     const head = await store.streamHead(view, v.show);
     if (seq > 0 && seq > head) seq = 0;
-    if (o.unlessBehind !== undefined && head - seq > o.unlessBehind) return seq;
+    if (o.unlessBehind !== undefined && head - seq > o.unlessBehind) {
+      // Declined on a request (brief 40): a view with no cursor row yet gets one at 0, the mark that it is
+      // asked for, so the index loop builds it off the request path instead of nobody ever building it.
+      if (!cur) await this.pool.query("insert into index_cursors (owner, view, version, audience, seq) values ($1, $2, $3, $4, 0) on conflict do nothing", [owner, view, version, v.show]);
+      return seq;
+    }
     // The stream a page at a time: a first publish of a large view is more entries than memory should hold at once.
     const page = 5000;
+    const until = o.budgetMs === undefined ? Number.POSITIVE_INFINITY : Date.now() + o.budgetMs;
     for (;;) {
       const entries = await store.entriesSince(view, seq, v.show, page);
       if (!entries.length) break;
       seq = await this.ingest(owner, view, version, v.show, entries, seq);
-      if (entries.length < page) break;
+      if (entries.length < page || Date.now() > until) break;
     }
     return seq;
+  }
+
+  /**
+   * The store's current views whose index is behind its stream, most behind first (brief 40): one probe of
+   * the cursor table and one of the stream's head per view, never a pass over either. A view with no cursor
+   * row was never asked for and is not listed; `apply` leaves a row at 0 when it declines one on a request.
+   */
+  async behind(store: PgStore): Promise<{ view: string; audience: string; seq: number; head: number }[]> {
+    const p = await store.definitions();
+    const out: { view: string; audience: string; seq: number; head: number }[] = [];
+    for (const v of p.views.views.values()) {
+      const cur = (await this.pool.query("select seq from index_cursors where owner = $1 and view = $2 and version = $3 and audience = $4", [store.owner, v.name, v.version ?? "", v.show])).rows[0] as Row | undefined;
+      if (!cur) continue;
+      const seq = Number(cur.seq);
+      const head = await store.streamHead(v.name, v.show);
+      if (head > seq) out.push({ view: v.name, audience: v.show, seq, head });
+    }
+    return out.sort((a, b) => b.head - b.seq - (a.head - a.seq));
   }
 
   /** Apply stream entries to the rows, idempotently by seq (12.6.2): from a store's stream or pushed by a presenter. */

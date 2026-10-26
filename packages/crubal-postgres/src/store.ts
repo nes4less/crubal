@@ -693,38 +693,74 @@ export class PgStore {
     return out;
   }
 
+  /** The drain's walk: its cursor per owner, and the record-order index it reads by; made once per process. */
+  private drainTable: Promise<void> | undefined;
+  private drainReady(): Promise<void> {
+    this.drainTable ??= (async () => {
+      await this.pool.query("create table if not exists drain_cursors (owner text primary key, ord bigint not null default 0)");
+      // Built concurrently when a store from before lacks it, never by the schema at connect: a plain create
+      // over a catalog of a million records would hold the table for the build (brief 40). On its own
+      // connection with no statement timeout, since a build over a million rows outlasts one; a build cut
+      // short leaves an invalid index behind, which is dropped and made again.
+      const { rows } = await this.pool.query("select x.indisvalid as valid from pg_index x join pg_class c on c.oid = x.indexrelid join pg_namespace n on n.oid = c.relnamespace where n.nspname = current_schema() and c.relname = 'records_ord'");
+      const state = (rows[0] as { valid: boolean } | undefined)?.valid;
+      if (state === true) return;
+      const client = await this.pool.connect();
+      try {
+        await client.query("set statement_timeout = 0");
+        if (state === false) await client.query("drop index if exists records_ord");
+        await client.query("create index concurrently if not exists records_ord on records (owner, ord)");
+      } catch {
+        // Left for the next process to try again.
+      } finally {
+        await client.query("reset statement_timeout").catch(() => undefined);
+        client.release();
+      }
+    })();
+    return this.drainTable;
+  }
+
   /**
    * Drain (docs/design/store.md, completion.md P): apply pending instructions to the records that have
    * them, at most `rate` records per call, each its own entry `by: migration: drain`; the ids done and
-   * how many still wait.
+   * whether any still wait (brief 40: a walk by cursor in record order, never a count of what remains).
    */
   async drain(rate = 100, at?: string): Promise<{ applied: string[]; remaining: number }> {
     // Nothing pending at all: no walk. The planner cannot tell that an empty issuer list makes the exists
     // below false for every row, so it read ME's 994,000 records for 27 s a tick for nothing (2026-10-26).
     if (!(await this.pool.query("select 1 from instructions where owner = $1 limit 1", [this.owner])).rows.length) return { applied: [], remaining: 0 };
+    await this.drainReady();
     const dict = (await this.definitions()).dict;
     // The records with an instruction still to apply, found by the tables (lifecycle.ts issuersFor: the
-    // parent's instructions, a kind's, a class's worn by the record or its parent), oldest first; never a
-    // walk of the catalog (brief 18, the scale rule).
+    // parent's instructions, a kind's, a class's worn by the record or its parent), in record order after the
+    // cursor; a page at a time, so a tick reads `rate` matching records and what it skips, never the catalog
+    // (brief 18, the scale rule). Counting what remained read every record twice a tick (2026-10-26).
     const waitingSql = `
       with ins as (select issuer, count(*)::int as n from instructions where owner = $1 group by issuer)
       select r.id, r.ord from records r
-      where r.owner = $1 and coalesce(r.status ->> 'state', '') <> 'archived' and exists (
+      where r.owner = $1 and r.ord > $3 and coalesce(r.status ->> 'state', '') <> 'archived' and exists (
         select 1 from ins i where coalesce((r.applied ->> i.issuer)::int, 0) < i.n and (
           i.issuer = r."of"
           or (i.issuer like 'kind:%' and split_part(substr(i.issuer, 6), '/', 1) = r.kind)
           or (i.issuer like 'class:%' and (
             split_part(substr(i.issuer, 7), '/', 1) = any(r.wears)
-            or split_part(substr(i.issuer, 7), '/', 1) = any(coalesce((select p.wears from records p where p.owner = r.owner and p.id = r."of"), '{}'::text[]))))))`;
-    const { rows } = await this.pool.query(`${waitingSql} order by r.ord limit $2`, [this.owner, rate]);
+            or split_part(substr(i.issuer, 7), '/', 1) = any(coalesce((select p.wears from records p where p.owner = r.owner and p.id = r."of"), '{}'::text[]))))))
+      order by r.ord limit $2`;
+    const from = Number(((await this.pool.query("select ord from drain_cursors where owner = $1", [this.owner])).rows[0] as { ord?: string | number } | undefined)?.ord ?? 0);
+    const { rows } = await this.pool.query(waitingSql, [this.owner, rate, from]);
     const applied: string[] = [];
-    for (const row of rows as { id: string }[]) {
+    let last = from;
+    for (const row of rows as { id: string; ord: string | number }[]) {
       const id = String(row.id);
       const entry = await this.commit({ migration: "drain" }, (d) => { apply(d as unknown as LifecycleStore, id, dict); }, at);
       if (entry) applied.push(id);
+      last = Number(row.ord);
     }
-    const left = (await this.pool.query(`select count(*)::int as n from (${waitingSql}) w`, [this.owner])).rows[0] as { n: number };
-    return { applied, remaining: Number(left.n) };
+    // A full page may have more behind it: the cursor moves on. A short page reached the end of the walk: the
+    // cursor returns to the start, and one more pass is owed unless this one began there and found nothing.
+    const full = rows.length >= rate;
+    await this.pool.query("insert into drain_cursors (owner, ord) values ($1, $2) on conflict (owner) do update set ord = excluded.ord", [this.owner, full ? last : 0]);
+    return { applied, remaining: full || from > 0 ? 1 : 0 };
   }
 
   /** What installing a version would restamp (10.4): per recipe and step, how many values change and how many go to review. */

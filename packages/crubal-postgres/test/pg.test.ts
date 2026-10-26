@@ -644,10 +644,13 @@ class: Item
     d.instructions.set("kind:item/2026-10-18", [{ issuer: "kind:item/2026-10-18", n: 1, op: "+", key: "notes", map: [] }]);
   }, "2026-10-18T09:00:01Z");
   const first = await store.drain(2, "2026-10-18T09:01:00Z");
-  assert.deepEqual(first, { applied: ["P-1", "P-2"], remaining: 1 });
+  assert.deepEqual(first, { applied: ["P-1", "P-2"], remaining: 1 }, "a full page: more may follow");
+  const cursor = async () => Number(((await pool.query("select ord from drain_cursors where owner = $1", [owner])).rows[0] as { ord: string }).ord);
+  assert.ok((await cursor()) > 0, "the walk's cursor moved on (brief 40)");
   const second = await store.drain(2, "2026-10-18T09:02:00Z");
-  assert.deepEqual(second, { applied: ["P-3"], remaining: 0 });
-  assert.deepEqual(await store.drain(2, "2026-10-18T09:03:00Z"), { applied: [], remaining: 0 });
+  assert.deepEqual(second, { applied: ["P-3"], remaining: 1 }, "a short page past the start: one pass from the start is owed");
+  assert.equal(await cursor(), 0, "the cursor returned to the start");
+  assert.deepEqual(await store.drain(2, "2026-10-18T09:03:00Z"), { applied: [], remaining: 0 }, "the pass from the start finds nothing: done");
   const s = await store.state();
   assert.deepEqual(s.records.get("P-2")?.values.notes, { $empty: "unknown" });
   assert.equal(s.records.get("P-2")?.applied?.["kind:item/2026-10-18"], 1);

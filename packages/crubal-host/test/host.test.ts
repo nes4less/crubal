@@ -993,3 +993,29 @@ permissions: rootshelf
   assert.deepEqual(row?.ancestors, ["ROOT"]);
 });
 
+
+test("brief 40: a request that declines a backlog leaves a cursor at 0 for a view never built; `behind` lists the views behind their stream, most behind first; a budgeted apply catches a view up a page at a time and nothing is behind after", { skip: !url }, async () => {
+  const store = await host.storeFor("root.example");
+  const index = new Index(pool);
+  await store.commit({ person: "root.example" }, (d) => {
+    for (const [id, title] of [["P-3", "Jaws"], ["P-4", "Alien"], ["P-5", "Heat"]] as const)
+      d.records.set(id, { id, kind: "item", level: "product", owner: "root.example", within: "ROOT", values: { title }, sources: { "*": { origin: "declared", via: "L-1" } } });
+  }, clock);
+  // A cursor past the stream (the view was built): a request past the limit serves what stands and the cursor stays.
+  const before = Number(((await pool.query("select seq from index_cursors where owner = 'root.example' and view = 'shelf'")).rows[0] as { seq: string }).seq);
+  assert.equal(await index.apply(store, "shelf", { unlessBehind: 0 }), before, "declined: the cursor as it stood");
+  const behind = await index.behind(store);
+  assert.deepEqual(behind.map((b) => [b.view, b.audience, b.seq > 0, b.head > b.seq]), [["shelf", "staff", true, true]]);
+  // No cursor at all (a view never asked for): a declining request writes the want marker at 0.
+  await pool.query("delete from index_cursors where owner = 'root.example' and view = 'shelf'");
+  assert.equal(await index.apply(store, "shelf", { unlessBehind: 0 }), 0);
+  const marked = await index.behind(store);
+  assert.equal(marked.length, 1);
+  assert.equal(marked[0]?.seq, 0, "the marker: asked for, never built");
+  // The loop's apply, within a budget: a page lands even when the budget is already spent, and the view is caught up.
+  const seq = await index.apply(store, "shelf", { budgetMs: 0 });
+  assert.equal(seq, marked[0]?.head);
+  assert.deepEqual(await index.behind(store), [], "nothing behind");
+  const rows = (await pool.query("select record from index_rows where owner = 'root.example' and view = 'shelf' order by record")).rows as { record: string }[];
+  assert.deepEqual(rows.map((r) => r.record), ["P-1", "P-2", "P-3", "P-4", "P-5"]);
+});
