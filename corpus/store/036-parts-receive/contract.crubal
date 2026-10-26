@@ -1,0 +1,5 @@
+contract: inspect
+  kind: form
+  origin: observed
+  reads:
+    Title -> title

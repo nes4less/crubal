@@ -9,7 +9,7 @@ import type { Arrival } from "./arrival.ts";
 import { evaluate, parseCondition } from "./conditions.ts";
 import { type ClassLine, type Dictionary, type Facet, type PartSlot } from "./defs.ts";
 import { resolve } from "./dictionary.ts";
-import { effective } from "./lifecycle.ts";
+import { effective, effectiveParts, ownedPartKeys } from "./lifecycle.ts";
 import type { Json, JsonObject, Record } from "./model.ts";
 import type { RecordSet } from "./records.ts";
 import type { Contract } from "./store.ts";
@@ -122,23 +122,34 @@ export function formOf(c: Contract, record: Record | undefined, dict: Dictionary
     s.fields.push(field(l, dict, r, vals, o, record?.id));
   }
   out.sections = sections.map((s): JsonObject => ({ ...(s.title ? { title: s.title } : {}), fields: s.fields }));
-  // Parts (5.6): rows per slot of the record's worn classes, the slot's class lines as fields.
-  if (r?.parts?.length) {
-    const worn = [...(r.wears ?? [])];
+  // Parts (5.6): rows per slot of the record's worn classes, the slot's class lines as fields. A record below
+  // the chain's top mirrors the parts above (1.6): it is asked only the lines its level owns on each part; the
+  // rest show as read through and take no edit.
+  const mirrored = r && o.records ? effectiveParts(o.records, r) : (r?.parts ?? []).filter(isObj);
+  if (r && mirrored.length) {
+    const up = r.of && o.records ? o.records.get(r.of) : undefined;
+    const worn = [...new Set([...(up?.wears ?? []), ...(r.wears ?? [])])];
     const slots: PartSlot[] = worn.flatMap((w) => dict.classes.get(w)?.parts ?? []);
     const parts: JsonObject[] = [];
     for (const slot of slots) {
-      const rows = (r.parts ?? []).filter((p) => isObj(p) && Array.isArray(p.wears) && p.wears.includes(slot.wears)) as JsonObject[];
+      const rows = mirrored.filter((p) => Array.isArray(p.wears) && p.wears.includes(slot.wears));
       if (!rows.length) continue;
       const lines = resolve(dict, [slot.wears]);
+      const owned = r.of ? ownedPartKeys(dict, r, [slot.wears]) : undefined;
       parts.push({
         slot: slot.slot,
         wears: slot.wears,
         ...(slot.fungible ? { fungible: true } : {}),
         rows: rows.map((p): JsonObject => {
           const pv = (isObj(p.values) ? p.values : {}) as JsonObject;
-          const fields = lines.map((ln) => field({ facet: ln.facet, ...(ln.required ? { required: true } : {}), ...(ln.values ? { values: ln.values } : {}), ...(ln.length !== undefined ? { length: ln.length } : {}), ...(ln.pick ? { pick: ln.pick } : {}), ...(ln.range ? { range: ln.range } : {}), ...(ln.when ? { when: ln.when } : {}) }, dict, { ...r, values: pv, alternatives: undefined, suggestions: undefined, held: undefined } as Extra, pv, o, record?.id));
-          if (slot.fungible) fields.push({ key: "crubal:count", label: "Count", type: "number", editable: true, ...(pv["crubal:count"] !== undefined ? { current: pv["crubal:count"] } : {}) });
+          const fields = lines
+            .filter((ln) => !ln.levels.length || ln.levels.includes(r.level))
+            .map((ln) => {
+              const f = field({ facet: ln.facet, ...(ln.required ? { required: true } : {}), ...(ln.values ? { values: ln.values } : {}), ...(ln.length !== undefined ? { length: ln.length } : {}), ...(ln.pick ? { pick: ln.pick } : {}), ...(ln.range ? { range: ln.range } : {}), ...(ln.when ? { when: ln.when } : {}) }, dict, { ...r, values: pv, alternatives: undefined, suggestions: undefined, held: undefined } as Extra, pv, o, record?.id);
+              if (owned && !owned.has(ln.facet)) f.editable = false;
+              return f;
+            });
+          if (slot.fungible && !owned) fields.push({ key: "crubal:count", label: "Count", type: "number", editable: true, ...(pv["crubal:count"] !== undefined ? { current: pv["crubal:count"] } : {}) });
           return { row: String(p.$row), fields };
         }),
       });

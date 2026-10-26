@@ -257,7 +257,15 @@ function samePath(a: string, b: string): boolean {
 
 // ─── Intake (9.1–9.4) ────────────────────────────────────────────────────────
 
-export type IntakeOutcome = { from: string; to?: string; outcome: string; value?: Json; cites?: JsonObject };
+export type IntakeOutcome = {
+  from: string;
+  to?: string;
+  outcome: string;
+  value?: Json;
+  cites?: JsonObject;
+  /** A part's value (5.6): which incoming part it belongs to, by its place in the body's `parts` list, its slot and the row it names. */
+  part?: { slot: string; at: number; row?: string; key: string };
+};
 
 export type IntakeRecord = {
   intake: string;
@@ -354,7 +362,37 @@ export function reviewByKey(intakes: { for: string; outcomes: IntakeOutcome[] }[
 export function receive(c: Contract, body: string, forRecord: string, dict: Dictionary, intakeId = "I-1"): IntakeRecord {
   const payload = JSON.parse(body) as Json;
   const outcomes: IntakeOutcome[] = [];
-  for (const [path, raw] of leaves(payload, "", (p) => c.reads.some((m) => samePath(m.from, p)))) {
+  // Parts (5.6, 9.2): the body's `parts` list, each `{ slot, row?, ...values }`; a value is read under its facet
+  // and lands on the part the slot and row name (the record's classes decide the slot; the row binds or mints).
+  const partList = isObj(payload) && Array.isArray(payload.parts) ? payload.parts : [];
+  partList.forEach((p, at) => {
+    if (!isObj(p) || typeof p.slot !== "string" || !p.slot) {
+      outcomes.push({ from: `parts[${at}]`, outcome: "unknown" });
+      return;
+    }
+    const row = typeof p.row === "string" && p.row ? p.row : undefined;
+    for (const [key, raw] of Object.entries(p)) {
+      if (key === "slot" || key === "row") continue;
+      const from = `parts[${at}].${key}`;
+      const part = { slot: p.slot, at, ...(row ? { row } : {}), key };
+      if (raw === "" || raw === null) {
+        outcomes.push({ from, outcome: "ignored", part });
+        continue;
+      }
+      if (key === "crubal:count") {
+        outcomes.push({ from, to: key, outcome: "absorbed", value: raw, part });
+        continue;
+      }
+      const f = dict.facets.get(key);
+      if (!f) {
+        outcomes.push({ from, to: key, outcome: "unknown", value: raw, part });
+        continue;
+      }
+      const { value, outcome, cites } = foldIn(f, raw, undefined, dict);
+      outcomes.push({ from, to: key, outcome, value, part, ...(outcome === "contradiction" ? { cites: cites ?? { type: f.key } } : cites ? { cites } : {}) });
+    }
+  });
+  for (const [path, raw] of leaves(isObj(payload) ? Object.fromEntries(Object.entries(payload).filter(([k]) => k !== "parts")) : payload, "", (p) => c.reads.some((m) => samePath(m.from, p)))) {
     // An empty string is no answer (chapter 3: what is absent stays absent); an empty is written as `$empty`.
     if (raw === "") {
       outcomes.push({ from: path, outcome: "ignored" });
@@ -429,6 +467,8 @@ export function land(
   facetTrust: Map<string, string[]> = new Map(),
   /** The facets declared `transitions: yes` (4.2): a later value of equal or higher trust replaces, never conflicts. */
   transitions: Set<string> = new Set(),
+  /** The dictionary, for landing parts (5.6): which class a slot's parts wear, and the match child that binds a row. */
+  dict?: Dictionary,
 ): Record {
   const order = trust.length ? trust : DEFAULT_TRUST;
   const incoming: Who = { source, ...(intake.contract ? { contract: intake.contract } : {}), ...(intake.person ? { person: true } : {}) };
@@ -437,33 +477,74 @@ export function land(
     values: { ...r.values },
     sources: { ...(r.sources ?? {}) },
   };
-  for (const o of intake.outcomes) {
-    if (!o.to || o.value === undefined || !["absorbed", "conflict", "new"].includes(o.outcome)) continue;
-    const current = out.values[o.to];
+  // One value landing at an address: new, agreed, moved (a transition), or decided by the trust order with
+  // the loser kept as an alternative (9.3). The same for a record's values and a part's.
+  const settle = (address: string, facet: string, current: Json | undefined, value: Json): Json | undefined => {
     if (current === undefined || (isObj(current) && current.$empty === "unknown")) {
-      out.values[o.to] = o.value;
-      (out.sources as { [a: string]: Source })[o.to] = source;
-      continue;
+      (out.sources as { [a: string]: Source })[address] = source;
+      return value;
     }
-    if (serialize(current) === serialize(o.value)) continue; // agreement: the current source stays
-    const was = sourceAt(out, o.to) as Source;
-    const fo = facetTrust.get(o.to) ?? [];
+    if (serialize(current) === serialize(value)) return undefined; // agreement: the current source stays
+    const was = sourceAt(out, address) as Source;
+    const fo = facetTrust.get(facet) ?? [];
     const incomingRank = rank(incoming, order, fo);
     const currentRank = rank({ source: was }, order, fo);
     // A state facet moves: a later value of equal or higher trust is the transition, not a dispute (4.2).
-    if (transitions.has(o.to) && incomingRank <= currentRank) {
-      out.values[o.to] = o.value;
-      (out.sources as { [a: string]: Source })[o.to] = source;
-      continue;
+    if (transitions.has(facet) && incomingRank <= currentRank) {
+      (out.sources as { [a: string]: Source })[address] = source;
+      return value;
     }
     const incomingWins = incomingRank < currentRank;
-    const loser: JsonObject = incomingWins ? { value: current, origin: was.origin, via: was.via } : { value: o.value, origin: source.origin, via: source.via };
-    if (incomingWins) {
-      out.values[o.to] = o.value;
-      (out.sources as { [a: string]: Source })[o.to] = source;
-    }
+    const loser: JsonObject = incomingWins ? { value: current, origin: was.origin, via: was.via } : { value, origin: source.origin, via: source.via };
+    if (incomingWins) (out.sources as { [a: string]: Source })[address] = source;
     out.alternatives = { ...(out.alternatives ?? {}) };
-    out.alternatives[o.to] = [...(out.alternatives[o.to] ?? []), loser];
+    out.alternatives[address] = [...(out.alternatives[address] ?? []), loser];
+    return incomingWins ? value : undefined;
+  };
+  for (const o of intake.outcomes) {
+    if (o.part || !o.to || o.value === undefined || !["absorbed", "conflict", "new"].includes(o.outcome)) continue;
+    const v = settle(o.to, o.to, out.values[o.to], o.value);
+    if (v !== undefined) out.values[o.to] = v;
+  }
+  // Parts (5.6): the incoming parts bind to the record's rows (a named row binds by its key; else the slot's
+  // match child, else review, else a new row, 9.2), then each value lands on its part at `parts[row].key`.
+  const partOutcomes = intake.outcomes.filter((o) => o.part && o.to && o.value !== undefined && ["absorbed", "conflict", "new"].includes(o.outcome));
+  if (partOutcomes.length && dict) {
+    const byAt = new Map<number, { slot: string; row?: string; values: JsonObject }>();
+    for (const o of partOutcomes) {
+      const p = o.part as NonNullable<IntakeOutcome["part"]>;
+      const have = byAt.get(p.at) ?? { slot: p.slot, ...(p.row ? { row: p.row } : {}), values: {} };
+      have.values[o.to as string] = o.value as Json;
+      byAt.set(p.at, have);
+    }
+    const parts = [...(r.parts ?? [])].filter(isObj).map((p) => ({ ...p })) as JsonObject[];
+    const slotsWorn = (r.wears ?? []).flatMap((w) => dict.classes.get(w)?.parts ?? []);
+    const review: JsonObject[] = [];
+    const landOn = (row: string, slot: string, values: JsonObject) => {
+      const wears = slotsWorn.find((s) => s.slot === slot)?.wears ?? (parts.find((p) => String(p.$row) === row)?.wears as Json[] | undefined)?.[0];
+      let part = parts.find((p) => String(p.$row) === row);
+      if (!part) {
+        part = { $row: row, ...(wears ? { wears: [wears] } : {}), values: {} };
+        parts.push(part);
+      }
+      const pv = { ...(isObj(part.values) ? part.values : {}) } as JsonObject;
+      for (const [k, v] of Object.entries(values)) {
+        const landed = settle(`parts[${row}].${k}`, k, pv[k], v as Json);
+        if (landed !== undefined) pv[k] = landed;
+      }
+      part.values = pv;
+    };
+    // Every incoming part is bound in one pass (a named row by its key, the rest by the slot's match child),
+    // then each lands on its row; one the match left to review is not landed, and the review item says why.
+    const incoming = [...byAt.values()];
+    const { match, bound } = bindParts({ ...r, parts }, incoming.map((p) => ({ slot: p.slot, ...(p.row ? { row: p.row } : {}), ...(p.values as { [k: string]: Json }) })), dict);
+    review.push(...match.review);
+    incoming.forEach((p, i) => {
+      const row = bound[i];
+      if (row) landOn(row, p.slot, p.values);
+    });
+    if (parts.length) out.parts = parts;
+    if (review.length) (out as Record & { review?: JsonObject[] }).review = [...(((out as Record & { review?: JsonObject[] }).review) ?? []), ...review];
   }
   return out;
 }
@@ -474,11 +555,22 @@ export type PartMatch = { parts: JsonObject[]; review: JsonObject[] };
 
 /** Bind incoming parts to existing ones: by the slot's match child, else review, else a new row. */
 export function matchParts(r: Record, incoming: { slot: string; [k: string]: Json }[], dict: Dictionary): PartMatch {
+  return bindParts(r, incoming, dict).match;
+}
+
+/**
+ * The binding with each incoming part's row beside it (5.6, 9.2): a part that names a `row` binds to the
+ * record's row of that key, or makes it; else the slot's match child; else, with an unmatched row of the
+ * slot still standing, review (no row); else a new row. `bound[i]` is the row the i-th incoming part
+ * landed on, or nothing when it went to review.
+ */
+export function bindParts(r: Record, incoming: { slot: string; [k: string]: Json }[], dict: Dictionary): { match: PartMatch; bound: (string | undefined)[] } {
   const slots = (r.wears ?? []).flatMap((w) => dict.classes.get(w)?.parts ?? []);
   const existing = (r.parts ?? []).filter(isObj).map((p) => ({ p, matched: false }));
   const result = new Map<string, JsonObject>(existing.map(({ p }) => [String(p.$row), { $row: p.$row as Json }]));
   const review: JsonObject[] = [];
   const minted: JsonObject[] = [];
+  const bound: (string | undefined)[] = [];
   const keys = existing.map(({ p }) => String(p.$row));
   const mint = () => {
     const m = keys.map((k) => k.match(/^(\D+)(\d+)$/)).find(Boolean);
@@ -492,23 +584,40 @@ export function matchParts(r: Record, incoming: { slot: string; [k: string]: Jso
     const slot = slots.find((s) => s.slot === inc.slot);
     const inSlot = existing.filter(({ p }) => Array.isArray(p.wears) && slot && p.wears.includes(slot.wears));
     const by = slot?.match;
+    // A named row binds by its key (1.6): the row the record holds under it, else a new row under that key.
+    if (typeof inc.row === "string" && inc.row) {
+      const named = existing.find(({ p }) => String(p.$row) === inc.row);
+      if (named) {
+        named.matched = true;
+        result.set(inc.row, { $row: inc.row, matched: "row", from: inc.row });
+      } else if (!keys.includes(inc.row)) {
+        keys.push(inc.row);
+        minted.push({ $row: inc.row, new: true, from: inc.row });
+      }
+      bound.push(inc.row);
+      continue;
+    }
     const want = by && typeof inc[by] === "string" ? foldKey(inc[by] as string) : null;
     const hit = want ? inSlot.find(({ p, matched }) => !matched && isObj(p.values) && foldKey(String(p.values[by as string] ?? "")) === want) : undefined;
     const label = String(by ? inc[by] : inc.slot);
     if (hit) {
       hit.matched = true;
       result.set(String(hit.p.$row), { $row: hit.p.$row as Json, matched: by as string, from: label });
+      bound.push(String(hit.p.$row));
       continue;
     }
     const could = inSlot.filter((x) => !x.matched);
     if (could.length) {
       const names = could.map(({ p }) => String(p.$row)).join(", ");
       review.push({ address: "parts", from: label, reason: `could be the same part as ${names} (${inc.slot}); not matched by ${by ?? "identity"}` });
+      bound.push(undefined);
       continue;
     }
-    minted.push({ $row: mint(), new: true, from: label });
+    const row = mint();
+    minted.push({ $row: row, new: true, from: label });
+    bound.push(row);
   }
-  return { parts: [...result.values(), ...minted], review };
+  return { match: { parts: [...result.values(), ...minted], review }, bound };
 }
 
 // ─── Evidence (9.7) ──────────────────────────────────────────────────────────

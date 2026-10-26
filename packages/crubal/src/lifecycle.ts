@@ -35,6 +35,39 @@ export function effective(records: RecordSet, r: Record): JsonObject {
   return { ...(up ? effective(records, up) : {}), ...r.values };
 }
 
+const isObjV = (v: Json | undefined): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);
+
+/**
+ * The parts a record reads (1.6, "units mirror parts"): the chain's top holds the parts; a record below holds
+ * rows with the same keys carrying only the values that vary at its level. Read through, a lower record's
+ * part is the part above with its own values over it; a row the record above lacks is its own.
+ */
+export function effectiveParts(records: RecordSet, r: Record): JsonObject[] {
+  const up = r.of ? records.get(r.of) : undefined;
+  const above = up ? effectiveParts(records, up) : [];
+  const own = (r.parts ?? []).filter(isObjV);
+  if (!above.length) return own;
+  const byRow = new Map(above.map((p) => [String(p.$row), p]));
+  for (const p of own) {
+    const row = String(p.$row);
+    const have = byRow.get(row);
+    if (!have) {
+      byRow.set(row, p);
+      continue;
+    }
+    const wears = [...new Set([...(Array.isArray(have.wears) ? have.wears : []), ...(Array.isArray(p.wears) ? p.wears : [])])];
+    byRow.set(row, { ...have, ...p, wears, values: { ...(isObjV(have.values) ? have.values : {}), ...(isObjV(p.values) ? p.values : {}) } });
+  }
+  return [...byRow.values()];
+}
+
+/** The keys a record owns on a part it mirrors (1.7 for parts): its level's vary step, and the part classes' `level::` lines at its level. */
+export function ownedPartKeys(dict: Dictionary, r: Record, partWears: string[]): Set<string> {
+  const keys = new Set(dict.vary.get(r.level) ?? []);
+  for (const w of partWears) for (const l of classLines(dict, w)) if (l.level === r.level) keys.add(l.facet);
+  return keys;
+}
+
 function classLines(dict: Dictionary, name: string, seen = new Set<string>()): ClassDef["lines"] {
   if (seen.has(name)) return [];
   seen.add(name);

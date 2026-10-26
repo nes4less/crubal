@@ -1,0 +1,11 @@
+{
+  "outcomes": [
+    { "from": "Title", "to": "title", "outcome": "absorbed", "value": "Christmas Vacation" },
+    { "from": "parts[0].condition", "to": "condition", "outcome": "absorbed", "value": "G", "part": { "slot": "disc", "at": 0, "row": "disc1", "key": "condition" } },
+    { "from": "parts[1].name", "to": "name", "outcome": "absorbed", "value": "Bonus Disc", "part": { "slot": "disc", "at": 1, "key": "name" } },
+    { "from": "parts[1].condition", "to": "condition", "outcome": "absorbed", "value": "VG", "part": { "slot": "disc", "at": 1, "key": "condition" } },
+    { "from": "parts[2].name", "to": "name", "outcome": "absorbed", "value": "Disc 1", "part": { "slot": "disc", "at": 2, "key": "name" } },
+    { "from": "parts[2].condition", "to": "condition", "outcome": "new", "value": "X", "part": { "slot": "disc", "at": 2, "key": "condition" } },
+    { "from": "parts[2].notes", "outcome": "ignored", "part": { "slot": "disc", "at": 2, "key": "notes" } }
+  ]
+}

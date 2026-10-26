@@ -230,6 +230,20 @@ export class Engine {
     return { ...(up ? this.effective(up) : {}), ...rec.values };
   }
 
+  /** The parts a record reads (1.6): the chain's top's rows, each under the record's own row of the same key. */
+  partsOf(rec: Record): JsonObject[] {
+    const up = rec.of ? (this.store.get(rec.of)?.rec ?? this.records?.().get(rec.of)) : undefined;
+    const above = up ? this.partsOf(up) : [];
+    const own = (rec.parts ?? []).filter((p): p is JsonObject => isObj(p));
+    if (!above.length) return own;
+    const byRow = new Map(above.map((p) => [String(p.$row), p]));
+    for (const p of own) {
+      const have = byRow.get(String(p.$row));
+      byRow.set(String(p.$row), have ? { ...have, ...p, values: { ...(isObj(have.values) ? have.values : {}), ...(isObj(p.values) ? p.values : {}) } } : p);
+    }
+    return [...byRow.values()];
+  }
+
   private applies(r: Rule, rec: Record): boolean {
     if (r.for === "everywhere") return true;
     // A level is written with its prefix (`unit::`, 6.1), the same spelling conditions use.
@@ -570,7 +584,7 @@ export class Engine {
       const kept = where ? all.filter((row) => evaluate(where, row, undefined, this.now) === true) : all;
       raw = kept.map((row) => (key ? row[key] : row));
     } else {
-      const parts = (rec.parts ?? []).filter((p): p is JsonObject => isObj(p) && isObj(p.values));
+      const parts = this.partsOf(rec).filter((p) => isObj(p.values));
       const kept = where ? parts.filter((p) => evaluate(where, p.values as JsonObject, undefined, this.now) === true) : parts;
       raw = kept.map((p) => (p.values as JsonObject)[key]);
     }
@@ -604,8 +618,7 @@ export class Engine {
     };
     const own = measure(rec.wears ?? [], this.effective(rec));
     if (own !== null) out.push({ record: rec.id, result: "completeness", value: own });
-    for (const p of rec.parts ?? []) {
-      if (!isObj(p)) continue;
+    for (const p of this.partsOf(rec)) {
       const v = measure(Array.isArray(p.wears) ? p.wears.map(String) : [], isObj(p.values) ? p.values : {});
       if (v !== null) out.push({ record: rec.id, address: `parts[${p.$row}]`, result: "completeness", value: v });
     }

@@ -1,0 +1,45 @@
+// A recipe turns a compound's rows into parts (10.3 `parts`): the rows the condition picks become parts of the
+// slot, keyed as the rows were, each child mapped to a facet of the part; the compound stays as it was.
+facet: name
+  type: text
+manifestItem$
+manifestItemType$
+manifestQty#
+facet: manifest
+  type: compound
+  pick: any
+  facets:
+    manifestItem
+    manifestItemType
+    manifestQty
+class: Disc
+  facets:
+    name
+    condition
+class: Boxed
+  for: item
+  facets:
+    title
+    manifest
+  parts:
+    disc: Disc *
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-1 [origin: declared, via: L-1]
+  crubal:wears: Boxed
+  title: Combo pack
+  manifest:
+    - [row: m1]
+      manifestItem: Blu-ray disc
+      manifestItemType: disc
+      manifestQty: 2
+    - [row: m2]
+      manifestItem: DVD disc
+      manifestItemType: disc
+      manifestQty: 1
+    - [row: m3]
+      manifestItem: Keep case
+      manifestItemType: case
+      manifestQty: 1

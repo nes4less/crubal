@@ -605,7 +605,7 @@ export class Exchange {
     if (c.lands === "suggestion" || gate) this.put(suggest(r, outcomes, source));
     else {
       // A form run by a caller is a person's write (11.3): it ranks as `person`, ahead of what a contract or an earlier declaration left.
-      const landed = land(r, { outcomes, contract: name, ...(c.kind === "form" && callerId ? { person: true } : {}) }, source, this.dict.trust, this.dict.facetTrust, new Set([...this.dict.facets.values()].filter((f) => f.transitions).map((f) => f.key)));
+      const landed = land(r, { outcomes, contract: name, ...(c.kind === "form" && callerId ? { person: true } : {}) }, source, this.dict.trust, this.dict.facetTrust, new Set([...this.dict.facets.values()].filter((f) => f.transitions).map((f) => f.key)), this.dict);
       // 6. Rules, over what this run changed.
       const touched: JsonObject = {};
       for (const [k, v] of Object.entries(landed.values)) if (serialize(r.values[k] ?? "∅") !== serialize(v)) touched[k] = v;

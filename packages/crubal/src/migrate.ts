@@ -23,7 +23,9 @@ export type Step =
   | { verb: "recompute"; facet: string; line: number; text: string }
   | { verb: "retype"; facet: string; from: string; to: string; line: number; text: string }
   /** `fill: value` with `for: level::` and `when:` beneath: records lacking the key get the value (10.3). */
-  | { verb: "fill"; facet: string; value: string; level?: string; when?: string; line: number; text: string };
+  | { verb: "fill"; facet: string; value: string; level?: string; when?: string; line: number; text: string }
+  /** `parts: -> slot` under a compound, with `when:` and `child -> facet` lines beneath: the compound's rows become parts of the slot (10.3, 5.6). */
+  | { verb: "parts"; facet: string; to: string; when?: string; map: [string, string][]; line: number; text: string };
 
 export type Recipe = { from: string; to: string; steps: Step[]; line: number };
 
@@ -110,6 +112,22 @@ export function readRecipes(source: string): Recipe[] {
             recipe.steps.push({ verb: "fill", value: unq(s.value), ...(level ? { level } : {}), ...(when ? { when } : {}), ...base });
             break;
           }
+          case "parts": {
+            // The rows of the compound become parts of the slot named (5.6): `when:` picks the rows, and each
+            // `child -> facet` line says which child becomes which facet of the part; a row's other children stay
+            // in the compound, which is left as it was.
+            const [, to] = arrow(s.value, s.line);
+            if (!to) throw new CrubalError(`parts names the slot the rows become: "parts: -> disc"`, s.line);
+            let when: string | undefined;
+            const map: [string, string][] = [];
+            for (const b of s.children) {
+              if (b.key === "when") when = b.value.trim();
+              else if (b.kind === "line" && b.text.includes(" -> ")) map.push(arrow(b.text, b.line));
+              else throw new CrubalError(`parts takes "when:" and "child -> facet" lines beneath it, not ${b.text}`, b.line);
+            }
+            recipe.steps.push({ verb: "parts", to, ...(when ? { when } : {}), map, ...base });
+            break;
+          }
           default:
             throw new CrubalError(`unknown recipe step: ${s.text}`, s.line);
         }
@@ -134,6 +152,13 @@ export function checkRecipe(r: Recipe, dict: Dictionary): void {
       if (s.else !== undefined) need(s.else);
     }
     if (s.verb === "convert" && convert("1", s.from, s.to) === null) throw new CrubalError(`can't convert ${s.from} to ${s.to}`, s.line);
+    if (s.verb === "parts") {
+      if (!f || f.type !== "compound") throw new CrubalError(`${s.facet} is not a compound of ${r.to}`, s.line);
+      const slot = [...dict.classes.values()].flatMap((c) => c.parts).find((p) => p.slot === s.to);
+      if (!slot) throw new CrubalError(`no class of ${r.to} declares a part slot ${s.to}`, s.line);
+      for (const [, to] of s.map) if (to !== "crubal:count" && !dict.facets.has(to)) throw new CrubalError(`${to} is not a facet of ${r.to}`, s.line);
+      if (s.when) parseCondition(s.when, s.line);
+    }
     if (s.verb === "fill") {
       if (!f) throw new CrubalError(`${s.facet} is not a facet of ${r.to}`, s.line);
       const v = readUnder(f, s.value, dict, s.line);
@@ -173,6 +198,7 @@ export function restamp(records: Record[], recipe: Recipe, dict: Dictionary, sta
   if (stats) for (const s of recipe.steps) stats.push({ step: s.text, facet: s.facet, verb: s.verb, changed: 0, review: 0 });
   const out = records.map((rec) => {
     const values: JsonObject = { ...rec.values };
+    let parts: Json[] | undefined = rec.parts ? [...rec.parts] : undefined;
     // A moved value keeps its source under its new address (10.4): the record's own, else its default.
     const sources: { [address: string]: Source } = { ...(rec.sources ?? {}) };
     recipe.steps.forEach((s, si) => {
@@ -241,6 +267,50 @@ export function restamp(records: Record[], recipe: Recipe, dict: Dictionary, sta
         }
         case "recompute":
           break; // the rules rebuild produced values
+        case "parts": {
+          // The compound's rows become parts of the slot (5.6): the row's key is its `$row` when it has one, else
+          // the slot's name numbered; a row whose key the record already holds as a part is left alone; the class
+          // the parts wear is the slot's, from the class the record wears that declares it (any class, standing
+          // alone). The compound stays as it was.
+          const rows = (Array.isArray(v) ? v : [v]).filter(isObj);
+          const declaring = [...dict.classes.values()].filter((c) => c.parts.some((p) => p.slot === s.to));
+          const cls = declaring.find((c) => (rec.wears ?? []).includes(c.name)) ?? declaring[0];
+          const slot = cls?.parts.find((p) => p.slot === s.to);
+          if (!slot) break;
+          const have = (parts ?? []).filter(isObj);
+          const keys = new Set(have.map((p) => String(p.$row)));
+          let n = 0;
+          const next = () => {
+            for (;;) {
+              n += 1;
+              const k = `${s.to}${n}`;
+              if (!keys.has(k)) return k;
+            }
+          };
+          const made: Json[] = [];
+          for (const row of rows) {
+            if (s.when && evaluate(parseCondition(s.when, s.line), row) !== true) continue;
+            const key = typeof row.$row === "string" && row.$row ? row.$row : next();
+            if (keys.has(key)) continue;
+            keys.add(key);
+            const pv: JsonObject = {};
+            for (const [from, to] of s.map) {
+              const x = row[from];
+              if (x === undefined || x === null || x === "") continue;
+              if (to === "crubal:count") {
+                pv[to] = x;
+                continue;
+              }
+              const f = dict.facets.get(to);
+              const read = f && typeof x === "string" ? readUnder(f, x, dict) : x;
+              if (read !== undefined) pv[to] = read as Json;
+            }
+            made.push({ $row: key, wears: [slot.wears], values: pv });
+          }
+          if (made.length) parts = [...(parts ?? []), ...made];
+          if (stats) (stats[si] as StepStats).changed += made.length;
+          break;
+        }
         case "fill": {
           // A backfill (10.3): a record lacking the key, at the level named, where the condition holds, gets the
           // value read under the facet; a record that has one is left alone.
@@ -255,11 +325,11 @@ export function restamp(records: Record[], recipe: Recipe, dict: Dictionary, sta
       }
       if (stats) {
         const st = stats[si] as StepStats;
-        if (serialize((values[s.facet] ?? null) as Json) !== before) st.changed += 1;
+        if (s.verb !== "parts" && serialize((values[s.facet] ?? null) as Json) !== before) st.changed += 1;
         st.review += review.length - reviewsBefore;
       }
     });
-    return { ...rec, values, ...(Object.keys(sources).length ? { sources } : {}) };
+    return { ...rec, values, ...(parts?.length ? { parts } : {}), ...(Object.keys(sources).length ? { sources } : {}) };
   });
   return { records: out, review };
 }

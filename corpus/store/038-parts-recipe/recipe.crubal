@@ -1,0 +1,5 @@
+migration: test /2026-10-14 -> test /2026-11-01
+  facet: manifest
+    parts: -> disc
+      when: manifestItemType is disc
+      manifestItem -> name

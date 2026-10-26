@@ -74,7 +74,7 @@ export function arrive(
   const active = (r: Record) => !r.status || r.status.state === "active";
   const finish = (arrival: Arrival, record: Record | undefined) => {
     if (record) {
-      const landed = land(record, { outcomes: intake.outcomes, contract: c.name }, source, dict.trust, dict.facetTrust);
+      const landed = land(record, { outcomes: intake.outcomes, contract: c.name }, source, dict.trust, dict.facetTrust, undefined, dict);
       store.records.set(landed.id, landed);
       if (bindKey) store.bindings.set(bindKey, landed.id);
       return { arrival: { ...arrival, record: landed.id, ...(refText !== undefined ? { ref: refText } : {}) }, intake: { ...intake, for: landed.id }, record: landed };
@@ -139,7 +139,7 @@ export function decide(
     if (opts.of) target.of = opts.of;
     if (opts.within) target.within = opts.within;
   }
-  const landed = land(target, { outcomes: held.intake.outcomes, contract: c.name }, source, dict.trust, dict.facetTrust);
+  const landed = land(target, { outcomes: held.intake.outcomes, contract: c.name }, source, dict.trust, dict.facetTrust, undefined, dict);
   store.records.set(landed.id, landed);
   if (held.ref !== undefined) store.bindings.set(`${c.name}|${held.ref}`, landed.id);
   return { arrival: { outcome: "record" in choice ? "bound" : "new", record: landed.id, by: "review", ...(held.ref !== undefined ? { ref: held.ref } : {}) }, record: landed };

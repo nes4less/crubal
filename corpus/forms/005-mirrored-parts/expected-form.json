@@ -1,0 +1,150 @@
+{
+  "contract": "grade",
+  "record": "U-5",
+  "origin": "observed",
+  "sections": [
+    {
+      "fields": [
+        {
+          "key": "condition",
+          "label": "Condition",
+          "type": "choice",
+          "required": true,
+          "values": [
+            {
+              "value": "NM"
+            },
+            {
+              "value": "VG"
+            },
+            {
+              "value": "G"
+            },
+            {
+              "value": "F"
+            },
+            {
+              "value": "P"
+            }
+          ],
+          "ranked": true,
+          "current": "VG",
+          "editable": true
+        }
+      ]
+    }
+  ],
+  "parts": [
+    {
+      "slot": "disc",
+      "wears": "GradedDisc",
+      "rows": [
+        {
+          "row": "disc1",
+          "fields": [
+            {
+              "key": "discFormat",
+              "label": "Disc Format",
+              "type": "choice",
+              "values": [
+                {
+                  "value": "DVD-5"
+                },
+                {
+                  "value": "DVD-9"
+                },
+                {
+                  "value": "BD-25"
+                },
+                {
+                  "value": "BD-50"
+                }
+              ],
+              "current": "DVD-9",
+              "editable": false
+            },
+            {
+              "key": "condition",
+              "label": "Condition",
+              "type": "choice",
+              "values": [
+                {
+                  "value": "NM"
+                },
+                {
+                  "value": "VG"
+                },
+                {
+                  "value": "G"
+                },
+                {
+                  "value": "F"
+                },
+                {
+                  "value": "P"
+                }
+              ],
+              "ranked": true,
+              "current": "G",
+              "editable": true
+            }
+          ]
+        },
+        {
+          "row": "disc2",
+          "fields": [
+            {
+              "key": "discFormat",
+              "label": "Disc Format",
+              "type": "choice",
+              "values": [
+                {
+                  "value": "DVD-5"
+                },
+                {
+                  "value": "DVD-9"
+                },
+                {
+                  "value": "BD-25"
+                },
+                {
+                  "value": "BD-50"
+                }
+              ],
+              "current": "DVD-5",
+              "editable": false
+            },
+            {
+              "key": "condition",
+              "label": "Condition",
+              "type": "choice",
+              "values": [
+                {
+                  "value": "NM"
+                },
+                {
+                  "value": "VG"
+                },
+                {
+                  "value": "G"
+                },
+                {
+                  "value": "F"
+                },
+                {
+                  "value": "P"
+                }
+              ],
+              "ranked": true,
+              "editable": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "submit": {
+    "run": "grade",
+    "record": "U-5"
+  }
+}

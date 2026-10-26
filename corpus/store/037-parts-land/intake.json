@@ -1,0 +1,42 @@
+{
+  "intake": "I-3",
+  "contract": "inspect",
+  "for": "P-1",
+  "outcomes": [
+    {
+      "from": "parts[0].condition",
+      "to": "condition",
+      "outcome": "absorbed",
+      "value": "G",
+      "part": {
+        "slot": "disc",
+        "at": 0,
+        "row": "disc1",
+        "key": "condition"
+      }
+    },
+    {
+      "from": "parts[1].name",
+      "to": "name",
+      "outcome": "absorbed",
+      "value": "Bonus Disc",
+      "part": {
+        "slot": "disc",
+        "at": 1,
+        "key": "name"
+      }
+    },
+    {
+      "from": "parts[1].condition",
+      "to": "condition",
+      "outcome": "absorbed",
+      "value": "VG",
+      "part": {
+        "slot": "disc",
+        "at": 1,
+        "key": "condition"
+      }
+    }
+  ],
+  "log": "L-3"
+}

@@ -551,7 +551,7 @@ function runStoreCase(folder: string, caseDir: string, name: string, shared: Dic
     }
     const intakes = existsSync(file("intakes.json")) ? (json("intakes.json") as JsonObject[]) : [json("intake.json") as JsonObject];
     let rec = records[0] as Rec;
-    for (const i of intakes) rec = land(rec, i as unknown as Parameters<typeof land>[1], { origin: "reported", via: String(i.log) }, dict.trust, dict.facetTrust);
+    for (const i of intakes) rec = land(rec, i as unknown as Parameters<typeof land>[1], { origin: "reported", via: String(i.log) }, dict.trust, dict.facetTrust, undefined, dict);
     const want = json("expected.json") as unknown as Rec;
     const got = one(rec);
     const wantC = one(want);

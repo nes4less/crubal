@@ -1,0 +1,38 @@
+// A unit mirrors its product's parts (1.6): the form at the unit shows every part above with the same row keys
+// and asks only the lines its level owns on each (1.7); a line the product holds reads through and takes no edit.
+contract: grade
+  kind: form
+  origin: observed
+  needs:
+    !condition
+class: GradedDisc
+  for: item
+  facets:
+    discFormat
+    unit::condition
+class: GradedSet
+  for: item
+  facets:
+    title
+  parts:
+    disc: GradedDisc *
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-5 [origin: declared, via: L-1]
+  crubal:wears: GradedSet
+  title: Christmas Vacation
+  crubal:parts:
+    - [row: disc1]
+      crubal:wears: GradedDisc
+      discFormat: DVD-9
+    - [row: disc2]
+      crubal:wears: GradedDisc
+      discFormat: DVD-5
+
+unit: U-5 of P-5 [origin: observed, via: L-2]
+  condition: VG
+  crubal:parts:
+    - [row: disc1]
+      condition: G

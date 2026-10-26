@@ -1,0 +1,17 @@
+{
+  "id": "P-1", "kind": "item", "level": "product", "owner": "test.example",
+  "wears": ["BoxSet"],
+  "values": { "title": "Christmas Vacation" },
+  "parts": [
+    { "$row": "disc1", "wears": ["Disc"], "values": { "name": "Disc 1", "condition": "NM" } },
+    { "$row": "disc2", "wears": ["Disc"], "values": { "name": "Bonus Disc", "condition": "VG" } }
+  ],
+  "sources": {
+    "*": { "origin": "declared", "via": "L-1" },
+    "parts[disc2].name": { "origin": "reported", "via": "L-3" },
+    "parts[disc2].condition": { "origin": "reported", "via": "L-3" }
+  },
+  "alternatives": {
+    "parts[disc1].condition": [ { "value": "G", "origin": "reported", "via": "L-3" } ]
+  }
+}

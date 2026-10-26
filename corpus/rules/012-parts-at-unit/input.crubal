@@ -1,0 +1,42 @@
+// A rollup over parts at a unit reads the parts the unit mirrors (1.6): the product's rows, each under the unit's
+// own row of the same key, so the worst disc is the unit's own grade where it gave one.
+facet: name
+  type: text
+class: Disc
+  for: item
+  facets:
+    name
+    unit::condition
+class: Graded
+  for: item
+  facets:
+    title
+  parts:
+    disc: Disc *
+
+rule: worstDisc
+  for: unit::
+  then: condition is worst of parts[*].condition
+  strength: should
+
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+
+product: P-30 [origin: declared, via: L-1]
+  crubal:wears: Graded
+  title: Two discs
+  crubal:parts:
+    - [row: disc1]
+      crubal:wears: Disc
+      name: Disc 1
+      condition: NM
+    - [row: disc2]
+      crubal:wears: Disc
+      name: Disc 2
+      condition: VG
+
+unit: U-30 of P-30 [origin: observed, via: L-2]
+  crubal:parts:
+    - [row: disc1]
+      condition: G

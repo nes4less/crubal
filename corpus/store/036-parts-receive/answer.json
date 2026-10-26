@@ -1,0 +1,8 @@
+{
+  "Title": "Christmas Vacation",
+  "parts": [
+    { "slot": "disc", "row": "disc1", "condition": "G" },
+    { "slot": "disc", "name": "Bonus Disc", "condition": "VG" },
+    { "slot": "disc", "name": "Disc 1", "condition": "X", "notes": "" }
+  ]
+}
