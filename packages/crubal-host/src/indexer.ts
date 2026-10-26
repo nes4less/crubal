@@ -70,8 +70,14 @@ export class Index {
     this.pool = pool;
   }
 
-  /** Pull a view's stream since the cursor into the rows, for the view's own audience. */
-  async apply(store: PgStore, view: string): Promise<number> {
+  /**
+   * Pull a view's stream since the cursor into the rows, for the view's own audience. With `unlessBehind`,
+   * a backlog past that many entries is left where it is and the cursor comes back as it stands: a page
+   * served on a request applies a handful of entries, never a restamp's hundreds of thousands (the scale
+   * rule, 2026-10-26: a shop's home spent its thirty seconds inserting index rows); the projecting loop
+   * catches the view up.
+   */
+  async apply(store: PgStore, view: string, o: { unlessBehind?: number } = {}): Promise<number> {
     const p = await store.definitions();
     const v = p.views.views.get(view);
     if (!v) throw new Error(`no view ${view}`);
@@ -81,7 +87,9 @@ export class Index {
     let seq = cur ? Number(cur.seq) : 0;
     // A cursor past the stream's head means the stream was started over behind the index (a store
     // rebuilt before 0.1.16 wiped its streams): the index takes the stream from its start again.
-    if (seq > 0 && seq > (await store.streamHead(view, v.show))) seq = 0;
+    const head = await store.streamHead(view, v.show);
+    if (seq > 0 && seq > head) seq = 0;
+    if (o.unlessBehind !== undefined && head - seq > o.unlessBehind) return seq;
     // The stream a page at a time: a first publish of a large view is more entries than memory should hold at once.
     const page = 5000;
     for (;;) {
