@@ -63,6 +63,21 @@ owner, as 12.6 already said of a partition, and never another person's own recor
 catalog of 994,000 records with no `within` refused its own Controller every run and served them an empty staff
 view; the engine had read 14.2 literally. Corpus exchange/034-root-envelope. Engine, store and host at 0.3.12.
 
+**Revision 2026-10-27** (pull request 11): parts, for the Cashierfu condition workflow (its brief 37). A unit
+mirrors the parts of the record above under its own rows of the same key and owns on each only its level's
+vary step and the part classes' `level::` lines; a form at the unit asks only those (1.6, 1.7). An incoming
+part travels in the body's `parts` list and binds by its row key, else the identity child, else the `match`
+child, else review or a new row, and lands at `parts[row].key` under the trust order (9.2). The `parts` verb
+turns a compound's rows into parts of a slot, only on records wearing a class that declares it (10.3); a step
+over the baseline's compound is left to the install (11.5); the step travels in the bundle's recipe JSON and
+text (10.6). Parts are in the log as an envelope write at `parts[row]` and value writes at `parts[row].key`,
+a row gone a removed row, and a part left to review is a review write, never a member of the record (8). A
+part wearing no class carries no `wears` (3.6). A stream run goes a page at a time (12.6.2). Corpus
+forms/005, rules/012, store/036–038; the log and bundle shapes in the engine's own tests (store.test "parts
+in the log", bundle.test "a parts recipe survives the bundle"). Engine 0.3.15 through 0.3.23; the store and
+host versions between carried no language change (paged pushes, counts guards, the index loop, the projector's
+appends).
+
 The claim was re-run the same day against the corpus dated 2026-10-19, which gained cases for the
 revisions of the day: a state facet moving under `transitions` (exchange/032), a member's form on a record
 they don't own (exchange/033), a class nothing wears (dictionary/010). Reader 25, Dictionary 48, Rules 61,

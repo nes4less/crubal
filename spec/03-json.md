@@ -124,7 +124,7 @@ A many-valued compound is an array of row objects.
 
 A part object has exactly `$row` (required), `wears` (when it wears classes) and `values` (required). A
 lower-level record mirrors its parts by `$row` and holds only the values that vary at its level; it MAY leave
-`wears` out.
+`wears` out. A part that wears no class carries no `wears` at any level: an empty list is not written.
 
 ## 3.7 Sources
 

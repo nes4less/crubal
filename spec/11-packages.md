@@ -187,6 +187,12 @@ Publishing MUST run, and the bundle MUST pass, every well-formedness check:
 | 12.8 | views, shapes, filters and roles |
 | 14.6 | permission menus, presets, relations and ownership |
 
+A recipe's `parts` step (10.3) names a compound and part facets that MAY belong to the kind's baseline
+package rather than the publishing one (an extending package writes the recipe over the baseline's manifest,
+11.4). Publishing checks the step's form and, where its own definitions do not hold the compound, its
+children or the facets, leaves them to the install: the store installing the version reads the recipe under
+the merged dictionary (11.4) and refuses there what does not resolve.
+
 A published version MUST NOT change. A mistake is fixed by a new version.
 
 ## 11.6 The JSON form
