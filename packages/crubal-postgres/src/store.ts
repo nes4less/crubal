@@ -479,7 +479,8 @@ export class PgStore {
         if (!rows.length) return await finish(true);
         const list = rows as { [column: string]: unknown }[];
         const before = list.map((r) => recordOf(r));
-        const was = new Map(before.map((r) => [r.id, JSON.stringify([r.values, r.wears ?? []])]));
+        // A record counts as changed by its values, its classes or its parts (a parts recipe adds rows, 2026-10-27).
+        const was = new Map(before.map((r) => [r.id, JSON.stringify([r.values, r.wears ?? [], r.parts ?? []])]));
         let current = before;
         const items: JsonObject[] = [];
         for (const recipe of recipes) {
@@ -487,7 +488,7 @@ export class PgStore {
           current = r.records;
           for (const item of r.review) items.push({ ...item, step: item.step, migration });
         }
-        const changed = current.filter((r) => was.get(r.id) !== JSON.stringify([r.values, r.wears ?? []]));
+        const changed = current.filter((r) => was.get(r.id) !== JSON.stringify([r.values, r.wears ?? [], r.parts ?? []]));
         if (changed.length || items.length)
           await this.commit(
             { migration },
