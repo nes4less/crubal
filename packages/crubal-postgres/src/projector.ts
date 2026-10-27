@@ -74,7 +74,9 @@ export async function publish(client: Client, owner: string, p: Projecting, name
   const batches: (string[] | undefined)[] = allMarked ? Array.from({ length: Math.ceil(allMarked.length / BATCH) }, (_, i) => allMarked.slice(i * BATCH, (i + 1) * BATCH)) : [undefined];
   for (const [i, only] of batches.entries()) {
     if (i > 0 && Date.now() - started > BUDGET_MS) break;
-    all.push(...(await publishSet(client, owner, p, name, aud, version, projection, v, reset && i === 0, full, only)));
+    // Appended one by one: a spread of a whole view's entries (347,000 on a first or reset publish at Media
+    // Encyclopedia, 2026-10-27) exceeds the call stack.
+    for (const e of await publishSet(client, owner, p, name, aud, version, projection, v, reset && i === 0, full, only)) all.push(e);
   }
   return all;
 }
