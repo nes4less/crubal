@@ -311,6 +311,11 @@ contract: searchIndex
   reorder.
 - **Lag is visible.** The index reports the `seq` it reflects (12.6.1), and the store exposes each contract's
   cursor, so an operator sees how far behind an index is.
+- **A page at a time.** A caller asking (`when: asked`) MAY name a limit per view; the answer carries at most
+  that many entries of each view and says `more` when a view had that many, and the caller acknowledges the
+  page and asks again from its cursor. A push goes the same way: each page is its own run, acknowledged
+  before the next is read, so a stream of any size is never one payload and a run cut short resumes from the
+  last page acknowledged.
 - **Trust by edge.** A stream carries every row of its audience's projection, ancestors included, because
   the index does the partition matching, so the index is trusted at the level of the views it carries. A
   view at `public` goes to any party the contract names. A view above `public` goes only to a party holding

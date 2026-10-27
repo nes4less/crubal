@@ -1,0 +1,12 @@
+[
+  { "ask": "ancestors: I-1", "result": ["ROOT"] },
+  { "ask": "ancestors: I-2", "result": ["ROOT"] },
+  { "ask": "ancestors: ROOT", "result": [] },
+  { "ask": "may: C-OP edit name on I-1", "result": true },
+  { "ask": "may: C-OP edit name on I-2", "result": true },
+  { "ask": "mode: C-OP on I-1", "result": "admin" },
+  { "ask": "stands: C-OP controlled on I-1", "result": true },
+  { "ask": "may: C-ST edit name on I-2", "result": true },
+  { "ask": "may: C-ST edit name on I-1", "result": false },
+  { "ask": "stands: C-ST controlled on I-1", "result": false }
+]

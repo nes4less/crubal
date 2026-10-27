@@ -113,7 +113,7 @@ Each write is one of these:
 | Write | Names | Effect |
 |---|---|---|
 | **value** | `record`, `address`, `value` or `"removed": true`, `as`, and `source` when it differs from the entry's | `as` says where the value lands: `current` (the default), `alternative`, `suggestion` or `held` |
-| **envelope** | `record` and one `envelope` member: `created`, `of`, `within`, `wears`, `status`, `applied` | the record's envelope (chapter 1.12) |
+| **envelope** | `record` and one `envelope` member: `created`, `of`, `within`, `wears`, `status`, `applied`; or `record`, an `address` of the form `parts[row]` and the member `wears` or `row` (parts, below) | the record's envelope (chapter 1.12), or a part's |
 | **edge** | the edge (chapter 14.3), or its ID and `"removed": true` | access and relations; a lapse it causes down the grantor chain is computed, not written |
 | **observation** | the observation document (chapter 3.8) | it is kept, beside the record it supports |
 | **binding** | `contract`, `ref`, and `record` or `"removed": true` | an arrival binding (chapter 9.2a) |
@@ -123,6 +123,15 @@ Each write is one of these:
 | **define** | a member of the owner's working package (chapter 11.4) as it now stands: `facet`, `class`, `rule`, `contract`, `kind`, `view`, `shape`, `filter`, `migration`, `permissions` or `ownership`, in the JSON form, or its name and `"retired": true`; or `package`, the package's own settings (chapter 11.1: its trust order, prefixes, pins and thresholds) | the definition in force from this entry on; `by` is the person who changed it, in the same entry as the review write when a review decision did (chapter 9.5) |
 | **install** | the package identity and version | a package of another owner the store adopts; the restamp that follows is its own entries |
 | **read** | `record` and the `edge` it was read under, under an emergency edge only (chapter 14.13) | nothing; it is the record that a read happened |
+
+**Parts are in the log** (chapter 1.6). A part that lands is written as an envelope write at the address
+`parts[row]` with the member `wears` (the row's classes; absent when the row wears none, chapter 3.6), then
+one value write per value at the address `parts[row].key`, each with its `source` when it differs from the
+entry's, a value gone as `"removed": true`; a row gone is an envelope write at `parts[row]` with the member
+`row` and `"removed": true`. Applying them makes, fills or removes the row, so a rebuild (8.5.3) recovers a
+record's parts with its values, and a reader sees the parts change where it sees the rest. A lower record
+mirroring a part (1.6) writes only what it owns on it. A part the match leaves to review (chapter 9.2) is a
+review write of the entry, never a member of the record: the record has no review list of its own.
 
 Definitions are state like records: the owner's working package is what the `define` writes build, so a
 rebuild (8.5.3) recovers the definitions in force at any entry together with the data, and replay (chapter

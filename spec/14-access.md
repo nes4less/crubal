@@ -52,6 +52,10 @@ kinds.
 - **Ancestors.** A record's ancestors are every record up its `within` chain. A store MUST keep each record's
   ancestors so that an access check is a lookup, never a walk, at any depth. Changing a `within` link is an
   envelope write (chapter 8.5), and the store updates the ancestors of everything below it.
+- **The root is the last ancestor.** An owner's root record (`ROOT`, the deployment's own record) is the
+  owner's envelope: a record of the owner whose chain does not reach it is within it all the same, and its
+  ancestors end at `ROOT` whenever the owner has one. So an edge on the root covers every record of the owner
+  (12.6), and never another person's own records (14.1), whose chains never reach the host's root.
 - **Membership is not containment.** A person who plays on a team is not `within` the team. They hold an
   edge to it (14.3). Their own record stays theirs, they can be on many teams, and leaving is one edge.
 
@@ -76,7 +80,7 @@ edge: E-71
 | `who` | the caller, of this owner or another (14.8) | required |
 | `relation` | what the link means: `operator`, `captain`, `player`, `follower`, `subscriber`, or a name the package declares | required |
 | `mode` | `admin`, `control`, `consume`, `view` or `none` (14.4) | required |
-| `on` | the record it is on; it also covers every record `within` it | required |
+| `on` | the record it is on; it also covers every record `within` it, and on the owner's root every record of the owner (14.2) | required |
 | `grants` | for `control`: the presets and menu items it carries (14.6) | none |
 | `where` | a condition (chapter 6.3) that narrows it further (14.6) | none |
 | `until` | a moment it lapses at, or a date: it lapses at the start of that day, UTC | never |

@@ -21,6 +21,7 @@ a new MUST or a new case updates this file.
 | 1.6 | an empty list is never written | reader/003-lists (print), reader-errors/e02-empty-list-item |
 | 1.6 | an identity child is a link | dictionary-errors/d03-identity-not-link |
 | 1.6 | a minted row key is never reused | store/008-row-matching, reader-errors/e06-duplicate-row |
+| 1.6, 1.7 | units mirror parts: the rows above under the unit's own, only the owned keys asked | forms/005-mirrored-parts, rules/012-parts-at-unit |
 | 1.6, 1.10 | a shared part is read through its link: `works[*].genres` in a slot, a filter, a condition | views/021-shared-part-read-through, views/022-rows-by-child |
 | 1.10 | a compound's rows are read by child with the wildcard, alone and through a link | views/022-rows-by-child |
 | 1.8 | `row`, `origin`, `via`, `owner` never qualifier keys | reader-errors/e09-reserved-qualifier, dictionary-errors/d12-reserved-child |
@@ -82,6 +83,8 @@ a new MUST or a new case updates this file.
 | 8.5 | a witnessed entry is never redacted | store/034-erasure-chain |
 | 8.5.3 | a rebuild gives exactly the state the store had | store/014-rebuild, 015-rebuild-redacted, 025-journal; pg test: every corpus log rebuilds the same |
 | 9.2 | re-deriving never grows rows | store/008-row-matching |
+| 9.2, 5.6 | incoming parts bind by their row, the match child, review or a new row, and land at `parts[row].key` | store/036-parts-receive, store/037-parts-land |
+| 10.3 | the `parts` verb turns a compound's rows into parts | store/038-parts-recipe |
 | 9.4 | `keep-raw` declares `prefix` | exchange-errors/x03-keep-raw-without-prefix |
 | 10.1 | a breaking change ships a recipe in the same version | unit: publish.test |
 | 10.1 | a store restamps before it accepts data under the new version | store/007-restamp; pg test: install restamps |
@@ -105,6 +108,7 @@ a new MUST or a new case updates this file.
 | 13.5 | extensions carried, never required | reader/010-unknown-block, dictionary/001 (`me:` settings) |
 | 13.6 | the same results whatever the store's choices | pg test: every corpus log rebuilds to the same state in Postgres as in memory |
 | 14.2 | `within` never cycles, never crosses owners; ancestors kept | exchange-errors/e11-within-cycle, e13-within-another-owner, views/009-partition (ancestors) |
+| 14.2 | the root is the last ancestor: an edge on ROOT covers a record that names no `within`; no root record, nothing added | exchange/034-root-envelope, exchange/010-edges (ancestors without a root) |
 | 14.6 | an item naming nothing refused | exchange-errors/x02-undefined-facet |
 | 14.6 | a preset may name items of the packages its package extends; a menu item of one name in several packages is one item with every package's verbs; checked when the packages are in force together | unit: bundle.test (a menu item two packages name is one item; a preset of the same name is the later one); the install check is `definitionsOf` + `checkAll` in crubal-postgres, exercised by every install in install.test |
 | 14.4 | each mode includes the ones below it; a `see` below admin is the audience's by the show rules (capped at member) or an item's | unit: audit-forms-access.test; host.test 14.8 |
