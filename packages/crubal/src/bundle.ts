@@ -174,6 +174,11 @@ export function recipeJson(r: Recipe): JsonObject {
       case "fill":
         o.fill = { value: s.value, ...(s.level ? { level: s.level } : {}), ...(s.when ? { when: s.when } : {}) };
         break;
+      case "parts":
+        // A step the bundle did not carry (0.3.15–0.3.22): the printed text lost it, and an install read the
+        // migration back with no steps, so the recipe never ran (Media Encyclopedia, 2026-10-27).
+        o.parts = { to: s.to, ...(s.when ? { when: s.when } : {}), map: s.map.map(([from, to]) => ({ from, to })) };
+        break;
     }
     return o;
   });
@@ -447,6 +452,7 @@ function recipeText(r: JsonObject): string[] {
     if (typeof s.review === "string") out.push(`    review: ${s.review}`);
     if (s.recompute === true) out.push("    recompute");
     if (isObj(s.fill)) out.push(`    fill: ${q(String(s.fill.value))}`, ...(typeof s.fill.level === "string" ? [`      for: ${s.fill.level}::`] : []), ...(typeof s.fill.when === "string" ? [`      when: ${s.fill.when}`] : []));
+    if (isObj(s.parts)) out.push(`    parts: -> ${s.parts.to}`, ...(typeof s.parts.when === "string" ? [`      when: ${s.parts.when}`] : []), ...((s.parts.map as JsonObject[]) ?? []).map((m) => `      ${m.from} -> ${m.to}`));
   }
   return out;
 }

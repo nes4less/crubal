@@ -133,3 +133,46 @@ display: bare
   const onto = readBundleOnto(b, emptyParsed());
   assert.equal(onto.views.displays.get("menu")?.layout, "menu");
 });
+
+test("a parts recipe survives the bundle (10.3, 5.6): the step is in the recipe JSON and the printed text, and reads back with its slot, condition and map (2026-10-27)", () => {
+  const text = `facet: name
+  type: text
+manifestItem$
+manifestItemType$
+facet: manifest
+  type: compound
+  pick: any
+  facets:
+    manifestItem
+    manifestItemType
+class: Disc
+  facets:
+    name
+class: Boxed
+  for: item
+  facets:
+    title
+    manifest
+  parts:
+    disc: Disc *
+crubal: 2
+package: test /2026-11-01
+owner: test.example
+
+migration: test /2026-10-14 -> test /2026-11-01
+  facet: manifest
+    parts: -> disc
+      when: manifestItemType is disc
+      manifestItem -> name
+`;
+  const b = bundleOf(parsePackage(text));
+  const json = (b.recipes as { steps: { parts?: { to: string; when?: string; map: { from: string; to: string }[] } }[] }[])[0];
+  assert.deepEqual(json?.steps[0]?.parts, { to: "disc", when: "manifestItemType is disc", map: [{ from: "manifestItem", to: "name" }] });
+  const again = readBundle(b);
+  const step = again.recipes[0]?.steps[0];
+  assert.equal(step?.verb, "parts");
+  if (step?.verb !== "parts") return;
+  assert.equal(step.to, "disc");
+  assert.equal(step.when, "manifestItemType is disc");
+  assert.deepEqual(step.map, [["manifestItem", "name"]]);
+});
