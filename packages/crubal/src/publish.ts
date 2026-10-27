@@ -217,8 +217,9 @@ export function publish(source: string | Parsed, o: PublishOptions): { bundle: J
     const ok = c.member.startsWith("facet:") ? covered.has(c.member) : anyReview || covered.size > 0;
     if (!ok) throw new CrubalError(`${c.member} is a breaking change (${c.why.join("; ")}) and no recipe from ${from ?? "the previous version"} covers it: needs ${c.recipe?.join(", ") ?? "a step"}`);
   }
-  // A recipe of fills and recomputes alone is a backfill (10.3): it may ride a version where nothing broke.
-  const backfill = (r: JsonObject) => ((r.steps as JsonObject[]) ?? []).every((s) => isObj(s.fill) || s.recompute === true);
+  // A recipe of fills, recomputes and parts steps alone is a backfill (10.3): it may ride a version where
+  // nothing broke (a class gaining a slot is additive, and the step that makes its parts rides with it, 2026-10-27).
+  const backfill = (r: JsonObject) => ((r.steps as JsonObject[]) ?? []).every((s) => isObj(s.fill) || s.recompute === true || isObj(s.parts));
   if (!breaking.length && covering.some((r) => !backfill(r))) throw new CrubalError(`a recipe from ${from} is present but nothing broke`);
   for (const r of covering) (r.migration as JsonObject).to = to;
   if (o.previous) b.previous = String(o.previous.version);

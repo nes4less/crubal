@@ -148,3 +148,55 @@ instructions: class:Item/2026-11-01
   assert.equal(changes.find((c) => c.member === "class:Item")?.kind, "breaking");
   assert.deepEqual(v2.instructions, [{ issuer: "class:Item/2026-11-01", instructions: [{ n: 1, op: "-", key: "sealed" }] }]);
 });
+
+test("a parts step rides a version where nothing broke: a class gaining a slot is additive, and the recipe that makes its parts is a backfill (2026-10-27)", () => {
+  const facets = `facet: name
+  type: text
+manifestItem$
+manifestItemType$
+facet: manifest
+  type: compound
+  pick: any
+  facets:
+    manifestItem
+    manifestItemType
+class: Disc
+  facets:
+    name
+`;
+  const v1Text = `${facets}class: Boxed
+  for: item
+  facets:
+    title
+    manifest
+crubal: 2
+package: test /2026-10-14
+owner: test.example
+`;
+  const { bundle: v1 } = publish(v1Text, { date: "2026-10-14" });
+  const v2Text = `${facets}class: Boxed
+  for: item
+  facets:
+    title
+    manifest
+  parts:
+    disc: Disc *
+crubal: 2
+package: test /2026-11-01
+owner: test.example
+
+migration: test /2026-10-14 -> test /2026-11-01
+  facet: manifest
+    parts: -> disc
+      when: manifestItemType is disc
+      manifestItem -> name
+`;
+  const { bundle: v2 } = publish(v2Text, { previous: v1, date: "2026-11-01" });
+  assert.equal(String(v2.previous), "2026-10-14");
+  assert.ok(Array.isArray(v2.recipes) && (v2.recipes as unknown[]).length === 1, "the recipe rides");
+  // A recipe that repairs nothing and backfills nothing is still refused.
+  const v3Text = v2Text.replace("package: test /2026-11-01", "package: test /2026-11-02").replace("migration: test /2026-10-14 -> test /2026-11-01", "migration: test /2026-11-01 -> test /2026-11-02").replace(`    parts: -> disc
+      when: manifestItemType is disc
+      manifestItem -> name`, "    rename: a -> b");
+  assert.throws(() => publish(v3Text, { previous: v2, date: "2026-11-02" }), /present but nothing broke/);
+});
