@@ -494,11 +494,24 @@ export class PgStore {
             { migration },
             (d) => {
               // The record is read into the working set before it is set, so the entry's writes are the change and not a creation.
+              // The restamped members land on the record as the commit finds it, not on the copy the batch read a
+              // moment ago: another hand (the drain stamping `applied`, a form) may have written it between the two,
+              // and a draft built on the stale copy failed the log's own check and stalled the walk (2026-10-27).
+              // So the recipes run again here, on the live record (restamp is pure and cheap per record); a record
+              // the working set has not loaded yet comes on the next pass of the settle.
+              const seen: JsonObject[] = [];
               for (const r of changed) {
-                d.records.get(r.id);
-                d.records.set(r.id, r);
+                const live = d.records.get(r.id);
+                if (!live) continue;
+                let cur: Record[] = [live];
+                for (const recipe of recipes) {
+                  const out = restamp(cur, recipe, p.dict);
+                  cur = out.records;
+                  for (const item of out.review) seen.push({ ...item, step: item.step, migration });
+                }
+                d.records.set(r.id, cur[0] as Record);
               }
-              for (const item of items) d.review.push(item);
+              for (const item of seen) d.review.push(item);
             },
             opts.at,
           );

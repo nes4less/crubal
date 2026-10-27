@@ -431,3 +431,42 @@ test("an install over more records than one batch holds moves the pin in its ent
   await assert.rejects(store.continueRestamp("lab.example/thing", "2026-10-09"), /no restamp is pending/);
 });
 
+test("a deferred restamp lands on the record as the commit finds it: another hand writing a record between the batch's read and its commit (the drain stamping applied) is kept, not refused (2026-10-27)", { skip: !url }, async () => {
+  const owner = "racing.example";
+  // The drain's hand: after the batch reads its rows, every one of them is stamped before the batch commits.
+  let stamped = 0;
+  const plain = pool.query.bind(pool);
+  const racing = pool as unknown as { query: (sql: unknown, params?: unknown[]) => Promise<{ rows: unknown[] }> };
+  racing.query = async (sql: unknown, params?: unknown[]) => {
+    const res = await plain(sql as string, params as never);
+    if (typeof sql === "string" && sql.startsWith("select * from records where owner = $1 and (kind = any") && res.rows.length) {
+      const ids = (res.rows as { id: string }[]).map((r) => r.id);
+      await plain(`update records set applied = '{"drain.example": 1}'::jsonb where owner = $1 and id = any($2::text[])`, [owner, ids]);
+      stamped += ids.length;
+    }
+    return res;
+  };
+  const store = new PgStore(pool, owner, { allowUnsigned: true, restampBatch: 2 });
+  try {
+  const v1 = publish(text("2026-10-01", "S|M|L"), { date: "2026-10-01" }).bundle;
+  const v2 = publish(text("2026-10-02", "Small|M|L", RECIPE_12), { date: "2026-10-02", previous: v1 }).bundle;
+  await store.install(v1, undefined, "2026-10-17T00:00:00Z");
+  await store.commit(
+    { person: owner },
+    (d) => {
+      for (const n of [1, 2, 3, 4]) d.records.set(`T-${n}`, { id: `T-${n}`, kind: "thing", level: "thing", owner, values: { size: "S" }, sources: { "*": { origin: "declared", via: "L-1" } } });
+    },
+    "2026-10-17T00:00:01Z",
+  );
+  await store.install(v2, undefined, "2026-10-17T00:00:02Z", { budgetMs: 0 });
+  const rest = await store.continueRestamp("lab.example/thing", "2026-10-02", { at: "2026-10-17T00:00:03Z" });
+  assert.equal(rest.done, true);
+  assert.ok(stamped >= 2, `the other hand wrote between read and commit: ${stamped}`);
+  const after = await store.records({ kind: "thing" });
+  assert.deepEqual(after.map((r) => r.values.size), ["Small", "Small", "Small", "Small"], "every record restamped");
+  assert.ok(after.every((r) => r.applied?.["drain.example"] === 1), "and every one keeps what the other hand wrote");
+  } finally {
+    delete (racing as { query?: unknown }).query;
+  }
+});
+
