@@ -60,9 +60,9 @@ its target.
 | `recompute` | `recompute` | produced values (rollups, derivations) are rebuilt by the new rules | no |
 | `retype` | `retype: text -> choice` | a facet's values are read under its new type; values that fit land, the rest go to review | the leftovers |
 | `fill` | `fill: 1` with `for: unit::` and an optional `when:` beneath | records lacking the key, at the level named, where the condition holds, get the value read under the facet; a record that has one is left alone. A backfill for a key the new version adds | no |
-| `parts` | `parts: -> slot` under a compound, with an optional `when:` and `child -> facet` lines beneath | the compound's rows the condition picks become parts of the slot (5.6), keyed as the rows were, wearing the slot's class, each named child read into the facet named; a row whose key the record already holds as a part is left alone; the compound stays as it was | no The step acts only on a record wearing a class that declares the slot (5.6): a record that wears none keeps its rows until it does, and the step runs for it when it does (10.4). |
+| `parts` | `parts: -> slot` under a compound, with an optional `when:` and `child -> facet` lines beneath | the compound's rows the condition picks become parts of the slot (5.6), keyed as the rows were, wearing the slot's class, each named child read into the facet named; a row whose key the record already holds as a part is left alone; the compound stays as it was | no The step acts only on a record wearing a class that declares the slot (5.6): a record that wears none keeps its rows until it does, and the step runs for it when it does (10.4). A backfill like `fill`: a recipe of parts steps alone rides a version where nothing broke, and run again it makes nothing twice (a row without a key of its own binds to the part it made before, each taken once). |
 
-A key never renames: keys are identity (chapter 4.1). A new label is not a migration. Moving values to a new
+A key never renames: keys are identity (chapter 4.1). A text facet takes a part's or a value's words whole: brackets in a name are a name, never a detail (chapter 2). A new label is not a migration. Moving values to a new
 key is `move`.
 
 ## 10.4 Restamping
