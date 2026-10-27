@@ -606,6 +606,13 @@ export class Exchange {
     else {
       // A form run by a caller is a person's write (11.3): it ranks as `person`, ahead of what a contract or an earlier declaration left.
       const landed = land(r, { outcomes, contract: name, ...(c.kind === "form" && callerId ? { person: true } : {}) }, source, this.dict.trust, this.dict.facetTrust, new Set([...this.dict.facets.values()].filter((f) => f.transitions).map((f) => f.key)), this.dict);
+      // A part the match left to review (9.2) is a review item of the journal, never a member of the record:
+      // the log has no write for a record's own review list, and a draft carrying one failed its check.
+      const withReview = landed as Record & { review?: JsonObject[] };
+      if (Array.isArray(withReview.review)) {
+        for (const item of withReview.review) this.review.push({ key: `parts:${String(item.from ?? "")}`, record: recordId, run: log, ...item });
+        delete withReview.review;
+      }
       // 6. Rules, over what this run changed.
       const touched: JsonObject = {};
       for (const [k, v] of Object.entries(landed.values)) if (serialize(r.values[k] ?? "∅") !== serialize(v)) touched[k] = v;
