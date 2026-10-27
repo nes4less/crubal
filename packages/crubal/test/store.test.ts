@@ -126,3 +126,37 @@ test("the version gate at a border (10.1): the same version is taken, an older o
   assert.deepEqual(versionGate("other.example/x /2026-11-01", mine), { kind: "take" });
   assert.deepEqual(versionGate(undefined, mine), { kind: "take" });
 });
+
+test("parts in the log (5.6): a landed row is a wears envelope at parts[row] and value writes at parts[row].key; applying them rebuilds the row; a row gone is a removed row (2026-10-27)", async () => {
+  const { diffWrites } = await import("../src/log.ts");
+  const { MemoryRecords } = await import("../src/records.ts");
+  const base = { id: "P-1", kind: "item", level: "product", owner: "o", values: { title: "A thing" }, sources: { title: { origin: "declared", via: "L-1" } } };
+  const before = emptyState();
+  before.records.set("P-1", structuredClone(base) as never);
+  const draft = { records: new MemoryRecords(), bindings: new Map(), instructions: new Map(), edges: new Map(), review: [] as never[] };
+  draft.records.set("P-1", {
+    ...structuredClone(base),
+    parts: [{ $row: "r1", wears: ["Disc"], values: { partName: "Disc 1", partNote: "the feature" } }],
+    sources: { ...base.sources, "parts[r1].partName": { origin: "declared", via: "L-2" }, "parts[r1].partNote": { origin: "declared", via: "L-2" } },
+  } as never);
+  const writes = diffWrites(before, draft as never);
+  assert.deepEqual(writes.map((w) => `${w.address}${w.envelope ? `:${w.envelope}` : ""}`), ["parts[r1]:wears", "parts[r1].partName", "parts[r1].partNote"]);
+  const applied = emptyState();
+  applied.records.set("P-1", structuredClone(base) as never);
+  applyEntry(applied, { log: "L-2", owner: "o", at: "2026-10-27T00:00:00Z", writes } as never);
+  const got = applied.records.get("P-1") as { parts?: unknown; sources?: Record<string, unknown> };
+  assert.deepEqual(got.parts, [{ $row: "r1", wears: ["Disc"], values: { partName: "Disc 1", partNote: "the feature" } }]);
+  assert.deepEqual(got.sources?.["parts[r1].partName"], { origin: "declared", via: "L-2" });
+  // The same draft again: nothing to write.
+  assert.deepEqual(diffWrites(applied, draft as never), []);
+  // A value dropped from the row, and then the row gone.
+  const less = { records: new MemoryRecords(), bindings: new Map(), instructions: new Map(), edges: new Map(), review: [] as never[] };
+  less.records.set("P-1", { ...structuredClone(base), parts: [{ $row: "r1", wears: ["Disc"], values: { partName: "Disc 1" } }], sources: { ...base.sources, "parts[r1].partName": { origin: "declared", via: "L-2" } } } as never);
+  assert.deepEqual(diffWrites(applied, less as never).map((w) => `${w.address}${w.removed ? ":removed" : ""}`), ["parts[r1].partNote:removed"]);
+  const none = { records: new MemoryRecords(), bindings: new Map(), instructions: new Map(), edges: new Map(), review: [] as never[] };
+  none.records.set("P-1", structuredClone(base) as never);
+  const gone = diffWrites(applied, none as never);
+  assert.deepEqual(gone, [{ record: "P-1", address: "parts[r1]", envelope: "row", removed: true }]);
+  applyEntry(applied, { log: "L-3", owner: "o", writes: gone } as never);
+  assert.equal((applied.records.get("P-1") as { parts?: unknown }).parts, undefined);
+});

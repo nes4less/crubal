@@ -109,7 +109,8 @@ export function applyEntry(state: State, entry: Entry): void {
     // A redacted write (8.5.2) is skipped: the state is rebuilt without what it held.
     if (typeof w.redacted === "string") continue;
     if (typeof w.envelope === "string") {
-      applyEnvelope(state, entry, w);
+      if (typeof w.address === "string" && /^parts\[[^\]]+\]$/.test(w.address)) applyPartRow(state, entry, w);
+      else applyEnvelope(state, entry, w);
       continue;
     }
     if (isObj(w.edge)) {
@@ -220,6 +221,28 @@ function applyValue(state: State, entry: Entry, w: JsonObject) {
     return;
   }
   throw new CrubalError(`entry ${entry.log}: a value lands as current, alternative, suggestion or held, not ${as}`);
+}
+
+/** A part row's envelope (5.6): `wears` sets the row's classes, making the row when it is new; `row` removed drops it. */
+function applyPartRow(state: State, entry: Entry, w: JsonObject) {
+  const r = need(state, String(w.record), `entry ${entry.log}`);
+  const row = String(w.address).slice("parts[".length, -1);
+  const parts = (r.parts ?? []).filter(isObj) as JsonObject[];
+  const member = String(w.envelope);
+  if (typeof entry.at === "string") r.updated = entry.at;
+  if (member === "row" && w.removed === true) {
+    const left = parts.filter((p) => String(p.$row) !== row);
+    if (left.length) r.parts = left;
+    else delete r.parts;
+    if (r.sources) for (const k of Object.keys(r.sources)) if (k.startsWith(`parts[${row}].`)) delete r.sources[k];
+    return;
+  }
+  if (member !== "wears") throw new CrubalError(`entry ${entry.log}: no part envelope member ${member}`);
+  const wears = Array.isArray(w.value) ? w.value.map(String) : [];
+  const have = parts.find((p) => String(p.$row) === row);
+  if (have) have.wears = wears;
+  else parts.push({ $row: row, wears, values: {} });
+  r.parts = parts;
 }
 
 function applyEnvelope(state: State, entry: Entry, w: JsonObject) {
@@ -346,6 +369,26 @@ export function diffWrites(before: State, after: Draft): JsonObject[] {
       writes.push({ record: id, address: k, value: v, ...(s ? { source: s as unknown as JsonObject } : {}) });
     }
     for (const k of Object.keys(was?.values ?? {})) if (now.values[k] === undefined && !newlyHeld.has(k)) writes.push({ record: id, address: k, removed: true });
+    // Parts (5.6): a row's classes as an envelope write at `parts[row]`, its values as value writes at
+    // `parts[row].key` with their sources, a row gone as a removed row. Without these a draft that landed a
+    // part failed the log's own check, "the log doesn't describe the change" (2026-10-27).
+    const partsWas = new Map(((was?.parts ?? []).filter(isObj) as JsonObject[]).map((p) => [String(p.$row), p]));
+    const partsNow = new Map(((now.parts ?? []).filter(isObj) as JsonObject[]).map((p) => [String(p.$row), p]));
+    for (const [row, p] of partsNow) {
+      const q = partsWas.get(row);
+      const at = `parts[${row}]`;
+      const wearsNow = Array.isArray(p.wears) ? p.wears : [];
+      if (!q || !sameJson(Array.isArray(q.wears) ? q.wears : [], wearsNow)) writes.push({ record: id, address: at, envelope: "wears", value: wearsNow });
+      const vNow = isObj(p.values) ? p.values : {};
+      const vWas = q && isObj(q.values) ? q.values : {};
+      for (const [k, v] of Object.entries(vNow)) {
+        const s = sourceAt(now, `${at}.${k}`);
+        if (q && sameJson(vWas[k], v) && sameJson((sourceAt(was as Record, `${at}.${k}`) ?? "") as Json, (s ?? "") as Json)) continue;
+        writes.push({ record: id, address: `${at}.${k}`, value: v, ...(s ? { source: s as unknown as JsonObject } : {}) });
+      }
+      for (const k of Object.keys(vWas)) if (vNow[k] === undefined) writes.push({ record: id, address: `${at}.${k}`, removed: true });
+    }
+    for (const row of partsWas.keys()) if (!partsNow.has(row)) writes.push({ record: id, address: `parts[${row}]`, envelope: "row", removed: true });
     for (const bag of ["alternatives", "suggestions"] as const) {
       const bw = was?.[bag] ?? {};
       // Items gone from the bag: accepted or denied (14.7), kept in the history as removed.

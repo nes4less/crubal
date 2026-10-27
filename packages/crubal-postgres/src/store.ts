@@ -388,7 +388,11 @@ export class PgStore {
       return { by, extra, out: null };
       }, at);
     } catch (e) {
-      await this.pool.query("delete from bundles where owner = $1 and package = $2 and version = $3", [this.owner, bundle.id, bundle.version]);
+      // The bundle goes only when the entry did not: an install whose projection failed after its entry
+      // committed kept the entry and lost the bundle, and the store then read "installed but its bundle is
+      // missing" on every definitions read (the brief 37 rehearsal, 2026-10-27).
+      const stands = (await this.installed().catch(() => [])).some((i) => i.package === bundle.id && String(i.version) === String(bundle.version));
+      if (!stands) await this.pool.query("delete from bundles where owner = $1 and package = $2 and version = $3", [this.owner, bundle.id, bundle.version]);
       throw e;
     } finally {
       this.walking = false;
