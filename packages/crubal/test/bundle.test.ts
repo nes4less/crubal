@@ -176,3 +176,71 @@ migration: test /2026-10-14 -> test /2026-11-01
   assert.equal(step.when, "manifestItemType is disc");
   assert.deepEqual(step.map, [["manifestItem", "name"]]);
 });
+
+test("the parts verb run again makes nothing twice: a manifest row with no key of its own binds to the part it made before (each taken once), and a name with brackets is a name, never a detail (2026-10-27)", async () => {
+  const { restamp } = await import("../src/migrate.ts");
+  const text = `facet: name
+  type: text
+manifestItem$
+manifestItemType$
+facet: manifest
+  type: compound
+  pick: any
+  facets:
+    manifestItem
+    manifestItemType
+class: Disc
+  facets:
+    name
+class: Boxed
+  for: item
+  facets:
+    title
+    manifest
+  parts:
+    disc: Disc *
+crubal: 2
+package: test /2026-11-01
+owner: test.example
+
+migration: test /2026-10-14 -> test /2026-11-01
+  facet: manifest
+    parts: -> disc
+      when: manifestItemType is disc
+      manifestItem -> name
+`;
+  const again = readBundle(bundleOf(parsePackage(text)));
+  const recipe = again.recipes[0];
+  assert.ok(recipe);
+  const rec = {
+    id: "P-1",
+    kind: "item",
+    level: "product",
+    owner: "test.example",
+    wears: ["Boxed"],
+    values: {
+      title: "A set",
+      // Rows as Media Encyclopedia's manifests carry them: no row key, two discs with the same name.
+      manifest: [
+        { manifestItem: "Blu-ray disc", manifestItemType: "disc" },
+        { manifestItem: "Blu-ray disc", manifestItemType: "disc" },
+        { manifestItem: "Seven [Se7en]", manifestItemType: "disc" },
+        { manifestItem: "Keep case", manifestItemType: "case" },
+      ],
+    },
+  };
+  const once = restamp([rec as never], recipe as never, again.dict).records[0] as typeof rec & {
+    parts?: { $row: string; values: { name?: string } }[];
+  };
+  assert.deepEqual(once.parts?.map((p) => [p.$row, p.values.name]), [
+    ["disc1", "Blu-ray disc"],
+    ["disc2", "Blu-ray disc"],
+    ["disc3", "Seven [Se7en]"],
+  ]);
+  const twice = restamp([once as never], recipe as never, again.dict).records[0] as { parts?: unknown[] };
+  assert.equal(twice.parts?.length, 3, "the step again: every row bound to the part it made, nothing minted");
+  // A fourth disc appears in the manifest later: one new part, the three kept.
+  const more = { ...once, values: { ...once.values, manifest: [...(rec.values.manifest as object[]), { manifestItem: "Bonus disc", manifestItemType: "disc" }] } };
+  const third = restamp([more as never], recipe as never, again.dict).records[0] as { parts?: { $row: string }[] };
+  assert.deepEqual(third.parts?.map((p) => p.$row), ["disc1", "disc2", "disc3", "disc4"]);
+});

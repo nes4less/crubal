@@ -295,12 +295,15 @@ export function restamp(records: Record[], recipe: Recipe, dict: Dictionary, sta
               if (!keys.has(k)) return k;
             }
           };
+          // A row without a key of its own binds to a part the slot already holds with the same values, each
+          // existing part taken once: the step run again (a later version repeating it) makes nothing twice.
+          // Before, every rerun minted a fresh key past the ones held (2026-10-27, Media Encyclopedia).
+          const unmatched = have.filter(
+            (p) => Array.isArray(p.wears) && p.wears.includes(slot.wears),
+          );
           const made: Json[] = [];
           for (const row of rows) {
             if (s.when && evaluate(parseCondition(s.when, s.line), row) !== true) continue;
-            const key = typeof row.$row === "string" && row.$row ? row.$row : next();
-            if (keys.has(key)) continue;
-            keys.add(key);
             const pv: JsonObject = {};
             for (const [from, to] of s.map) {
               const x = row[from];
@@ -310,9 +313,30 @@ export function restamp(records: Record[], recipe: Recipe, dict: Dictionary, sta
                 continue;
               }
               const f = dict.facets.get(to);
-              const read = f && typeof x === "string" ? readUnder(f, x, dict) : x;
-              if (read !== undefined) pv[to] = read as Json;
+              // A text facet takes the words as they are: a part named with brackets is a name, not a detail.
+              let read: Json | undefined = x as Json;
+              if (f && typeof x === "string" && f.type !== "text") {
+                try {
+                  read = readUnder(f, x, dict);
+                } catch {
+                  read = x;
+                }
+              }
+              if (read !== undefined) pv[to] = read;
             }
+            if (typeof row.$row === "string" && row.$row) {
+              if (keys.has(row.$row)) continue;
+              keys.add(row.$row);
+              made.push({ $row: row.$row, wears: [slot.wears], values: pv });
+              continue;
+            }
+            const same = unmatched.findIndex((p) => isObj(p.values) && serialize(p.values as Json) === serialize(pv));
+            if (same >= 0) {
+              unmatched.splice(same, 1);
+              continue;
+            }
+            const key = next();
+            keys.add(key);
             made.push({ $row: key, wears: [slot.wears], values: pv });
           }
           if (made.length) parts = [...(parts ?? []), ...made];
