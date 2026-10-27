@@ -238,10 +238,13 @@ function applyPartRow(state: State, entry: Entry, w: JsonObject) {
     return;
   }
   if (member !== "wears") throw new CrubalError(`entry ${entry.log}: no part envelope member ${member}`);
+  // A row with no classes of its own (a unit's copy of a mirrored row, 1.6) carries no `wears` member at all.
   const wears = Array.isArray(w.value) ? w.value.map(String) : [];
   const have = parts.find((p) => String(p.$row) === row);
-  if (have) have.wears = wears;
-  else parts.push({ $row: row, wears, values: {} });
+  if (have) {
+    if (wears.length) have.wears = wears;
+    else delete have.wears;
+  } else parts.push({ $row: row, ...(wears.length ? { wears } : {}), values: {} });
   r.parts = parts;
 }
 
