@@ -63,6 +63,12 @@ owner, as 12.6 already said of a partition, and never another person's own recor
 catalog of 994,000 records with no `within` refused its own Controller every run and served them an empty staff
 view; the engine had read 14.2 literally. Corpus exchange/034-root-envelope. Engine, store and host at 0.3.12.
 
+**Revision 2026-10-27, the second** (pull request 13): ending an edge within authority (14.5): whoever could have
+granted an edge may end it, a manager ending a cashier's access, and a holder their own; the parts step is a
+backfill like fill, riding a version where nothing broke and idempotent on a rerun (10.3); a text facet takes
+words whole, brackets included. Engine 0.3.25 and 0.3.26, found by Cashierfu's brief 45 (associates, invitations
+and managers) and brief 37's closing rehearsal.
+
 **Revision 2026-10-27** (pull request 11): parts, for the Cashierfu condition workflow (its brief 37). A unit
 mirrors the parts of the record above under its own rows of the same key and owns on each only its level's
 vary step and the part classes' `level::` lines; a form at the unit asks only those (1.6, 1.7). An incoming

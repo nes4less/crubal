@@ -137,6 +137,10 @@ that is what "their own part" means above.
 - **An edge is only as good as its grantor.** An edge is live while the edge named in its `by` is live and
   still covers it. When an edge lapses or is removed, every edge granted under it lapses with it, down the
   chain. Nothing is deleted: lapsed edges stay in the history.
+- **Ending within authority.** Whoever could have granted an edge may end it: an `admin` edge any edge of
+  the owner's; a `control` edge carrying the `grant` item for every item of an edge may give that edge an
+  `until` whoever granted it, as a manager ends a cashier's access. The holder of an edge may end their own
+  at any time. Both are logged edge writes naming who ended it.
 - **Every chain ends at an owner.** Following `by` from any edge reaches an `owner` grant in a finite number of
   steps. The owner holds the key at the top of every chain. The one exception is an emergency edge (14.13),
   which ends at `platform` and can't be granted onward.
