@@ -824,6 +824,71 @@ export class PgStore {
     return { applied, remaining: full || from > 0 ? 1 : 0 };
   }
 
+  /**
+   * Compact the projection streams (12.6.2): an entry a later entry for the same record superseded is
+   * dropped. Each record's latest entry stays, a removal among them, as does every `reset` marker, and the
+   * head keeps its number, so an index resuming from any cursor lands the same rows. A pass walks every
+   * current view's stream from its head DOWN in windows of `window` entries: walked that way, a record's
+   * latest entry is met before its earlier ones, so an earlier entry is superseded when the stored row's seq
+   * (a record in the view) or a removal met on the way (one that left) is above it; nothing scans ahead.
+   * Each window is one read of the entries' records, a lookup of their stored rows and of the removals met,
+   * and one delete by seq. A call stops at the budget and the next continues the pass from the cursors; when
+   * every stream has been walked the pass is done and the next call begins another, skipping any stream whose
+   * head has not moved since. Media Encyclopedia's four big streams held 2.3 million entries, 980,000 of them
+   * superseded, 2.3 GB of 21 (2026-10-28).
+   */
+  async compact(budgetMs = 20_000, window = 10_000): Promise<{ deleted: number; done: boolean }> {
+    const p = await this.projecting();
+    if (!p) return { deleted: 0, done: true };
+    const started = Date.now();
+    const streams = [...p.views.views.values()].map((v) => [this.owner, v.name, v.version ?? "", v.show] as const);
+    type Cursor = { seq: string | number; done: boolean; head: string | number };
+    const cursorOf = async (key: readonly [string, string, string, string]) => (await this.pool.query("select seq, done, head from compaction_cursors where owner = $1 and view = $2 and version = $3 and audience = $4", [...key])).rows[0] as Cursor | undefined;
+    // A pass is over when every current stream is done: the next call starts a fresh one from every head.
+    const cursors = await Promise.all(streams.map(cursorOf));
+    const fresh = streams.length > 0 && cursors.every((c) => c?.done);
+    if (fresh) await this.pool.query("update compaction_cursors set seq = 0, done = false where owner = $1", [this.owner]);
+    let deleted = 0;
+    for (const [i, key] of streams.entries()) {
+      const c = cursors[i];
+      const was = fresh && c ? { ...c, seq: 0, done: false } : c;
+      if (was?.done) continue;
+      const head = Number(((await this.pool.query("select coalesce(max(seq), 0) as seq from projection_stream where owner = $1 and view = $2 and version = $3 and audience = $4", [...key])).rows[0] as { seq: string | number }).seq);
+      const mark = (seq: number, done: boolean, at = head) => this.pool.query("insert into compaction_cursors (owner, view, version, audience, seq, done, head) values ($1, $2, $3, $4, $5, $6, $7) on conflict (owner, view, version, audience) do update set seq = excluded.seq, done = excluded.done, head = excluded.head", [...key, seq, done, at]);
+      // The cursor is the seq the walk is below; 0 means the stream's walk has not started. A stream unmoved
+      // since the last pass, or empty, is done at once: nothing new can have superseded anything.
+      let from = Number(was?.seq ?? 0);
+      // The head the pass began at, kept with the cursor: entries published during a pass wait for the next.
+      let top = Number(was?.head ?? 0);
+      if (from === 0) {
+        if (head === 0 || head === top) { await mark(0, true, head); continue; }
+        await this.pool.query("delete from compaction_removed where owner = $1 and view = $2 and version = $3 and audience = $4", [...key]);
+        top = head;
+        from = head + 1;
+      }
+      for (;;) {
+        if (Date.now() - started > budgetMs) return { deleted, done: false };
+        const rows = (await this.pool.query("select seq, json ->> 'record' as record, (json ? 'reset') as reset, (json ? 'removed') as removed from projection_stream where owner = $1 and view = $2 and version = $3 and audience = $4 and seq < $5 order by seq desc limit $6", [...key, from, window])).rows as { seq: string | number; record: string; reset: boolean; removed: boolean }[];
+        if (rows.length) {
+          const records = [...new Set(rows.map((r) => r.record))];
+          // The removals met, this window's first: the highest seq per record, which is the one met first.
+          const gone = rows.filter((r) => r.removed).map((r) => ({ record: r.record, seq: Number(r.seq) }));
+          if (gone.length) await this.pool.query("insert into compaction_removed (owner, view, version, audience, record, seq) select $1, $2, $3, $4, e ->> 'record', (e ->> 'seq')::bigint from jsonb_array_elements($5::jsonb) as t(e) on conflict (owner, view, version, audience, record) do update set seq = greatest(compaction_removed.seq, excluded.seq)", [...key, JSON.stringify(gone)]);
+          const above = new Map<string, number>();
+          for (const r of (await this.pool.query("select record, seq from projections where owner = $1 and view = $2 and version = $3 and audience = $4 and record = any($5)", [...key, records])).rows as { record: string; seq: string | number }[]) above.set(r.record, Number(r.seq));
+          for (const r of (await this.pool.query("select record, seq from compaction_removed where owner = $1 and view = $2 and version = $3 and audience = $4 and record = any($5)", [...key, records])).rows as { record: string; seq: string | number }[]) above.set(r.record, Math.max(above.get(r.record) ?? 0, Number(r.seq)));
+          const superseded = rows.filter((r) => !r.reset && (above.get(r.record) ?? 0) > Number(r.seq)).map((r) => Number(r.seq));
+          if (superseded.length) deleted += (await this.pool.query("delete from projection_stream where owner = $1 and view = $2 and version = $3 and audience = $4 and seq = any($5::bigint[])", [...key, superseded])).rowCount ?? 0;
+          from = Number(rows[rows.length - 1]?.seq ?? from);
+        }
+        const finished = rows.length < window;
+        await mark(finished ? 0 : from, finished, top);
+        if (finished) break;
+      }
+    }
+    return { deleted, done: true };
+  }
+
   /** What installing a version would restamp (10.4): per recipe and step, how many values change and how many go to review. */
   async dryRun(bundle: JsonObject): Promise<{ recipes: { from: string; to: string; steps: StepStats[]; review: number }[]; records: number }> {
     const installed = await this.installed();

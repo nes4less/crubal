@@ -214,6 +214,31 @@ create table if not exists projection_stream (
   primary key (owner, view, version, audience, seq)
 );
 
+-- Where a stream's compaction got to (12.6.2): the seq the pass last looked at, whether the pass reached
+-- the stream's end, and the head it saw there; a stream whose head has not moved since is skipped.
+create table if not exists compaction_cursors (
+  owner text not null,
+  view text not null,
+  version text not null,
+  audience text not null,
+  seq bigint not null default 0,
+  done boolean not null default false,
+  head bigint not null default 0,
+  primary key (owner, view, version, audience)
+);
+
+-- The removals a compaction pass met walking a stream down from its head: a record that left the view has
+-- no stored row, so its earlier entries are superseded by the removal met first. Cleared as a stream's walk starts.
+create table if not exists compaction_removed (
+  owner text not null,
+  view text not null,
+  version text not null,
+  audience text not null,
+  record text not null,
+  seq bigint not null,
+  primary key (owner, view, version, audience, record)
+);
+
 -- A view published at least once for an audience, and under which version: a view with no rows is
 -- otherwise indistinguishable from one never published, and would rebuild whole on every write.
 create table if not exists published (

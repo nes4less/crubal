@@ -230,6 +230,33 @@ test("projections and the stream match the memory views, rebuilding only stale r
   const third = await store.project("discs");
   assert.deepEqual(third, [{ projection: "discs", audience: "public", seq: first.length + second.length + 1, record: "P-1", removed: true }]);
   assert.equal((await pool.query("select count(*)::int as n from projections where owner = $1 and record = 'P-1'", [owner])).rows[0].n, 0);
+
+  // Compaction (12.6.2): the entries a later entry for the same record superseded go, once the stored row
+  // carries the later one; each record's latest stays, P-1's removal among them (no stored row supersedes
+  // it), a reset marker stays whatever follows it, and the head keeps its number. Any index replaying from
+  // any cursor lands the same rows: here, the last entry per record before and after.
+  const everything = await store.entriesSince("discs", 0);
+  const resetAt = everything.find((e) => e.record === "P-2")?.seq;
+  assert.ok(resetAt, "P-2 has an entry to carry the marker");
+  await pool.query("update projection_stream set json = json || '{\"reset\": true}' where owner = $1 and view = 'discs' and seq = $2", [owner, resetAt]);
+  await store.commit({ person: "staff-1" }, (d) => {
+    const was = d.records.get("P-2") as Record;
+    d.records.set("P-2", { ...was, values: { ...was.values, title: "Marked again" } });
+  }, "2026-10-15T16:00:03Z");
+  await store.project("discs");
+  const before = await store.entriesSince("discs", 0);
+  const lastPer = (list: StreamEntry[]) => Object.fromEntries([...new Map(list.map((e) => [String(e.record), { ...e, reset: undefined }])).entries()]);
+  const pass = await store.compact(60_000, 2);
+  const after = await store.entriesSince("discs", 0);
+  assert.equal(pass.done, true, "a small stream is walked in one call");
+  assert.equal(pass.deleted, before.length - after.length);
+  // P-1 was published twice before it left (two superseded), P-2 was published again (its marker stays).
+  assert.equal(pass.deleted, 2, `P-1's two superseded entries go, P-2's marker stays: ${serialize(after as unknown as JsonObject)}`);
+  assert.ok(after.some((e) => e.record === "P-2" && e.reset && e.seq === resetAt), "the reset marker stays");
+  assert.ok(after.some((e) => e.record === "P-1" && e.removed), "the removal that stands stays");
+  assert.equal(after.at(-1)?.seq, before.at(-1)?.seq, "the head keeps its number");
+  assert.deepEqual(lastPer(after), lastPer(before), "every record's latest entry is the same");
+  assert.deepEqual(await store.compact(), { deleted: 0, done: true }, "the next pass skips a stream whose head has not moved");
 });
 
 test("the border over the store: intake kept, runs idempotent across transactions", { skip: !url }, async () => {

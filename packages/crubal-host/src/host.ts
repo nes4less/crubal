@@ -863,6 +863,16 @@ export class Host {
     return out;
   }
 
+  /** Compact the projection streams (12.6.2) of every owner or one, within a budget: what each pass dropped and whether it finished. */
+  async compact(owner?: string, budgetMs?: number, window?: number): Promise<JsonObject[]> {
+    const out: JsonObject[] = [];
+    for await (const o of owner ? [{ owner }] : this.eachOwner()) {
+      const r = await (await this.storeFor(o.owner)).compact(budgetMs, window);
+      out.push({ owner: o.owner, deleted: r.deleted, done: r.done });
+    }
+    return out;
+  }
+
   /**
    * Try failed runs again when their contract's retry interval has passed (7.5): a run still open after a
    * failure, whose last attempt is `every` behind `now`. A run dead after its last attempt is noticed.
