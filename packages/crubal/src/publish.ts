@@ -158,7 +158,7 @@ export function classify(previous: JsonObject | undefined, next: JsonObject): Ch
     }
     else out.push({ member: key, kind: "safe", why: ["changed"] });
   }
-  for (const key of was.keys()) if (!now.has(key)) out.push({ member: key, kind: "retired", why: ["removed"], recipe: ["review or move"] });
+  for (const key of was.keys()) if (!now.has(key)) out.push({ member: key, kind: "retired", why: ["removed"], recipe: ["review, move or hand"] });
   return out;
 }
 

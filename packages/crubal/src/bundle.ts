@@ -165,6 +165,9 @@ export function recipeJson(r: Recipe): JsonObject {
       case "move":
         o.move = { to: s.to };
         break;
+      case "hand":
+        o.hand = { to: s.to };
+        break;
       case "review":
         o.review = s.cond;
         break;
@@ -449,6 +452,7 @@ function recipeText(r: JsonObject): string[] {
     if (isObj(s.convert)) out.push(`    convert: ${s.convert.from} -> ${s.convert.to}`, ...(s.convert.rounding && s.convert.rounding !== "nearest" ? [`    rounding: ${s.convert.rounding}`] : []));
     if (isObj(s.split)) out.push(`    split: ${q(String(s.split.value))}`, ...((s.split.when as JsonObject[]) ?? []).map((w) => `      when: ${w.if} -> ${q(String(w.to))}`), ...(s.split.else !== undefined ? [`      else: ${q(String(s.split.else))}`] : []));
     if (isObj(s.move)) out.push(`    move: -> ${s.move.to}`);
+    if (isObj(s.hand)) out.push(`    hand: -> ${s.hand.to}`);
     if (typeof s.review === "string") out.push(`    review: ${s.review}`);
     if (s.recompute === true) out.push("    recompute");
     if (isObj(s.fill)) out.push(`    fill: ${q(String(s.fill.value))}`, ...(typeof s.fill.level === "string" ? [`      for: ${s.fill.level}::`] : []), ...(typeof s.fill.when === "string" ? [`      when: ${s.fill.when}`] : []));
