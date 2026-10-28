@@ -780,9 +780,17 @@ export class PgStore {
         branches.push(`select r.id, r.ord from records r where ${base} and r."of" = $${ps.length} and ${still(issuer, n)}`);
       }
     }
-    const waitingSql = `select distinct on (ord) id, ord from (${branches.join(" union all ")}) r order by ord limit $2`;
+    // One branch at a time, each walked by the record-order index with the page's limit, the first that
+    // yields past the cursor taken: a union sorted every candidate before its limit (28 s a tick), and a
+    // branch with nothing to give costs its scan once a tick, not once a row (0.3.31). A branch's records
+    // behind the cursor are reached on the next pass from the start, which the walk owes until a pass finds
+    // nothing.
     const from = from0;
-    const { rows } = branches.length ? await this.pool.query(waitingSql, ps) : { rows: [] as unknown[] };
+    let rows: unknown[] = [];
+    for (const branch of branches) {
+      rows = (await this.pool.query(`${branch} order by r.ord limit $2`, ps)).rows;
+      if (rows.length) break;
+    }
     const applied: string[] = [];
     let last = from;
     let cut = false;
