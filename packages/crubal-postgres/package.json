@@ -1,6 +1,6 @@
 {
   "name": "@cruba/crubal-postgres",
-  "version": "0.3.27",
+  "version": "0.3.28",
   "description": "The persistent CRUBAL store on Postgres: the log as the truth, every other table a cache rebuilt from it.",
   "license": "Apache-2.0",
   "type": "module",
@@ -26,7 +26,7 @@
     "prepublishOnly": "npm run typecheck && npm run build"
   },
   "dependencies": {
-    "@cruba/crubal": "0.3.27",
+    "@cruba/crubal": "0.3.28",
     "pg": "^8.13.0"
   },
   "devDependencies": {

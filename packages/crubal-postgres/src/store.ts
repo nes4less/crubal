@@ -743,7 +743,8 @@ export class PgStore {
    * them, at most `rate` records per call, each its own entry `by: migration: drain`; the ids done and
    * whether any still wait (brief 40: a walk by cursor in record order, never a count of what remains).
    */
-  async drain(rate = 100, at?: string): Promise<{ applied: string[]; remaining: number }> {
+  async drain(rate = 100, at?: string, budgetMs?: number): Promise<{ applied: string[]; remaining: number }> {
+    const started = Date.now();
     // Nothing pending at all: no walk. The planner cannot tell that an empty issuer list makes the exists
     // below false for every row, so it read ME's 994,000 records for 27 s a tick for nothing (2026-10-26).
     if (!(await this.pool.query("select 1 from instructions where owner = $1 limit 1", [this.owner])).rows.length) return { applied: [], remaining: 0 };
@@ -753,10 +754,20 @@ export class PgStore {
     // parent's instructions, a kind's, a class's worn by the record or its parent), in record order after the
     // cursor; a page at a time, so a tick reads `rate` matching records and what it skips, never the catalog
     // (brief 18, the scale rule). Counting what remained read every record twice a tick (2026-10-26).
+    // The issuers by kind, so the walk reaches only records an issuer can name, by the indexes on wears, kind
+    // and of, before the exact test below: without this the planner read the records table in order until it
+    // found a page of matches, fourteen seconds a tick at Media Encyclopedia with 268,000 waiting (2026-10-28).
+    const issuers = (await this.pool.query("select distinct issuer from instructions where owner = $1", [this.owner])).rows.map((r) => String((r as { issuer: string }).issuer));
+    const classes = issuers.filter((i) => i.startsWith("class:")).map((i) => i.slice(6).split("/")[0] as string);
+    const kinds = issuers.filter((i) => i.startsWith("kind:")).map((i) => i.slice(5).split("/")[0] as string);
+    const parents = issuers.filter((i) => !i.startsWith("class:") && !i.startsWith("kind:"));
     const waitingSql = `
       with ins as (select issuer, count(*)::int as n from instructions where owner = $1 group by issuer)
       select r.id, r.ord from records r
-      where r.owner = $1 and r.ord > $3 and coalesce(r.status ->> 'state', '') <> 'archived' and exists (
+      where r.owner = $1 and r.ord > $3 and coalesce(r.status ->> 'state', '') <> 'archived'
+        and (r.wears && $4::text[] or r.kind = any($5::text[]) or r."of" = any($6::text[])
+          or r."of" in (select p.id from records p where p.owner = $1 and p.wears && $4::text[]))
+        and exists (
         select 1 from ins i where coalesce((r.applied ->> i.issuer)::int, 0) < i.n and (
           i.issuer = r."of"
           or (i.issuer like 'kind:%' and split_part(substr(i.issuer, 6), '/', 1) = r.kind)
@@ -765,10 +776,16 @@ export class PgStore {
             or split_part(substr(i.issuer, 7), '/', 1) = any(coalesce((select p.wears from records p where p.owner = r.owner and p.id = r."of"), '{}'::text[]))))))
       order by r.ord limit $2`;
     const from = Number(((await this.pool.query("select ord from drain_cursors where owner = $1", [this.owner])).rows[0] as { ord?: string | number } | undefined)?.ord ?? 0);
-    const { rows } = await this.pool.query(waitingSql, [this.owner, rate, from]);
+    const { rows } = await this.pool.query(waitingSql, [this.owner, rate, from, classes, kinds, parents]);
     const applied: string[] = [];
     let last = from;
+    let cut = false;
     for (const row of rows as { id: string; ord: string | number }[]) {
+      // Within a budget when given: the rest of the page waits for the next tick, the cursor left on the last done.
+      if (budgetMs !== undefined && Date.now() - started > budgetMs) {
+        cut = true;
+        break;
+      }
       const id = String(row.id);
       const entry = await this.commit({ migration: "drain" }, (d) => { apply(d as unknown as LifecycleStore, id, dict); }, at);
       if (entry) applied.push(id);
@@ -776,7 +793,7 @@ export class PgStore {
     }
     // A full page may have more behind it: the cursor moves on. A short page reached the end of the walk: the
     // cursor returns to the start, and one more pass is owed unless this one began there and found nothing.
-    const full = rows.length >= rate;
+    const full = rows.length >= rate || cut;
     await this.pool.query("insert into drain_cursors (owner, ord) values ($1, $2) on conflict (owner) do update set ord = excluded.ord", [this.owner, full ? last : 0]);
     return { applied, remaining: full || from > 0 ? 1 : 0 };
   }
