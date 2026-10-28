@@ -711,6 +711,16 @@ export class PgStore {
     return out;
   }
 
+  /** The compaction's two tables (schema.sql), made once per process: a store from before 0.3.33 lacks them, and the schema file is applied only to a new one. */
+  private compactTable: Promise<void> | undefined;
+  private compactReady(): Promise<void> {
+    this.compactTable ??= (async () => {
+      await this.pool.query("create table if not exists compaction_cursors (owner text not null, view text not null, version text not null, audience text not null, seq bigint not null default 0, done boolean not null default false, head bigint not null default 0, primary key (owner, view, version, audience))");
+      await this.pool.query("create table if not exists compaction_removed (owner text not null, view text not null, version text not null, audience text not null, record text not null, seq bigint not null, primary key (owner, view, version, audience, record))");
+    })();
+    return this.compactTable;
+  }
+
   /** The drain's walk: its cursor per owner, and the record-order index it reads by; made once per process. */
   private drainTable: Promise<void> | undefined;
   private drainReady(): Promise<void> {
@@ -840,6 +850,7 @@ export class PgStore {
   async compact(budgetMs = 20_000, window = 10_000): Promise<{ deleted: number; done: boolean }> {
     const p = await this.projecting();
     if (!p) return { deleted: 0, done: true };
+    await this.compactReady();
     const started = Date.now();
     const streams = [...p.views.views.values()].map((v) => [this.owner, v.name, v.version ?? "", v.show] as const);
     type Cursor = { seq: string | number; done: boolean; head: string | number };
