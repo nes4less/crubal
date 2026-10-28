@@ -750,43 +750,39 @@ export class PgStore {
     if (!(await this.pool.query("select 1 from instructions where owner = $1 limit 1", [this.owner])).rows.length) return { applied: [], remaining: 0 };
     await this.drainReady();
     const dict = (await this.definitions()).dict;
+    const from0 = Number(((await this.pool.query("select ord from drain_cursors where owner = $1", [this.owner])).rows[0] as { ord?: string | number } | undefined)?.ord ?? 0);
     // The records with an instruction still to apply, found by the tables (lifecycle.ts issuersFor: the
     // parent's instructions, a kind's, a class's worn by the record or its parent), in record order after the
     // cursor; a page at a time, so a tick reads `rate` matching records and what it skips, never the catalog
     // (brief 18, the scale rule). Counting what remained read every record twice a tick (2026-10-26).
-    // The issuers by kind, so the walk reaches only records an issuer can name, by the indexes on wears, kind
-    // and of, before the exact test below: without this the planner read the records table in order until it
-    // found a page of matches, fourteen seconds a tick at Media Encyclopedia with 268,000 waiting (2026-10-28).
-    const issuers = (await this.pool.query("select distinct issuer from instructions where owner = $1", [this.owner])).rows.map((r) => String((r as { issuer: string }).issuer));
-    const classes = issuers.filter((i) => i.startsWith("class:")).map((i) => i.slice(6).split("/")[0] as string);
-    const kinds = issuers.filter((i) => i.startsWith("kind:")).map((i) => i.slice(5).split("/")[0] as string);
-    const parents = issuers.filter((i) => !i.startsWith("class:") && !i.startsWith("kind:"));
-    const waitingSql = `
-      with ins as (select issuer, count(*)::int as n from instructions where owner = $1 group by issuer),
-      reach as (
-        select r.id, r.ord, r.kind, r."of", r.wears, r.status, r.applied from records r
-        where r.owner = $1 and r.ord > $3 and r.wears && $4::text[]
-        union all
-        select r.id, r.ord, r.kind, r."of", r.wears, r.status, r.applied from records r
-        where r.owner = $1 and r.ord > $3 and r.kind = any($5::text[])
-        union all
-        select r.id, r.ord, r.kind, r."of", r.wears, r.status, r.applied from records r
-        where r.owner = $1 and r.ord > $3 and r."of" = any($6::text[])
-        union all
-        select r.id, r.ord, r.kind, r."of", r.wears, r.status, r.applied from records r
-        join records p on p.owner = r.owner and p.id = r."of"
-        where r.owner = $1 and r.ord > $3 and p.wears && $4::text[])
-      select distinct on (r.ord) r.id, r.ord from reach r
-      where coalesce(r.status ->> 'state', '') <> 'archived' and exists (
-        select 1 from ins i where coalesce((r.applied ->> i.issuer)::int, 0) < i.n and (
-          i.issuer = r."of"
-          or (i.issuer like 'kind:%' and split_part(substr(i.issuer, 6), '/', 1) = r.kind)
-          or (i.issuer like 'class:%' and (
-            split_part(substr(i.issuer, 7), '/', 1) = any(r.wears)
-            or split_part(substr(i.issuer, 7), '/', 1) = any(coalesce((select p.wears from records p where p.owner = $1 and p.id = r."of"), '{}'::text[]))))))
-      order by r.ord limit $2`;
-    const from = Number(((await this.pool.query("select ord from drain_cursors where owner = $1", [this.owner])).rows[0] as { ord?: string | number } | undefined)?.ord ?? 0);
-    const { rows } = await this.pool.query(waitingSql, [this.owner, rate, from, classes, kinds, parents]);
+    // The walk by issuer (0.3.30): one indexable branch per issuer, each carrying its own "still to apply"
+    // test inline, in a union ordered by ord; no correlated test per candidate row (the exists over every
+    // candidate with a lookup of the parent's classes ran 33 s a tick at Media Encyclopedia, 2026-10-28). A
+    // class issuer reaches its wearers and the records of its wearers (lifecycle.ts issuersFor); a kind
+    // issuer its kind's records; a record issuer the records of it.
+    const issuers = (await this.pool.query("select issuer, count(*)::int as n from instructions where owner = $1 group by issuer", [this.owner])).rows as { issuer: string; n: number }[];
+    const ps: unknown[] = [this.owner, rate, from0];
+    const branches: string[] = [];
+    const still = (issuer: string, n: number): string => { ps.push(issuer, n); return `coalesce((r.applied ->> $${ps.length - 1})::int, 0) < $${ps.length}`; };
+    const base = `r.owner = $1 and r.ord > $3 and coalesce(r.status ->> 'state', '') <> 'archived'`;
+    for (const { issuer, n } of issuers) {
+      if (issuer.startsWith("class:")) {
+        const name = issuer.slice(6).split("/")[0] as string;
+        ps.push([name]);
+        const arr = `$${ps.length}::text[]`;
+        branches.push(`select r.id, r.ord from records r where ${base} and r.wears && ${arr} and ${still(issuer, n)}`);
+        branches.push(`select r.id, r.ord from records r where ${base} and r."of" in (select p.id from records p where p.owner = $1 and p.wears && ${arr}) and ${still(issuer, n)}`);
+      } else if (issuer.startsWith("kind:")) {
+        ps.push(issuer.slice(5).split("/")[0]);
+        branches.push(`select r.id, r.ord from records r where ${base} and r.kind = $${ps.length} and ${still(issuer, n)}`);
+      } else {
+        ps.push(issuer);
+        branches.push(`select r.id, r.ord from records r where ${base} and r."of" = $${ps.length} and ${still(issuer, n)}`);
+      }
+    }
+    const waitingSql = `select distinct on (ord) id, ord from (${branches.join(" union all ")}) r order by ord limit $2`;
+    const from = from0;
+    const { rows } = branches.length ? await this.pool.query(waitingSql, ps) : { rows: [] as unknown[] };
     const applied: string[] = [];
     let last = from;
     let cut = false;
