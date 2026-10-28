@@ -740,7 +740,7 @@ export class PgStore {
 
   /**
    * Drain (docs/design/store.md, completion.md P): apply pending instructions to the records that have
-   * them, at most `rate` records per call, each its own entry `by: migration: drain`; the ids done and
+   * them, at most `rate` records per call, fifty to an entry `by: migration: drain`; the ids done and
    * whether any still wait (brief 40: a walk by cursor in record order, never a count of what remains).
    */
   async drain(rate = 100, at?: string, budgetMs?: number): Promise<{ applied: string[]; remaining: number }> {
@@ -762,34 +762,54 @@ export class PgStore {
     const kinds = issuers.filter((i) => i.startsWith("kind:")).map((i) => i.slice(5).split("/")[0] as string);
     const parents = issuers.filter((i) => !i.startsWith("class:") && !i.startsWith("kind:"));
     const waitingSql = `
-      with ins as (select issuer, count(*)::int as n from instructions where owner = $1 group by issuer)
-      select r.id, r.ord from records r
-      where r.owner = $1 and r.ord > $3 and coalesce(r.status ->> 'state', '') <> 'archived'
-        and (r.wears && $4::text[] or r.kind = any($5::text[]) or r."of" = any($6::text[])
-          or r."of" in (select p.id from records p where p.owner = $1 and p.wears && $4::text[]))
-        and exists (
+      with ins as (select issuer, count(*)::int as n from instructions where owner = $1 group by issuer),
+      reach as (
+        select r.id, r.ord, r.kind, r."of", r.wears, r.status, r.applied from records r
+        where r.owner = $1 and r.ord > $3 and r.wears && $4::text[]
+        union all
+        select r.id, r.ord, r.kind, r."of", r.wears, r.status, r.applied from records r
+        where r.owner = $1 and r.ord > $3 and r.kind = any($5::text[])
+        union all
+        select r.id, r.ord, r.kind, r."of", r.wears, r.status, r.applied from records r
+        where r.owner = $1 and r.ord > $3 and r."of" = any($6::text[])
+        union all
+        select r.id, r.ord, r.kind, r."of", r.wears, r.status, r.applied from records r
+        join records p on p.owner = r.owner and p.id = r."of"
+        where r.owner = $1 and r.ord > $3 and p.wears && $4::text[])
+      select distinct on (r.ord) r.id, r.ord from reach r
+      where coalesce(r.status ->> 'state', '') <> 'archived' and exists (
         select 1 from ins i where coalesce((r.applied ->> i.issuer)::int, 0) < i.n and (
           i.issuer = r."of"
           or (i.issuer like 'kind:%' and split_part(substr(i.issuer, 6), '/', 1) = r.kind)
           or (i.issuer like 'class:%' and (
             split_part(substr(i.issuer, 7), '/', 1) = any(r.wears)
-            or split_part(substr(i.issuer, 7), '/', 1) = any(coalesce((select p.wears from records p where p.owner = r.owner and p.id = r."of"), '{}'::text[]))))))
+            or split_part(substr(i.issuer, 7), '/', 1) = any(coalesce((select p.wears from records p where p.owner = $1 and p.id = r."of"), '{}'::text[]))))))
       order by r.ord limit $2`;
     const from = Number(((await this.pool.query("select ord from drain_cursors where owner = $1", [this.owner])).rows[0] as { ord?: string | number } | undefined)?.ord ?? 0);
     const { rows } = await this.pool.query(waitingSql, [this.owner, rate, from, classes, kinds, parents]);
     const applied: string[] = [];
     let last = from;
     let cut = false;
-    for (const row of rows as { id: string; ord: string | number }[]) {
+    // Fifty records a commit: a commit's fixed cost (the chain lock, the base, the definitions, the entry)
+    // is most of a record's three hundred milliseconds one by one, which made 139 a tick (2026-10-28). A
+    // batch that fails is retried one record at a time, so one bad record never holds the others.
+    const page = rows as { id: string; ord: string | number }[];
+    for (let i = 0; i < page.length; i += 50) {
       // Within a budget when given: the rest of the page waits for the next tick, the cursor left on the last done.
       if (budgetMs !== undefined && Date.now() - started > budgetMs) {
         cut = true;
         break;
       }
-      const id = String(row.id);
-      const entry = await this.commit({ migration: "drain" }, (d) => { apply(d as unknown as LifecycleStore, id, dict); }, at);
-      if (entry) applied.push(id);
-      last = Number(row.ord);
+      const group = page.slice(i, i + 50);
+      const ids = group.map((row) => String(row.id));
+      const batched = await this.commit({ migration: "drain" }, (d) => { for (const id of ids) apply(d as unknown as LifecycleStore, id, dict); }, at).then((e) => (e ? true : false), () => undefined);
+      if (batched === undefined) {
+        for (const id of ids) {
+          const entry = await this.commit({ migration: "drain" }, (d) => { apply(d as unknown as LifecycleStore, id, dict); }, at);
+          if (entry) applied.push(id);
+        }
+      } else if (batched) applied.push(...ids);
+      last = Number((group[group.length - 1] as { ord: string | number }).ord);
     }
     // A full page may have more behind it: the cursor moves on. A short page reached the end of the walk: the
     // cursor returns to the start, and one more pass is owed unless this one began there and found nothing.
