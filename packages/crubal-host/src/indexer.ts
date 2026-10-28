@@ -44,7 +44,7 @@ export type Serve = {
    * of hundreds of thousands of rows on a request (the scale rule, 2026-10-26: crawlers walking filter
    * combinations minted ten thousand tallies an hour, a scan each, and the site answered in thirty seconds).
    */
-  counts?: "always" | "stored";
+  counts?: "always" | "stored" | "standard";
 };
 export type Page = { view: string; version: string; audience: string; seq: number; page: number; pages: number; /** The rows the picks (and the search) select, across every page: the figure a report stamps. */ total: number; rows: JsonObject[]; counts: { [filter: string]: { [bucket: string]: number } }; sums?: Sums; nested?: Nested; indexable: boolean };
 
@@ -273,9 +273,15 @@ export class Index {
     const sums: Sums = {};
     const nested: Nested = {};
     const key = `${owner}|${view}|${version}|${v.show}|${seq}|${JSON.stringify(pickList)}|${o.q ?? ""}|${standsOn ? standsOn.join(",") : ""}|${JSON.stringify(o.only ?? {})}`;
-    // A standard ask (no search, page one, no pick or one pick on an indexable filter): its tally is kept a
-    // week, any other's a day (pruneTallies), so crawlers walking combinations never fill the table.
-    const standardAsk = !o.q && page === 1 && (pickList.length === 0 || (pickList.length === 1 && v.index.includes(pickList[0]?.[0] as string) && pickList[0]?.[1].length === 1));
+    // A standard ask (no search, no pick or one pick on an indexable filter): its tally is kept a week, any
+    // other's a day (pruneTallies), so crawlers walking combinations never fill the table. The page is not in
+    // the key, so every page of one selection shares the tally; it is not in the standard either (a crawler
+    // paging a list made a non-standard tally a page, 2026-10-28).
+    const standardAsk = !o.q && (pickList.length === 0 || (pickList.length === 1 && v.index.includes(pickList[0]?.[0] as string) && pickList[0]?.[1].length === 1));
+    // "standard": the host decides by its own rule whether a cold tally may be built here (the app's rule had
+    // drifted from it, and crawlers walking filter combinations built a thousand tallies an hour, ten seconds
+    // of database time each, 2026-10-28); any other ask is served with its total and the counts it has.
+    const mayBuild = o.counts === "always" || o.counts === undefined || (o.counts === "standard" && standardAsk);
     if (standsOn && o.caller) {
       const caller = o.caller;
       const all = (await this.pool.query(`select record, row, buckets, marks, ancestors, sort, pin from index_rows where ${baseWhere} order by ${order}`, params)).rows as Row[];
@@ -319,7 +325,7 @@ export class Index {
         Object.assign(counts, cached.counts);
         Object.assign(sums, cached.sums ?? {});
         Object.assign(nested, cached.nested);
-      } else if (o.counts === "stored") {
+      } else if (!mayBuild) {
         // No tally kept and none to be built here: the page's total, and the counts left empty.
         const all = build();
         total = Number((await this.pool.query(`select count(*) as n from index_rows where ${all.sql}`, all.ps)).rows[0]?.n ?? 0);

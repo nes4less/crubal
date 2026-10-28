@@ -19,6 +19,8 @@ export type Step =
   | { verb: "precision"; facet: string; from: string; to: string; line: number; text: string }
   | { verb: "split"; facet: string; value: string; when: { cond: string; to: string }[]; else?: string; line: number; text: string }
   | { verb: "move"; facet: string; to: string; line: number; text: string }
+  /** `hand: -> owner/package`: the key is that package's now; the values stay under the same address (10.3). */
+  | { verb: "hand"; facet: string; to: string; line: number; text: string }
   | { verb: "review"; facet: string; cond: string; line: number; text: string }
   | { verb: "recompute"; facet: string; line: number; text: string }
   | { verb: "retype"; facet: string; from: string; to: string; line: number; text: string }
@@ -97,6 +99,9 @@ export function readRecipes(source: string): Recipe[] {
           }
           case "move":
             recipe.steps.push({ verb: "move", to: arrow(s.value, s.line)[1], ...base });
+            break;
+          case "hand":
+            recipe.steps.push({ verb: "hand", to: arrow(s.value, s.line)[1], ...base });
             break;
           case "review":
             recipe.steps.push({ verb: "review", cond: s.value, ...base });
@@ -257,6 +262,10 @@ export function restamp(records: Record[], recipe: Recipe, dict: Dictionary, sta
             if (src) sources[s.to] = src;
             delete sources[s.facet];
           }
+          break;
+        case "hand":
+          // The key is another package's now (10.3): the value stays where it is, under the same address, for that
+          // package's definition to read; nothing is moved, held or recomputed.
           break;
         case "review":
           if (evaluate(parseCondition(s.cond, s.line), values) === true) review.push({ record: rec.id, address: s.facet, step: s.text, held: true });

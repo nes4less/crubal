@@ -200,3 +200,39 @@ migration: test /2026-10-14 -> test /2026-11-01
       manifestItem -> name`, "    rename: a -> b");
   assert.throws(() => publish(v3Text, { previous: v2, date: "2026-11-02" }), /present but nothing broke/);
 });
+
+test("a retired facet is covered by hand: the key is another package's now, the publish lands, the values stay, and the step round-trips (10.3)", async () => {
+  const { bundle: v1 } = publish(base, { date: "2026-10-01" });
+  const retired = base.replace("runtime#min 1..600\n", "");
+  assert.throws(() => publish(retired, { previous: v1, date: "2026-11-01" }), /facet:runtime is a breaking change \(removed\) and no recipe from shop \/2026-10-01 covers it: needs review, move or hand/);
+  const handed = `${retired}
+migration: shop /2026-10-01 -> shop /2026-11-01
+  facet: runtime
+    hand: -> shop.example/running
+`;
+  const { bundle: v2, changes } = publish(handed, { previous: v1, date: "2026-11-01" });
+  assert.equal(changes.find((c) => c.member === "facet:runtime")?.kind, "retired");
+  const { readBundle, printBundle } = await import("../src/bundle.ts");
+  const { dryRun, restamp } = await import("../src/migrate.ts");
+  assert.match(printBundle(v2), /facet: runtime\n {4}hand: -> shop.example\/running/);
+  const parsed = readBundle(v2);
+  const recipe = parsed.recipes[0];
+  assert.ok(recipe && recipe.steps[0]?.verb === "hand" && recipe.steps[0].to === "shop.example/running");
+  const records = [
+    { id: "P-1", kind: "item", level: "product", owner: "shop.example", values: { title: "A", runtime: { $qty: "90", unit: "min" } } },
+    { id: "P-2", kind: "item", level: "product", owner: "shop.example", values: { title: "B" } },
+  ] as Parameters<typeof restamp>[0];
+  const dry = dryRun(records, recipe, parsed.dict);
+  assert.equal(dry.steps[0]?.changed, 0, "a hand moves nothing");
+  const out = restamp(records, recipe, parsed.dict);
+  assert.equal(out.review.length, 0);
+  assert.equal(JSON.stringify(out.records[0]?.values.runtime), JSON.stringify({ $qty: "90", unit: "min" }), "the value stays under its key");
+  assert.equal(out.records[1]?.values.runtime, undefined);
+  // A hand alone is not a backfill: it rides only a version that retired the key.
+  const idle = `${base}
+migration: shop /2026-10-01 -> shop /2026-11-01
+  facet: runtime
+    hand: -> shop.example/running
+`;
+  assert.throws(() => publish(idle, { previous: v1, date: "2026-11-01" }), /present but nothing broke/);
+});

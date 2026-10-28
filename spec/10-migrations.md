@@ -56,6 +56,7 @@ its target.
 | `precision` | `precision: day -> month` | dates are cut to the new precision | no |
 | `split` | `split: v` with `when: condition -> new` lines and an `else` | one value becomes one of several, by a condition (chapter 6.3) on the same record | where no branch decides and there is no `else` |
 | `move` | `move: -> otherAddress` | values move to another key, or into a compound's rows | sometimes (a target already holding a different value) |
+| `hand` | `hand: -> owner/package` | the key is that package's now: the values stay under the same address for its definition to read; nothing moves, nothing is held. Covers a facet this version retires because another package in the dictionary declares it (chapter 11.4) | no |
 | `review` | `review: condition` | values where the condition holds go to the review queue | yes |
 | `recompute` | `recompute` | produced values (rollups, derivations) are rebuilt by the new rules | no |
 | `retype` | `retype: text -> choice` | a facet's values are read under its new type; values that fit land, the rest go to review | the leftovers |
@@ -63,7 +64,9 @@ its target.
 | `parts` | `parts: -> slot` under a compound, with an optional `when:` and `child -> facet` lines beneath | the compound's rows the condition picks become parts of the slot (5.6), keyed as the rows were, wearing the slot's class, each named child read into the facet named; a row whose key the record already holds as a part is left alone; the compound stays as it was | no The step acts only on a record wearing a class that declares the slot (5.6): a record that wears none keeps its rows until it does, and the step runs for it when it does (10.4). A backfill like `fill`: a recipe of parts steps alone rides a version where nothing broke, and run again it makes nothing twice (a row without a key of its own binds to the part it made before, each taken once). |
 
 A key never renames: keys are identity (chapter 4.1). A text facet takes a part's or a value's words whole: brackets in a name are a name, never a detail (chapter 2). A new label is not a migration. Moving values to a new
-key is `move`.
+key is `move`. A key that passes from one package to another keeps its address: the package that drops it
+writes `hand`, the package that takes it declares the key with the same type (chapter 11.4), and the records
+notice nothing.
 
 ## 10.4 Restamping
 
@@ -102,7 +105,8 @@ A package MUST be refused at publish when a recipe breaks these:
    the `to` version.
 3. `convert` names units the units table can convert between.
 4. A `split` either has `else` or is accepted as sending its leftovers to review.
-5. Every breaking change between the two versions (chapter 4.8) is covered by a step.
+5. Every breaking change between the two versions (chapter 4.8) is covered by a step; a facet retired is
+   covered by `review`, `move` or `hand`.
 6. A recipe whose steps are all `fill` or `recompute` is a backfill and MAY accompany a version where nothing
    broke; any other recipe with nothing broken is refused.
 7. A class version that stops projecting a key (a `level::` line removed, chapter 5.3.3) carries the
@@ -121,6 +125,7 @@ A package MUST be refused at publish when a recipe breaks these:
     { "facet": "format", "split": { "value": "Blu-ray",
         "when": [ { "if": "hdrFormats has", "to": "4K" } ], "else": "Blu-ray" } },
     { "facet": "audioLanguage", "move": { "to": "audioTracks[*].language" } },
+    { "facet": "holdMinutes", "hand": { "to": "cashierfu.com/commerce" } },
     { "facet": "languages", "review": "count of languages over 2" },
     { "facet": "condition", "recompute": true },
     { "facet": "qty", "fill": { "value": "1", "level": "unit" } },

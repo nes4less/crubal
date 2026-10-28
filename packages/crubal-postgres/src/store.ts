@@ -740,43 +740,76 @@ export class PgStore {
 
   /**
    * Drain (docs/design/store.md, completion.md P): apply pending instructions to the records that have
-   * them, at most `rate` records per call, each its own entry `by: migration: drain`; the ids done and
+   * them, at most `rate` records per call, fifty to an entry `by: migration: drain`; the ids done and
    * whether any still wait (brief 40: a walk by cursor in record order, never a count of what remains).
    */
-  async drain(rate = 100, at?: string): Promise<{ applied: string[]; remaining: number }> {
+  async drain(rate = 100, at?: string, budgetMs?: number): Promise<{ applied: string[]; remaining: number }> {
+    const started = Date.now();
     // Nothing pending at all: no walk. The planner cannot tell that an empty issuer list makes the exists
     // below false for every row, so it read ME's 994,000 records for 27 s a tick for nothing (2026-10-26).
     if (!(await this.pool.query("select 1 from instructions where owner = $1 limit 1", [this.owner])).rows.length) return { applied: [], remaining: 0 };
     await this.drainReady();
     const dict = (await this.definitions()).dict;
+    const from0 = Number(((await this.pool.query("select ord from drain_cursors where owner = $1", [this.owner])).rows[0] as { ord?: string | number } | undefined)?.ord ?? 0);
     // The records with an instruction still to apply, found by the tables (lifecycle.ts issuersFor: the
     // parent's instructions, a kind's, a class's worn by the record or its parent), in record order after the
     // cursor; a page at a time, so a tick reads `rate` matching records and what it skips, never the catalog
     // (brief 18, the scale rule). Counting what remained read every record twice a tick (2026-10-26).
-    const waitingSql = `
-      with ins as (select issuer, count(*)::int as n from instructions where owner = $1 group by issuer)
-      select r.id, r.ord from records r
-      where r.owner = $1 and r.ord > $3 and coalesce(r.status ->> 'state', '') <> 'archived' and exists (
-        select 1 from ins i where coalesce((r.applied ->> i.issuer)::int, 0) < i.n and (
-          i.issuer = r."of"
-          or (i.issuer like 'kind:%' and split_part(substr(i.issuer, 6), '/', 1) = r.kind)
-          or (i.issuer like 'class:%' and (
-            split_part(substr(i.issuer, 7), '/', 1) = any(r.wears)
-            or split_part(substr(i.issuer, 7), '/', 1) = any(coalesce((select p.wears from records p where p.owner = r.owner and p.id = r."of"), '{}'::text[]))))))
-      order by r.ord limit $2`;
-    const from = Number(((await this.pool.query("select ord from drain_cursors where owner = $1", [this.owner])).rows[0] as { ord?: string | number } | undefined)?.ord ?? 0);
-    const { rows } = await this.pool.query(waitingSql, [this.owner, rate, from]);
+    // The walk by issuer (0.3.30): one indexable branch per issuer, each carrying its own "still to apply"
+    // test inline, in a union ordered by ord; no correlated test per candidate row (the exists over every
+    // candidate with a lookup of the parent's classes ran 33 s a tick at Media Encyclopedia, 2026-10-28). A
+    // class issuer reaches its wearers and the records of its wearers (lifecycle.ts issuersFor); a kind
+    // issuer its kind's records; a record issuer the records of it.
+    const issuers = (await this.pool.query("select issuer, count(*)::int as n from instructions where owner = $1 group by issuer", [this.owner])).rows as { issuer: string; n: number }[];
+    const ps: unknown[] = [this.owner, rate, from0];
+    const branches: string[] = [];
+    const still = (issuer: string, n: number): string => { ps.push(issuer, n); return `coalesce((r.applied ->> $${ps.length - 1})::int, 0) < $${ps.length}`; };
+    const base = `r.owner = $1 and r.ord > $3 and coalesce(r.status ->> 'state', '') <> 'archived'`;
+    for (const { issuer, n } of issuers) {
+      if (issuer.startsWith("class:")) {
+        const name = issuer.slice(6).split("/")[0] as string;
+        ps.push([name]);
+        const arr = `$${ps.length}::text[]`;
+        branches.push(`select r.id, r.ord from records r where ${base} and r.wears && ${arr} and ${still(issuer, n)}`);
+        branches.push(`select r.id, r.ord from records r where ${base} and r."of" in (select p.id from records p where p.owner = $1 and p.wears && ${arr}) and ${still(issuer, n)}`);
+      } else if (issuer.startsWith("kind:")) {
+        ps.push(issuer.slice(5).split("/")[0]);
+        branches.push(`select r.id, r.ord from records r where ${base} and r.kind = $${ps.length} and ${still(issuer, n)}`);
+      } else {
+        ps.push(issuer);
+        branches.push(`select r.id, r.ord from records r where ${base} and r."of" = $${ps.length} and ${still(issuer, n)}`);
+      }
+    }
+    const waitingSql = `select distinct on (ord) id, ord from (${branches.join(" union all ")}) r order by ord limit $2`;
+    const from = from0;
+    const { rows } = branches.length ? await this.pool.query(waitingSql, ps) : { rows: [] as unknown[] };
     const applied: string[] = [];
     let last = from;
-    for (const row of rows as { id: string; ord: string | number }[]) {
-      const id = String(row.id);
-      const entry = await this.commit({ migration: "drain" }, (d) => { apply(d as unknown as LifecycleStore, id, dict); }, at);
-      if (entry) applied.push(id);
-      last = Number(row.ord);
+    let cut = false;
+    // Fifty records a commit: a commit's fixed cost (the chain lock, the base, the definitions, the entry)
+    // is most of a record's three hundred milliseconds one by one, which made 139 a tick (2026-10-28). A
+    // batch that fails is retried one record at a time, so one bad record never holds the others.
+    const page = rows as { id: string; ord: string | number }[];
+    for (let i = 0; i < page.length; i += 50) {
+      // Within a budget when given: the rest of the page waits for the next tick, the cursor left on the last done.
+      if (budgetMs !== undefined && Date.now() - started > budgetMs) {
+        cut = true;
+        break;
+      }
+      const group = page.slice(i, i + 50);
+      const ids = group.map((row) => String(row.id));
+      const batched = await this.commit({ migration: "drain" }, (d) => { for (const id of ids) apply(d as unknown as LifecycleStore, id, dict); }, at).then((e) => (e ? true : false), () => undefined);
+      if (batched === undefined) {
+        for (const id of ids) {
+          const entry = await this.commit({ migration: "drain" }, (d) => { apply(d as unknown as LifecycleStore, id, dict); }, at);
+          if (entry) applied.push(id);
+        }
+      } else if (batched) applied.push(...ids);
+      last = Number((group[group.length - 1] as { ord: string | number }).ord);
     }
     // A full page may have more behind it: the cursor moves on. A short page reached the end of the walk: the
     // cursor returns to the start, and one more pass is owed unless this one began there and found nothing.
-    const full = rows.length >= rate;
+    const full = rows.length >= rate || cut;
     await this.pool.query("insert into drain_cursors (owner, ord) values ($1, $2) on conflict (owner) do update set ord = excluded.ord", [this.owner, full ? last : 0]);
     return { applied, remaining: full || from > 0 ? 1 : 0 };
   }

@@ -620,7 +620,7 @@ contract: discRead
   assert.deepEqual(await store.verify(), { valid: true });
 });
 
-test("drain applies pending instructions at a rate, each record one entry", { skip: !url }, async () => {
+test("drain applies pending instructions at a rate, a page to an entry (fifty at most, 0.3.29)", { skip: !url }, async () => {
   const owner = "drain.example";
   const store = new PgStore(pool, owner, { allowUnsigned: true });
   const text = `package: shop /2026-10-01
@@ -654,7 +654,7 @@ class: Item
   const s = await store.state();
   assert.deepEqual(s.records.get("P-2")?.values.notes, { $empty: "unknown" });
   assert.equal(s.records.get("P-2")?.applied?.["kind:item/2026-10-18"], 1);
-  assert.equal((await store.entries()).filter((e) => (e.by as JsonObject).migration === "drain").length, 3, "one entry per record drained");
+  assert.equal((await store.entries()).filter((e) => (e.by as JsonObject).migration === "drain").length, 2, "a page to an entry: two pages drained records (0.3.29)");
   assert.deepEqual(await store.verify(), { valid: true });
 });
 

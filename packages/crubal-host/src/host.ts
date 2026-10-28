@@ -854,10 +854,10 @@ export class Host {
   }
 
   /** Drain pending instructions (completion.md P) for every owner or one, at a rate per owner. */
-  async drain(rate = 100, owner?: string, now = this.now()): Promise<JsonObject[]> {
+  async drain(rate = 100, owner?: string, now = this.now(), budgetMs?: number): Promise<JsonObject[]> {
     const out: JsonObject[] = [];
     for await (const o of owner ? [{ owner }] : this.eachOwner()) {
-      const r = await (await this.storeFor(o.owner)).drain(rate, now);
+      const r = await (await this.storeFor(o.owner)).drain(rate, now, budgetMs);
       if (r.applied.length || r.remaining) out.push({ owner: o.owner, applied: r.applied, remaining: r.remaining });
     }
     return out;

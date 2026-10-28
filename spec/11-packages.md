@@ -158,7 +158,9 @@ Adopted values (chapter 8.2) are outside the trust order: they don't change unti
 - **One key, one definition.** A package MUST NOT define a facet another package in the same dictionary
   defines with a different type; a store refuses the install, since the later definition would silently
   change what the earlier package's records mean. A package that needs the same idea on its own records
-  names its own key.
+  names its own key. The same key with the same type in two packages is one definition, which is how a key
+  passes between packages: the taker declares it, the giver retires it with `hand` (chapter 10.3), and the
+  values never move.
 - **Outside, adopters pin.** `extends: commerce /2026-10-01` uses exactly that version until the package
   moves its pin, which is itself a new version of the package.
 - **Extending** (UCP's word, kept for packages and contracts) lets a package add facets, classes, rules,
