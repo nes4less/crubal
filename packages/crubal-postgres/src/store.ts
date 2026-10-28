@@ -761,23 +761,25 @@ export class PgStore {
     // class issuer reaches its wearers and the records of its wearers (lifecycle.ts issuersFor); a kind
     // issuer its kind's records; a record issuer the records of it.
     const issuers = (await this.pool.query("select issuer, count(*)::int as n from instructions where owner = $1 group by issuer", [this.owner])).rows as { issuer: string; n: number }[];
-    const ps: unknown[] = [this.owner, rate, from0];
-    const branches: string[] = [];
-    const still = (issuer: string, n: number): string => { ps.push(issuer, n); return `coalesce((r.applied ->> $${ps.length - 1})::int, 0) < $${ps.length}`; };
+    // Each branch carries its own parameters: Postgres refuses a bind that supplies more than the statement
+    // names (0.3.31 handed every branch the whole list and the drain applied nothing, 2026-10-28).
+    const branches: { sql: string; ps: unknown[] }[] = [];
     const base = `r.owner = $1 and r.ord > $3 and coalesce(r.status ->> 'state', '') <> 'archived'`;
+    const branch = (where: (ps: unknown[]) => string, issuer: string, n: number): void => {
+      const ps: unknown[] = [this.owner, rate, from0];
+      const w = where(ps);
+      ps.push(issuer, n);
+      branches.push({ sql: `select r.id, r.ord from records r where ${base} and ${w} and coalesce((r.applied ->> $${ps.length - 1})::int, 0) < $${ps.length} order by r.ord limit $2`, ps });
+    };
     for (const { issuer, n } of issuers) {
       if (issuer.startsWith("class:")) {
         const name = issuer.slice(6).split("/")[0] as string;
-        ps.push([name]);
-        const arr = `$${ps.length}::text[]`;
-        branches.push(`select r.id, r.ord from records r where ${base} and r.wears && ${arr} and ${still(issuer, n)}`);
-        branches.push(`select r.id, r.ord from records r where ${base} and r."of" in (select p.id from records p where p.owner = $1 and p.wears && ${arr}) and ${still(issuer, n)}`);
+        branch((ps) => { ps.push([name]); return `r.wears && $${ps.length}::text[]`; }, issuer, n);
+        branch((ps) => { ps.push([name]); return `r."of" in (select p.id from records p where p.owner = $1 and p.wears && $${ps.length}::text[])`; }, issuer, n);
       } else if (issuer.startsWith("kind:")) {
-        ps.push(issuer.slice(5).split("/")[0]);
-        branches.push(`select r.id, r.ord from records r where ${base} and r.kind = $${ps.length} and ${still(issuer, n)}`);
+        branch((ps) => { ps.push(issuer.slice(5).split("/")[0]); return `r.kind = $${ps.length}`; }, issuer, n);
       } else {
-        ps.push(issuer);
-        branches.push(`select r.id, r.ord from records r where ${base} and r."of" = $${ps.length} and ${still(issuer, n)}`);
+        branch((ps) => { ps.push(issuer); return `r."of" = $${ps.length}`; }, issuer, n);
       }
     }
     // One branch at a time, each walked by the record-order index with the page's limit, the first that
@@ -787,8 +789,8 @@ export class PgStore {
     // nothing.
     const from = from0;
     let rows: unknown[] = [];
-    for (const branch of branches) {
-      rows = (await this.pool.query(`${branch} order by r.ord limit $2`, ps)).rows;
+    for (const b of branches) {
+      rows = (await this.pool.query(b.sql, b.ps)).rows;
       if (rows.length) break;
     }
     const applied: string[] = [];

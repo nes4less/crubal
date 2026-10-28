@@ -642,6 +642,8 @@ class: Item
   await store.commit({ person: owner }, (d) => {
     for (const id of ["P-1", "P-2", "P-3"]) d.records.set(id, { id, kind: "item", level: "product", owner, values: { title: id }, sources: { "*": { origin: "declared", via: "L-1" } } });
     d.instructions.set("kind:item/2026-10-18", [{ issuer: "kind:item/2026-10-18", n: 1, op: "+", key: "notes", map: [] }]);
+    // A second issuer, a class nobody wears: its branches run with their own parameters and yield nothing (0.3.32).
+    d.instructions.set("class:Nobody/2026-10-18", [{ issuer: "class:Nobody/2026-10-18", n: 1, op: "+", key: "notes", map: [] }]);
   }, "2026-10-18T09:00:01Z");
   const first = await store.drain(2, "2026-10-18T09:01:00Z");
   assert.deepEqual(first, { applied: ["P-1", "P-2"], remaining: 1 }, "a full page: more may follow");
