@@ -3,6 +3,19 @@
 // The log is the truth; `rebuild` gives every other table back from it.
 
 import { applyEntry, diffWrites, differs, type Draft, type Entry, type State, MemoryRecords } from "@cruba/crubal";
+import { type Contract, proposalMet, quorumHolds } from "@cruba/crubal";
+
+/** A commit refused by a contract's quorum (7.6): the contract, and the proposal cited if any. */
+export class QuorumRefused extends Error {
+  readonly contract: string;
+  readonly cited: string | undefined;
+  constructor(contract: string, cited?: string) {
+    super(cited ? `${contract} needs a met proposal; ${cited} is not one` : `${contract} needs a met proposal`);
+    this.name = "QuorumRefused";
+    this.contract = contract;
+    this.cited = cited;
+  }
+}
 import { Engine, serialize } from "@cruba/crubal";
 import { CrubalError } from "@cruba/crubal";
 import { Access, type Edge } from "@cruba/crubal";
@@ -1229,6 +1242,19 @@ export class PgStore {
    * entry's writes (plus `extra` writes the diff can't see), and the entry is applied and persisted in the
    * same transaction. Nothing happens when nothing changed; a throw inside `mutate` rolls everything back.
    */
+  /**
+   * A quorum (7.6) holds a commit by hand to the same rule as a run: a cause naming a contract whose quorum
+   * holds must cite a met proposal (`by.proposal`), or the commit is refused before anything is written.
+   */
+  private quorumGate(p: { contracts: Contract[] }, d: Draft, by: JsonObject): void {
+    const name = typeof by.contract === "string" ? by.contract : undefined;
+    if (!name) return;
+    const c = p.contracts.find((x) => x.name === name);
+    if (!c || !quorumHolds(c, d.records)) return;
+    const cite = typeof by.proposal === "string" ? by.proposal : undefined;
+    if (!proposalMet(d.records, cite, name)) throw new QuorumRefused(name, cite);
+  }
+
   async commit(by: JsonObject, mutate: (draft: Draft) => void, at?: string, extra: JsonObject[] = []): Promise<Entry | null> {
     return (await this.commitFrom((d) => { mutate(d); return { by, extra, out: undefined }; }, at)).entry;
   }
@@ -1257,7 +1283,7 @@ export class PgStore {
       tr("definitions");
       for (;;) {
         const had = needs.needs.loaded.size;
-        ({ draft, result } = (await settle(client, this.owner, before, (s) => { const d = draftOf(s); const r = run(d); this.derive(p, before, d); return { draft: d, result: r }; })).out);
+        ({ draft, result } = (await settle(client, this.owner, before, (s) => { const d = draftOf(s); const r = run(d); this.quorumGate(p, d, r.by); this.derive(p, before, d); return { draft: d, result: r }; })).out);
         const writes = [...diffWrites(before, draft), ...(result.extra ?? [])];
         if (!writes.length) return { entry: null, out: result.out };
         entry = { log: `L-${head.seq + 1}`, owner: this.owner, at: at ?? new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), by: result.by, writes, ...(mark.witnessed ? { witnessed: true } : {}) };

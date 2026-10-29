@@ -57,15 +57,40 @@ function callerStates(caller: Record | undefined, roles: Role[], held?: (verb: s
   };
 }
 
+// ─── A quorum (7.6) ──────────────────────────────────────────────────────────
+
+/** Whether a contract's quorum holds now: it names a flag on the root, and the flag is true. */
+export function quorumHolds(c: { quorum?: string }, records: { get(id: string): Record | undefined }): boolean {
+  if (!c.quorum) return false;
+  return records.get("ROOT")?.values[c.quorum] === true;
+}
+
+/**
+ * Whether a cited proposal meets a contract's quorum: a record whose `proposalContract` names the contract,
+ * whose `proposalState` is `met`, and, where the run names a record and the proposal names one, the same
+ * record. How a proposal is met is the host's (who proposes, who approves, how many, by when, and that the
+ * body applied is the body proposed); the engine checks the citation.
+ */
+export function proposalMet(records: { get(id: string): Record | undefined }, cite: string | undefined, contract: string, recordId?: string): boolean {
+  if (!cite) return false;
+  const p = records.get(cite);
+  if (!p) return false;
+  if (p.values.proposalState !== "met" || p.values.proposalContract !== contract) return false;
+  const named = p.values.proposalRecord;
+  const target = isObj(named) ? named.$link : named;
+  if (recordId && typeof target === "string" && target !== recordId) return false;
+  return true;
+}
+
 // ─── Publish checks (7.10) ───────────────────────────────────────────────────
 
 const PARTS: { [kind: string]: string[] } = {
-  send: ["needs", "gives", "writes", "reads", "stream", "to", "when", "missed", "who", "audience", "auth", "scope", "credential", "retry", "undo", "for", "label", "describe", "version"],
-  receive: ["needs", "gives", "reads", "when", "missed", "who", "audience", "origin", "lands", "evidence", "absorb", "ignore", "keep-raw", "prefix", "ref", "relation", "auth", "scope", "credential", "retry", "undo", "for", "label", "describe", "version"],
-  store: ["needs", "stores", "origin", "when", "who", "audience", "for", "label", "describe", "version"],
-  form: ["needs", "gives", "writes", "reads", "when", "who", "audience", "origin", "lands", "ref", "relation", "for", "label", "describe", "version"],
-  offer: ["needs", "gives", "to", "mode", "terms", "for", "when", "who", "audience", "label", "describe", "version"],
-  take: ["needs", "from", "offer", "reads", "mode", "lands", "origin", "absorb", "ignore", "keep-raw", "prefix", "ref", "when", "who", "audience", "for", "label", "describe", "version"],
+  send: ["quorum", "needs", "gives", "writes", "reads", "stream", "to", "when", "missed", "who", "audience", "auth", "scope", "credential", "retry", "undo", "for", "label", "describe", "version"],
+  receive: ["quorum", "needs", "gives", "reads", "when", "missed", "who", "audience", "origin", "lands", "evidence", "absorb", "ignore", "keep-raw", "prefix", "ref", "relation", "auth", "scope", "credential", "retry", "undo", "for", "label", "describe", "version"],
+  store: ["quorum", "needs", "stores", "origin", "when", "who", "audience", "for", "label", "describe", "version"],
+  form: ["quorum", "needs", "gives", "writes", "reads", "when", "who", "audience", "origin", "lands", "ref", "relation", "for", "label", "describe", "version"],
+  offer: ["quorum", "needs", "gives", "to", "mode", "terms", "for", "when", "who", "audience", "label", "describe", "version"],
+  take: ["quorum", "needs", "from", "offer", "reads", "mode", "lands", "origin", "absorb", "ignore", "keep-raw", "prefix", "ref", "when", "who", "audience", "for", "label", "describe", "version"],
 };
 const AUDIENCES = ["public", "member", "staff", "owner"];
 /**
@@ -128,6 +153,7 @@ export function checkContracts(contracts: Contract[], dict: Dictionary, ownPrefi
     if (missed && !["once", "all", "skip"].includes(missed)) throw new CrubalError(`${c.name}: missed is once, all or skip`, c.partLines.missed);
     if (missed && !isSchedule(c.when)) throw new CrubalError(`${c.name}: missed belongs to a scheduled contract`, c.partLines.missed);
     if (c.undo && !names.has(c.undo)) throw new CrubalError(`${c.name}'s undo names ${c.undo}, which isn't a contract here`, c.partLines.undo);
+    if (c.quorum && dict.facets.get(c.quorum)?.type !== "yes-no") throw new CrubalError(`${c.name}'s quorum names ${c.quorum}, which isn't a yes/no facet`, c.partLines.quorum);
     const cred = c.parts.credential;
     if (cred && /[^A-Za-z0-9._-]/.test(cred)) throw new CrubalError(`${c.name}'s credential must be a name, never a secret`, c.partLines.credential);
   }
@@ -167,6 +193,8 @@ export class Exchange {
   readonly roles: Role[];
   /** The records, shared with the Access that decides over them (chapter 14). */
   records: RecordSet = new MemoryRecords();
+  /** The proposal a run cites (7.6): set by the border before the run, read when a contract has a quorum. */
+  citing?: string;
   bindings = new Map<string, string>();
   /** Set to make the border consult access: `run` needs the caller's `run` item, gated access suggests. */
   access?: Access;
@@ -341,6 +369,8 @@ export class Exchange {
       const ok = evaluate(parseCondition(c.who), caller ? { ...caller.values } : {}, callerStates(caller, this.roles, held, asked));
       if (ok !== true) return "who";
     }
+    // A quorum (7.6): while the root's flag is true, the run needs a met proposal it cites.
+    if (quorumHolds(c, this.records) && !proposalMet(this.records, this.citing, c.name, arrival ? undefined : recordId)) return "quorum";
     return null;
   }
 

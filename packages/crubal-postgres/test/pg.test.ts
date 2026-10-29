@@ -22,7 +22,7 @@ import { connect, testSchema, type Pool } from "../src/db.ts";
 import { publish } from "@cruba/crubal";
 import { borderOptions, PgBorder } from "../src/border.ts";
 import { Needs, WorkingRecords } from "../src/working.ts";
-import { PgStore } from "../src/store.ts";
+import { PgStore, QuorumRefused } from "../src/store.ts";
 
 const url = process.env.CRUBAL_PG_URL;
 const corpus = fileURLToPath(new URL("../../../corpus/store/", import.meta.url));
@@ -868,6 +868,90 @@ view: units
   shape: card
   fresh: write
 `;
+
+
+test("a contract's quorum (7.6): the border refuses a run while the root's flag is true unless it cites a met proposal; a commit by hand naming the contract is held to the same rule", { skip: !url }, async () => {
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const key = { d: privateKey.export({ format: "jwk" }).d as string, x: publicKey.export({ format: "jwk" }).x as string };
+  const keys = { "board.example": { alg: "Ed25519", public: key.x } };
+  const src = `package: board /2026-10-01
+  owner: board.example
+  crubal: 2
+
+kind: deployment
+  levels: deployment
+  base: Deployment
+kind: proposal
+  levels: proposal
+  base: Proposal
+deploymentName$
+tagline$
+consensusOn?
+emailSending?
+proposalContract$
+proposalState{open|met|applied|declined|lapsed}
+proposalRecord&deployment
+
+class: Deployment
+  for: deployment
+  facets:
+    deploymentName
+    tagline
+    consensusOn
+    emailSending
+
+contract: settings
+  kind: form
+  origin: declared
+  for: Deployment
+  quorum: consensusOn
+  needs:
+    emailSending
+    tagline
+`;
+  const bundle = publish(src, { date: "2026-10-01", key }).bundle;
+  const owner = "board.example";
+  const store = new PgStore(pool, owner);
+  await store.install(bundle, keys, "2026-10-16T09:00:00Z");
+  const src0 = { "*": { origin: "declared" as const, via: "L-1" } };
+  await store.commit({ migration: "backfill" }, (d) => {
+    d.records.set("ROOT", { id: "ROOT", kind: "deployment", level: "deployment", owner, values: { deploymentName: "Board" }, sources: src0 });
+  }, "2026-10-16T09:00:01Z");
+  const border = await PgBorder.over(store);
+  assert.equal(border.contracts.size, 1, "the contract read from the store");
+  // Flag off: the form lands.
+  const off = await border.receive("settings", "ROOT", JSON.stringify({ emailSending: false }), undefined, "2026-10-16T09:00:02Z");
+  assert.equal(off.stopped, undefined, JSON.stringify(off));
+  // Flag on: refused with quorum, nothing written.
+  const setRoot = (d: Draft, key: string, value: Json, via: string) => {
+    const r = d.records.get("ROOT") as Record;
+    d.records.set("ROOT", { ...r, values: { ...r.values, [key]: value }, sources: { ...(r.sources ?? {}), [key]: { origin: "declared", via } } });
+  };
+  await store.commit({ person: "C-1" }, (d) => setRoot(d, "consensusOn", true, "C-1"), "2026-10-16T09:00:03Z");
+  const on = await border.receive("settings", "ROOT", JSON.stringify({ tagline: "Hijacked" }), undefined, "2026-10-16T09:00:04Z");
+  assert.equal(on.stopped, "quorum");
+  assert.equal((await store.state()).records.get("ROOT")?.values.tagline, undefined, "nothing landed");
+  // A commit by hand naming the contract is refused the same way, before anything is written.
+  await assert.rejects(
+    store.commit({ person: "C-1", contract: "settings" }, (d) => setRoot(d, "emailSending", true, "C-1"), "2026-10-16T09:00:05Z"),
+    (e: unknown) => e instanceof QuorumRefused && e.contract === "settings" && e.cited === undefined,
+  );
+  // A met proposal, cited: the run lands; the commit by hand lands too, and its cause names the proposal.
+  await store.commit({ person: "C-2" }, (d) => {
+    d.records.set("PP-1", { id: "PP-1", kind: "proposal", level: "proposal", owner, values: { proposalContract: "settings", proposalState: "met", proposalRecord: { $link: "ROOT" } }, sources: src0 });
+    d.records.set("PP-2", { id: "PP-2", kind: "proposal", level: "proposal", owner, values: { proposalContract: "settings", proposalState: "open", proposalRecord: { $link: "ROOT" } }, sources: src0 });
+  }, "2026-10-16T09:00:06Z");
+  const notMet = await border.receive("settings", "ROOT", JSON.stringify({ tagline: "Three of us" }), undefined, "2026-10-16T09:00:07Z", undefined, "PP-2");
+  assert.equal(notMet.stopped, "quorum", "an open proposal is not met");
+  const met = await border.receive("settings", "ROOT", JSON.stringify({ tagline: "Three of us" }), undefined, "2026-10-16T09:00:08Z", undefined, "PP-1");
+  assert.equal(met.stopped, undefined, JSON.stringify(met));
+  assert.equal((await store.state()).records.get("ROOT")?.values.tagline, "Three of us");
+  const last = (await store.entries()).at(-1) as Entry;
+  assert.equal((last.by as JsonObject).proposal, "PP-1", "the citation rides on the entry's cause");
+  const byHand = await store.commit({ person: "C-1", contract: "settings", proposal: "PP-1" }, (d) => setRoot(d, "emailSending", true, "C-1"), "2026-10-16T09:00:09Z");
+  assert.ok(byHand, "the commit by hand lands with a met proposal cited");
+  assert.deepEqual(await store.verify(), { valid: true });
+});
 
 test("load (brief 18 step 1): a thousand records land in two entries with their sources; archived ones stay out of the views; the publish runs once at the end", { skip: !url }, async () => {
   const dropBulk = await testSchema(pool);

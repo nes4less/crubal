@@ -105,6 +105,8 @@ export type Contract = {
   undo?: string;
   /** The field of their payload that is their own ID for the thing (9.2a). */
   ref?: string;
+  /** A quorum (7.6): the root's flag facet that, while true, makes a run need a met proposal it cites. */
+  quorum?: string;
   /** For a send contract that carries projection streams (12.6.2): the views. */
   stream: string[];
   /** Every part as written, with its line, for the publish checks. */
@@ -179,6 +181,7 @@ export function readContracts(source: string): Contract[] {
       else if (p.key === "mode") c.mode = p.value;
       else if (p.key === "undo") c.undo = p.value;
       else if (p.key === "ref") c.ref = p.value;
+      else if (p.key === "quorum") c.quorum = p.value.trim();
       else if (p.key === "stream") c.stream = list();
       else if (p.key === "terms") {
         // `terms:` with one term per line, or `terms: reshare no, expires 2027-01-01` on the line.

@@ -130,7 +130,7 @@ export class PgBorder {
     return Object.fromEntries((rows as { p: string; n: string | number }[]).map((r) => [r.p, Number(r.n)]));
   }
 
-  async run<T extends RunResult>(fn: (ex: Exchange) => T, at?: string, seed: { observations?: JsonObject[]; review?: JsonObject[] } = {}): Promise<T> {
+  async run<T extends RunResult>(fn: (ex: Exchange) => T, at?: string, seed: { observations?: JsonObject[]; review?: JsonObject[] } = {}, cite?: string): Promise<T> {
     const { runs, sent, known, open } = await this.past();
     const counts = await this.idCounts();
     const { out } = await this.store.commitFrom((draft: Draft) => {
@@ -146,6 +146,7 @@ export class PgBorder {
       ex.records = draft.records;
       ex.bindings = draft.bindings;
       ex.review = draft.review;
+      if (cite) ex.citing = cite;
       // The observations and open items this run reads, loaded apart from the draft: the entry's own
       // observation and review writes are what the store keeps.
       ex.observations = [...(seed.observations ?? [])];
@@ -168,6 +169,8 @@ export class PgBorder {
       ex.journal = { commit: (by: JsonObject, _m: unknown, _at: unknown, extra: JsonObject[] = []) => { captured = { by, extra }; return null; } } as unknown as Journal;
       const edgesBefore = new Set(draft.edges.keys());
       const result = fn(ex);
+      // The citation rides on the entry's cause, so the store's gate and the ledger both see it (7.6).
+      if (cite) captured.by = { ...captured.by, proposal: cite };
       if (this.acting) {
         const recordId = typeof result.record === "string" ? result.record : undefined;
         this.refuseActing(this.acting, recordId, ex.access, edgesBefore, draft.edges);
@@ -191,20 +194,20 @@ export class PgBorder {
   }
 
   /** A receive contract's run on a record (7.4 steps 5–6), its intake kept; with `forRun`, a late answer closing that run. */
-  async receive(name: string, recordId: string, body: string, callerId?: string, at?: string, forRun?: string): Promise<RunResult> {
+  async receive(name: string, recordId: string, body: string, callerId?: string, at?: string, forRun?: string, cite?: string): Promise<RunResult> {
     const c = this.contracts.get(name);
     if (!c) throw new Error(`no contract ${name}`);
     const seed = c.lands === "observation" ? await this.evidenceFor(recordId) : {};
-    const r = await this.run((ex) => ex.receiveRun(name, recordId, body, callerId, forRun), at, seed);
+    const r = await this.run((ex) => ex.receiveRun(name, recordId, body, callerId, forRun), at, seed, cite);
     if (typeof r.log === "string") await this.keepIntake(c, body, recordId, r.log, at);
     return r;
   }
 
   /** An arrival (9.2a): the payload finds or makes its record; its intake kept. */
-  async arrive(name: string, body: string, level: string, callerId?: string, of?: string, at?: string, within?: string): Promise<RunResult> {
+  async arrive(name: string, body: string, level: string, callerId?: string, of?: string, at?: string, within?: string, cite?: string): Promise<RunResult> {
     const c = this.contracts.get(name);
     if (!c) throw new Error(`no contract ${name}`);
-    const r = await this.run((ex) => ex.arriveRun(name, body, level, callerId, of, within), at);
+    const r = await this.run((ex) => ex.arriveRun(name, body, level, callerId, of, within), at, {}, cite);
     const record = (r.arrival as JsonObject | undefined)?.record;
     if (typeof r.log === "string") await this.keepIntake(c, body, typeof record === "string" ? record : "", r.log, at);
     return r;
