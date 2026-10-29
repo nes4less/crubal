@@ -324,6 +324,11 @@ contract: searchIndex
 
 - **Actions check again.** Nothing that acts relies on an index. A contract checks its `needs` against the
   store when it runs (chapter 7.4), so a unit that sold a moment ago and still shows can't be bought twice.
+- **A stream is compacted.** An entry a later entry for the same record supersedes MAY be dropped once the
+  store's row carries the later one, or once a removal stands for the record. Each record's latest entry, a
+  removal that stands and every `reset` marker remain, the head keeps its number, and no entry is ever
+  renumbered, so an index resuming from any cursor lands the same rows as before the compaction. A stream
+  is a change log, not a history: nothing may depend on an entry a later one superseded.
 - An index can be dropped and rebuilt from the projection at any time. It is never the truth.
 
 ## 12.7 The JSON form
