@@ -232,6 +232,11 @@ test("install through the host, then a form run, a send with an adapter and an a
   const fresh = new Index(pool);
   const again = await fresh.serve(store, "discs", {});
   assert.deepEqual(again.counts, page.counts, "the same counts from the table");
+  // Brief 50, decision 178: a tally is a cache and returns its space. Forced here (no floor, any ratio): the
+  // table is rewritten in place and answers the same after; nothing owed is 0.
+  assert.ok((await fresh.shrinkTallies({ ratio: 0, minBytes: 0 })) >= 0);
+  assert.deepEqual((await fresh.serve(store, "discs", {})).counts, page.counts, "the same counts after the rewrite");
+  assert.equal(await fresh.shrinkTallies(), 0, "a small table owes nothing");
   assert.ok(Number((await pool.query("select count(*)::int as n from index_tallies where owner = $1 and view = $2", ["shop.example", "discs"])).rows[0].n) >= 1, "a tally row kept");
   const picked = await call("GET", "/o/shop.example/v/discs?format=Blu-ray");
   assert.deepEqual((picked.body.rows as JsonObject[]).map((r) => r.heading), ["Home Alone"]);

@@ -463,6 +463,26 @@ export class Index {
     return gone;
   }
 
+  /**
+   * The tally table's space returned (brief 50, decision 178): a cache written and deleted a thousand rows an
+   * hour leaves its disk far past its rows (10 MB of tallies on 1.27 GB, 2026-10-29), and autovacuum reclaims
+   * rows, never space. When the table's disk is `ratio` times its live rows and past `minBytes`, it is
+   * rewritten in place (`vacuum full`: an exclusive lock for the seconds a small table takes); the bytes
+   * freed, or 0 when nothing was owed. Run after a prune, by the same loop.
+   */
+  async shrinkTallies(o: { ratio?: number; minBytes?: number } = {}): Promise<number> {
+    await this.talliesReady();
+    const ratio = o.ratio ?? 10;
+    const minBytes = o.minBytes ?? 64 * 1024 * 1024;
+    const size = async () =>
+      Number((await this.pool.query("select pg_total_relation_size('index_tallies')::bigint as n")).rows[0]?.n ?? 0);
+    const disk = await size();
+    const live = Number((await this.pool.query("select coalesce(sum(pg_column_size(t.*)), 0)::bigint as n from index_tallies t")).rows[0]?.n ?? 0);
+    if (disk < minBytes || disk <= live * ratio) return 0;
+    await this.pool.query("vacuum full index_tallies");
+    return Math.max(0, disk - (await size()));
+  }
+
   private readonly cache = new Map<string, unknown>();
   private remember(key: string, value: unknown): void {
     this.cache.set(key, value);
