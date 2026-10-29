@@ -9,7 +9,7 @@ import { Access, type Record as CrubalRecord } from "@cruba/crubal";
 import type { StreamEntry } from "@cruba/crubal";
 import { readFileSync } from "node:fs";
 import type { Json, JsonObject } from "@cruba/crubal";
-import { type Contract, type Keys, keyFor, publish } from "@cruba/crubal";
+import { type Contract, type Keys, keyFor, publish, signBundle } from "@cruba/crubal";
 import { type Adapter, PgBorder, borderOptions } from "@cruba/crubal-postgres";
 import { type Client, migrate as migrateStore, type Pool, transaction } from "@cruba/crubal-postgres";
 import { PgStore } from "@cruba/crubal-postgres";
@@ -659,6 +659,9 @@ export class Host {
    * Install into one owner what another owner on this host already holds (brief 1: a person's chain takes
    * the person package from the platform's own log): the bundle and what it extends, in order, each skipped
    * when the target already has that version. The source's bundles were verified when it installed them.
+   * A bundle the source holds unsigned (the standard packages it took at its own first install, before any
+   * key) is signed with the source's key as it is handed on (0.3.37): the source vouches for it, the copy
+   * carries that signature, and a store that refuses unsigned bundles takes it. The entry says `vouched`.
    */
   async installFromOwner(target: string, source: string, pkg: string, version?: string, at = this.now()): Promise<JsonObject[]> {
     const have = (await (await this.storeFor(target)).installed()).map((i) => `${i.package} /${i.version}`);
@@ -682,8 +685,22 @@ export class Host {
         await put(dep, String(e.version));
       }
       if (have.includes(key)) return;
-      const entry = await store.install(b.json, undefined, at);
-      out.push({ installed: String(b.json.id), version: b.version, entry: String(entry.log) });
+      let bundle = b.json;
+      let vouched: string | undefined;
+      if (!bundle.sig) {
+        const k = await this.keyOf(source);
+        if (k) {
+          bundle = signBundle(bundle as Parameters<typeof signBundle>[0], k.private, k.public) as JsonObject;
+          vouched = source;
+        }
+      }
+      const entry = await store.install(bundle, undefined, at);
+      out.push({
+        installed: String(b.json.id),
+        version: b.version,
+        entry: String(entry.log),
+        ...(vouched ? { vouched } : {}),
+      });
     };
     await put(pkg, version);
     return out;

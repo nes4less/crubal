@@ -786,7 +786,25 @@ ownership:
   await host.createOwner("platform.example:P-2");
   const done = await host.installFromOwner("platform.example:P-2", "platform.example", "pub.example/top");
   assert.deepEqual(done.map((d) => d.installed), ["pub.example/ground", "pub.example/top"]);
+  // A copy of a signed bundle carries the publisher's own signature: nobody vouches.
+  for (const d of done) assert.equal(d.vouched, undefined, `${String(d.installed)} needs no voucher`);
   assert.deepEqual(await host.installFromOwner("platform.example:P-2", "platform.example", "pub.example/top"), []);
+  // 0.3.37: a bundle the source holds unsigned (the standard packages it took before it had a key) is signed
+  // with the source's key as it is handed on, so a store that refuses unsigned bundles takes the copy; the
+  // entry names the voucher.
+  const PLAIN = `package: plain /2026-10-16
+  owner: pub.example
+  crubal: 2
+notes$
+`;
+  const lax = new PgStore(pool, "platform.example", { allowUnsigned: true });
+  await lax.install(publish(PLAIN, { date: "2026-10-16" }).bundle, undefined, "2026-10-16T12:00:04Z");
+  const vouched = await host.installFromOwner("platform.example:P-2", "platform.example", "pub.example/plain");
+  assert.deepEqual(
+    vouched.map((d) => [d.installed, d.vouched]),
+    [["pub.example/plain", "platform.example"]],
+    "the copy is signed by the platform",
+  );
   const chain = await host.storeFor("platform.example:P-2");
   assert.equal((await chain.definitions()).dict.levels.get("note"), "note");
   await assert.rejects(host.installFromOwner("platform.example:P-2", "platform.example", "pub.example/nothing"), /holds no pub.example\/nothing/);
