@@ -64,6 +64,7 @@ contract: ebayListing
 | `mode` · `terms` | how shared data is held, and the presenter's terms for `controlled` (7.8) | offer, take · offer |
 | `who` | who may run it: a condition over the caller (7.6) | all |
 | `audience` | the lowest audience (chapter 12.4) that may run it: `public`, `member`, `staff` or `owner`; the menu (chapter 14.6) and `who` still apply | all; default `public` for a contract with a `relation` (it grants the consumer's edge, chapter 14.4), `member` for any other form, `public` otherwise |
+| `quorum` | more than one person: the root's yes/no facet that, while true, makes a run need a met proposal it cites (7.6) | all |
 
 A form a consumer runs on a record they do not own (a buyer cancelling their order, a member keeping
 their profile) needs no ownership: `audience: member` admits them when an edge of theirs covers the record
@@ -176,6 +177,16 @@ the caller's values or classes reads the caller's record in this owner's log; a 
 (chapter 14.8) has none here, so for them only `caller may …` (what their edges hold, chapter 14.6) can hold,
 and `audience` is the usual gate. What a caller
 sees is decided by `show` rules (chapter 12) and the view's partition (chapter 12.6).
+
+**A quorum.** A contract may require more than one person: `quorum: <facet>` names a yes/no facet on the
+owner's root. While that flag is true, a run of the contract is refused (`stopped: quorum`) unless it cites a
+met proposal: a record whose `proposalContract` names the contract, whose `proposalState` is `met`, and,
+where the run names a record and the proposal names one, the same record. A commit whose cause names the
+contract is held to the same rule and cites the proposal in its cause (`proposal`), so an act taken by hand
+is gated as one taken through the border, and the ledger shows the proposal beside what it allowed. How a
+proposal is met is the host's: who proposes, who approves, how many, by when, and that the body applied is
+the body proposed; the engine checks the citation. The flag's own change is a run like any other, so a
+package that guards the contract that sets it makes switching the quorum off need the quorum.
 
 **Authentication is the host's job.** Sign-in, OAuth flows and API keys belong to whatever runs the
 contracts. A contract only declares what the other side requires:
@@ -294,6 +305,7 @@ A package MUST be refused at publish when a contract breaks these:
 8. `stream` names views of the package and comes with `to` and without `writes` or `needs`; `when: entry`
    comes only with `stream`; `missed` comes only with a schedule.
 9. `relation` is a relation the package declares (chapter 14.6).
+10. `quorum` names a yes/no facet the package defines or inherits.
 
 ## 7.11 Schedules
 
