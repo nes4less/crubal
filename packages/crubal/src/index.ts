@@ -16,7 +16,7 @@ export { checkRules, Engine, readRules, shortcutRules, type Result, type Rule, t
 export { entryHash, fieldPath, keyFor, land, matchParts, proposeSplit, readContracts, receive, sha256, validate, verifyChain, verifySig, writeHash, type Contract, type IntakeOutcome, type IntakeRecord, type Key, type Keys, type Observation } from "./store.ts";
 export { checkRecipe, dryRun, readRecipes, restamp, type Recipe, type ReviewItem, type Step, type StepStats } from "./migrate.ts";
 export { checkContracts, Exchange, proposalMet, quorumHolds, readRoles, verifyBorder, versionGate, type Role, type RunResult, type Offer } from "./exchange.ts";
-export { checkPackages, readPackages, type PackageInfo, type Subject, type SubjectPress, type Utility } from "./packages.ts";
+export { checkPackages, readPackages, type PackageInfo, type Lane, type LanePress, type Utility } from "./packages.ts";
 export { STANDARD_PACKAGES, standardDefinitions } from "./std-packages.ts";
 export { AUDIENCES, checkViews, emptyViewSet, partitionOf, PERIODS, periodOf, readViews, shownAudience, VIEW_SET_KEYS, Views, visibleTo, type Display, type Nested, type Period, type Projection, type ProjectOptions, type Shape, type ShownFor, type StreamEntry, type Sums, type View, type ViewSet } from "./views.ts";
 export { applyEntry, diffWrites, differs, emptyState, Journal, rebuild, redactable, redactableWrite, redactWrite, stateJson, type Draft, type Entry, type State, type Write } from "./log.ts";
@@ -25,6 +25,6 @@ export { arrive, decide, surviving, type Arrival, type ArrivalStore } from "./ar
 export { apply, archive, attach, detach, effective, emptyStore, foldUp, issue, issuersFor, merge, ownedKeys, pending, readInstructionBlocks, unarchive, type Instruction, type Records, type Store } from "./lifecycle.ts";
 export { Access, checkPermissions, foreign, MODES, readAccess, VERBS, type Edge, type Effective, type MenuItem, type Mode, type Permissions, type Preset } from "./access.ts";
 export { isSchedule, nextTick, readSchedule, ticksDue, type Schedule } from "./schedule.ts";
-export { bundleHash, bundleOf, classJson, classLineJson, contractJson, emptyParsed, filterJson, kindJson, parsePackage, printBundle, readBundle, readBundleInto, readBundleOnto, recipeJson, ruleJson, shapeJson, signBundle, utilityJson, verifyBundle, viewJson, type Parsed, subjectJson } from "./bundle.ts";
+export { bundleHash, bundleOf, classJson, classLineJson, contractJson, emptyParsed, filterJson, kindJson, parsePackage, printBundle, readBundle, readBundleInto, readBundleOnto, recipeJson, ruleJson, shapeJson, signBundle, utilityJson, verifyBundle, viewJson, type Parsed, laneJson } from "./bundle.ts";
 export { classify, publish, type Change, type PublishOptions } from "./publish.ts";
 export { formOf, type FormOptions } from "./forms.ts";

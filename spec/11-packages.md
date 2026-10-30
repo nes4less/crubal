@@ -38,7 +38,7 @@ package: me /2026-10-13
 | `terms` | how each audience may use what it's shown: `public: search yes, answer yes, train no` (chapter 12.5.1) |
 
 The rest of the package is its member files: `facet:`, `class:`, `rule:`, `contract:`, `kind:`, `view:`,
-`shape:`, `display:`, `filter:`, `role:`, `subject:` (chapter 12), `migration:`, `permissions:` and `ownership:`
+`shape:`, `display:`, `filter:`, `role:`, `lane:` (chapter 12), `migration:`, `permissions:` and `ownership:`
 (chapter 14) and `utility:` blocks, in any number of files. A package MAY also publish **reference records** (data files in
 the text form, chapter 2) that others read but don't own copies of: the units table is one.
 
@@ -61,7 +61,7 @@ utility: orders /2026-10-16
 | `label` · `describe` | what people see |
 | `serves` | whom it mounts for: presets, relations or audiences (chapter 14.6, 12.4), each optionally narrowed in parentheses to the presets, menu items or relations it shows screens for |
 | `needs` | the packages (`domain/name`, optionally with a version) and the other utilities it depends on |
-| `acts` | the acts the utility provides by name (lower-case words), which a subject's presses may name (12.10); the app that mounts the utility provides their bodies |
+| `acts` | the acts the utility provides by name (lower-case words), which a lane's presses may name (12.10); the app that mounts the utility provides their bodies |
 | `setup` | what a deployment provides before it runs: `connection <name>` (a credential the host holds, chapter 7.6) and `setting <facet>` (a value on the deployment's own record) |
 
 A utility is a member like any other: versioned, listed in `members`, carried in the bundle (11.6). It
@@ -221,7 +221,7 @@ A published version MUST NOT change. A mistake is fixed by a new version.
 ```
 
 The member sections (`kinds`, `facets`, `classes`, `rules`, `contracts`, `views`, `shapes`, `displays`,
-`filters`, `roles`, `permissions`, `ownership`, `recipes`, `utilities`, `subjects`) each hold their members'
+`filters`, `roles`, `permissions`, `ownership`, `recipes`, `utilities`, `lanes`) each hold their members'
 JSON forms as the chapters define them. A utility with acts carries them as `"acts": ["pick", "pack"]`.
 
 ## 11.7 The home: crubal.com

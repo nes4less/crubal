@@ -1,4 +1,4 @@
-// The `subject:` block (spec 12.10): a row of the grid a package declares. Read with its parts, carried
+// The `lane:` block (spec 12.10): a row of the grid a package declares. Read with its parts, carried
 // into the bundle and back, versioned in `members`, and refused at publish when it names a view, filter,
 // value, slot or act the package doesn't declare, or serves wider than its view shows.
 
@@ -56,7 +56,7 @@ utility: orders /2026-11-05
 ${tail}
 `;
 
-const toPick = `subject: ordersToPick /2026-11-05
+const toPick = `lane: ordersToPick /2026-11-05
   label: Orders to pick
   utility: orders
   view: desk
@@ -82,7 +82,7 @@ const toPick = `subject: ordersToPick /2026-11-05
     quick: "Confirm address" -> confirmAddress
     opens: page`;
 
-const setup = `subject: setup /2026-11-05
+const setup = `lane: setup /2026-11-05
   label: Setup
   utility: orders
   serve: setup
@@ -93,9 +93,9 @@ const setup = `subject: setup /2026-11-05
     word: one "step done" many "steps done"
     press: Open Setup -> /setup`;
 
-test("a subject block is read with its parts", () => {
+test("a lane block is read with its parts", () => {
   const [info] = readPackages(shop(toPick));
-  const s = info?.subjects[0];
+  const s = info?.lanes[0];
   assert.equal(s?.name, "ordersToPick");
   assert.equal(s?.version, "2026-11-05");
   assert.equal(s?.view, "desk");
@@ -114,32 +114,32 @@ test("a subject block is read with its parts", () => {
   checkPackages(shop(toPick));
 });
 
-test("a utility's own subject names a serve and no view; done may be viewed", () => {
+test("a utility's own lane names a serve and no view; done may be viewed", () => {
   const [info] = readPackages(shop(setup));
-  assert.equal(info?.subjects[0]?.serve, "setup");
+  assert.equal(info?.lanes[0]?.serve, "setup");
   checkPackages(shop(setup));
   const viewed = toPick.replace("done: orderState = picking", "done: viewed");
-  assert.equal(readPackages(shop(viewed))[0]?.subjects[0]?.done, "viewed");
+  assert.equal(readPackages(shop(viewed))[0]?.lanes[0]?.done, "viewed");
   checkPackages(shop(viewed));
 });
 
-test("a subject round-trips through its bundle and is versioned in members", () => {
+test("a lane round-trips through its bundle and is versioned in members", () => {
   const first = bundleOf(parsePackage(shop(toPick)));
-  const subjects = first.subjects as { subject: string; card: { quick: { word: string; to: string }[] } }[];
-  assert.equal(subjects[0]?.subject, "ordersToPick");
-  assert.deepEqual(subjects[0]?.card.quick, [{ word: "Confirm address", to: "confirmAddress" }]);
+  const lanes = first.lanes as { lane: string; card: { quick: { word: string; to: string }[] } }[];
+  assert.equal(lanes[0]?.lane, "ordersToPick");
+  assert.deepEqual(lanes[0]?.card.quick, [{ word: "Confirm address", to: "confirmAddress" }]);
   assert.deepEqual((first.utilities as { acts: string[] }[])[0]?.acts, ["pick", "pack", "confirmAddress"]);
   const text = printBundle(first);
-  assert.match(text, /^subject: ordersToPick \/2026-11-05$/m);
+  assert.match(text, /^lane: ordersToPick \/2026-11-05$/m);
   assert.match(text, /^    quick: "Confirm address" -> confirmAddress$/m);
   assert.equal(serialize(bundleOf(readBundle(first))), serialize(first));
   const { bundle } = publish(shop(toPick), { date: "2026-11-06" });
-  assert.equal((bundle.members as { [k: string]: string })["subject:ordersToPick"], "2026-11-06");
+  assert.equal((bundle.members as { [k: string]: string })["lane:ordersToPick"], "2026-11-06");
 });
 
 const refused = (tail: string, why: RegExp) => assert.throws(() => checkPackages(shop(tail)), (e: unknown) => e instanceof CrubalError && why.test(e.message));
 
-test("a subject is refused when it names what the package doesn't declare", () => {
+test("a lane is refused when it names what the package doesn't declare", () => {
   refused(toPick.replace("view: desk", "view: shelf"), /names the view shelf/);
   refused(toPick.replace("pick: orderState = paid", "pick: orderState = lost"), /lost is not a value/);
   refused(toPick.replace("pick: orderState = paid", "pick: region = us"), /region, which isn't a filter/);

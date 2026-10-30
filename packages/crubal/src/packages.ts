@@ -27,8 +27,8 @@ export type PackageInfo = {
   terms: { [audience: string]: string };
   /** The utilities the package declares (11.1, `utility:` blocks). */
   utilities: Utility[];
-  /** The subjects the package declares (12.10, `subject:` blocks). */
-  subjects: Subject[];
+  /** The lanes the package declares (12.10, `lane:` blocks). */
+  lanes: Lane[];
 };
 
 /**
@@ -46,21 +46,21 @@ export type Utility = {
   /** Package identities (`domain/name`, optionally ` /version`) and bare utility names. */
   needs: { name: string; version?: string; line: number }[];
   setup: ({ connection: string; line: number } | { setting: string; line: number })[];
-  /** The acts the utility provides by name (11.1, `acts:`), which a subject's presses may name (12.10). */
+  /** The acts the utility provides by name (11.1, `acts:`), which a lane's presses may name (12.10). */
   acts: { name: string; line: number }[];
   line: number;
 };
 
-/** A press on a subject's home or card (12.10): a word, and where it lands: a path, `page`, or an act. */
-export type SubjectPress = { word: string; to: string; line: number };
+/** A press on a lane's home or card (12.10): a word, and where it lands: a path, `page`, or an act. */
+export type LanePress = { word: string; to: string; line: number };
 
 /**
- * A subject (12.10): a row of the grid a package declares. What it lists (a view and the picks for what
+ * A lane (12.10): a row of the grid a package declares. What it lists (a view and the picks for what
  * is ahead and what is done), whom it serves, how it sorts (band, house), what its home card shows and
- * how its object cards map to the compass, with the presses that act on them. A utility's own subject
+ * how its object cards map to the compass, with the presses that act on them. A utility's own lane
  * (`serve:`) names the function the utility provides instead of a view.
  */
-export type Subject = {
+export type Lane = {
   name: string;
   version: string;
   label?: string;
@@ -75,7 +75,7 @@ export type Subject = {
   home: {
     figure?: { of: "count" } | { of: "sum" | "state"; slot: string };
     word?: { one: string; many: string } | { word: string };
-    press?: SubjectPress;
+    press?: LanePress;
     chips: string[];
     line: number;
   };
@@ -86,9 +86,9 @@ export type Subject = {
     state?: string;
     moment?: string;
     figure?: string;
-    primary?: SubjectPress;
-    quiet?: SubjectPress;
-    quick: SubjectPress[];
+    primary?: LanePress;
+    quiet?: LanePress;
+    quick: LanePress[];
     opens: "page";
     line: number;
   };
@@ -155,7 +155,7 @@ function readUtility(node: Node): Utility {
 }
 
 /** `Word -> target`: a press's word and where it lands. */
-function readPress(value: string, line: number, what: string): SubjectPress {
+function readPress(value: string, line: number, what: string): LanePress {
   const at = value.lastIndexOf(" -> ");
   if (at < 0) throw new CrubalError(`${what} is "Word -> target": ${value}`, line);
   const word = unquote(value.slice(0, at).trim());
@@ -171,11 +171,11 @@ function readPick(value: string, line: number, what: string): { filter: string; 
   return { filter: m[1] as string, value: unquote((m[2] as string).trim()), line };
 }
 
-/** Read one `subject:` block (12.10). */
-function readSubject(node: Node): Subject {
+/** Read one `lane:` block (12.10). */
+function readLane(node: Node): Lane {
   const [name = "", version = ""] = node.value.split(/\s+\//).map((s) => s.trim());
-  if (!/^[a-z][\w-]*$/.test(name)) throw new CrubalError(`a subject is "subject: <name> /<version>", the name a lower-case word: ${node.value}`, node.line);
-  const s: Subject = { name, version, band: "rarely", house: 8, serves: [], home: { chips: [], line: node.line }, line: node.line };
+  if (!/^[a-z][\w-]*$/.test(name)) throw new CrubalError(`a lane is "lane: <name> /<version>", the name a lower-case word: ${node.value}`, node.line);
+  const s: Lane = { name, version, band: "rarely", house: 8, serves: [], home: { chips: [], line: node.line }, line: node.line };
   for (const c of node.children) {
     if (!c.key) continue;
     const v = c.value.trim();
@@ -215,10 +215,10 @@ function readSubject(node: Node): Subject {
           s.home.word = m ? { one: unquote(m[1] as string), many: unquote(m[2] as string) } : { word: unquote(hv) };
         } else if (h.key === "press") s.home.press = readPress(hv, h.line, "home's press");
         else if (h.key === "chips") s.home.chips = splitList(hv);
-        else throw new CrubalError(`a subject's home has figure, word, press and chips, not ${h.key}`, h.line);
+        else throw new CrubalError(`a lane's home has figure, word, press and chips, not ${h.key}`, h.line);
       }
     } else if (c.key === "card") {
-      const card: NonNullable<Subject["card"]> = { name: [], sub: [], lines: [], quick: [], opens: "page", line: c.line };
+      const card: NonNullable<Lane["card"]> = { name: [], sub: [], lines: [], quick: [], opens: "page", line: c.line };
       for (const k of c.children) {
         if (!k.key) continue;
         const kv = k.value.trim();
@@ -233,15 +233,15 @@ function readSubject(node: Node): Subject {
         else if (k.key === "quick") card.quick.push(readPress(kv, k.line, "quick"));
         else if (k.key === "opens") {
           if (kv !== "page") throw new CrubalError(`opens: ${kv}: a card opens its page; a nest is not in this language version`, k.line);
-        } else throw new CrubalError(`a subject's card has name, sub, lines, state, moment, figure, primary, quiet, quick and opens, not ${k.key}`, k.line);
+        } else throw new CrubalError(`a lane's card has name, sub, lines, state, moment, figure, primary, quiet, quick and opens, not ${k.key}`, k.line);
       }
-      if (!card.name.length) throw new CrubalError(`the subject ${name}'s card names nothing`, c.line);
+      if (!card.name.length) throw new CrubalError(`the lane ${name}'s card names nothing`, c.line);
       s.card = card;
-    } else throw new CrubalError(`a subject has label, utility, view, serve, pick, done, band, house, serves, home and card, not ${c.key}`, c.line);
+    } else throw new CrubalError(`a lane has label, utility, view, serve, pick, done, band, house, serves, home and card, not ${c.key}`, c.line);
   }
-  if (!s.view && !s.serve) throw new CrubalError(`the subject ${name} names no view and no serve`, node.line);
-  if (s.view && s.serve) throw new CrubalError(`the subject ${name} names both a view and a serve`, node.line);
-  if (s.serve && (s.pick || s.done || s.card)) throw new CrubalError(`the subject ${name} is a utility's own (serve): no pick, done or card`, node.line);
+  if (!s.view && !s.serve) throw new CrubalError(`the lane ${name} names no view and no serve`, node.line);
+  if (s.view && s.serve) throw new CrubalError(`the lane ${name} names both a view and a serve`, node.line);
+  if (s.serve && (s.pick || s.done || s.card)) throw new CrubalError(`the lane ${name} is a utility's own (serve): no pick, done or card`, node.line);
   return s;
 }
 
@@ -255,7 +255,7 @@ export function readPackages(source: string): PackageInfo[] {
     const [head, ...rest] = readTree(text);
     if (!head) throw new CrubalError("an empty package", start + 1);
     const [name = "", version = ""] = head.value.split(/\s+\//).map((s) => s.trim());
-    const info: PackageInfo = { name, version, owner: "", line: head.line, crubal: LANGUAGE, crubalLine: head.line, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {}, utilities: [], subjects: [] };
+    const info: PackageInfo = { name, version, owner: "", line: head.line, crubal: LANGUAGE, crubalLine: head.line, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {}, utilities: [], lanes: [] };
     for (const c of head.children) {
       if (c.key === "owner") info.owner = c.value;
       if (c.key === "crubal") {
@@ -279,10 +279,10 @@ export function readPackages(source: string): PackageInfo[] {
         if (info.utilities.some((x) => x.name === u.name)) throw new CrubalError(`the utility ${u.name} twice in one package`, node.line);
         info.utilities.push(u);
       }
-      if (node.key === "subject") {
-        const s = readSubject(node);
-        if (info.subjects.some((x) => x.name === s.name)) throw new CrubalError(`the subject ${s.name} twice in one package`, node.line);
-        info.subjects.push(s);
+      if (node.key === "lane") {
+        const s = readLane(node);
+        if (info.lanes.some((x) => x.name === s.name)) throw new CrubalError(`the lane ${s.name} twice in one package`, node.line);
+        info.lanes.push(s);
       }
     }
     // Definitions are everything after the header block.
@@ -348,27 +348,27 @@ export function checkPackages(source: string): PackageInfo[] {
     }
   }
   checkUtilities(source, pkgs);
-  checkSubjects(source, pkgs);
+  checkLanes(source, pkgs);
   return pkgs;
 }
 
 const AUDIENCE_RANK: { [a: string]: number } = { public: 0, member: 1, staff: 2, owner: 3 };
 
 /**
- * Subject blocks (12.10): a subject names its own package's view, the view's filters for its picks with
+ * Lane blocks (12.10): a lane names its own package's view, the view's filters for its picks with
  * real values of their facets, slots of the view's shapes for its card, its utility's acts for its presses,
  * and serves nothing wider than its view shows. File-local, as the utility checks are.
  */
-function checkSubjects(source: string, pkgs: PackageInfo[]): void {
-  if (!pkgs.some((p) => p.subjects.length)) return;
+function checkLanes(source: string, pkgs: PackageInfo[]): void {
+  if (!pkgs.some((p) => p.lanes.length)) return;
   const { perms } = readAccess(source);
   const dict = readDefinitions(source);
   const views = readViews(source);
   const known = (n: string) => perms.presets.has(n) || perms.relations.has(n) || AUDIENCES.has(n);
   const item = (n: string) => perms.presets.has(n) || perms.menu.has(n) || perms.relations.has(n);
   for (const p of pkgs) {
-    for (const s of p.subjects) {
-      const where = `the subject ${s.name}`;
+    for (const s of p.lanes) {
+      const where = `the lane ${s.name}`;
       const utility = s.utility ? p.utilities.find((u) => u.name === s.utility) : undefined;
       if (s.utility && !utility) throw new CrubalError(`${where} names the utility ${s.utility}, which this package doesn't declare`, s.line);
       const acts = new Set((utility?.acts ?? []).map((a) => a.name));
@@ -376,7 +376,7 @@ function checkSubjects(source: string, pkgs: PackageInfo[]): void {
         if (!known(sv.as)) throw new CrubalError(`${where} serves ${sv.as}, which isn't a preset, relation or audience here`, sv.line);
         for (const i of sv.items ?? []) if (!item(i)) throw new CrubalError(`${where} serves ${sv.as}(${i}): ${i} isn't a preset, menu item or relation`, sv.line);
       }
-      const press = (pr: SubjectPress | undefined, what: string) => {
+      const press = (pr: LanePress | undefined, what: string) => {
         if (!pr) return;
         if (pr.to === "page" || pr.to.startsWith("/")) return;
         if (!acts.has(pr.to)) throw new CrubalError(`${where}'s ${what} ${pr.word} -> ${pr.to}: ${pr.to} isn't an act of ${s.utility ?? "its utility"}`, pr.line);
