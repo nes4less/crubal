@@ -30,7 +30,7 @@
   },
   "dependencies": {
     "@cruba/crubal": "0.3.38",
-    "@cruba/crubal-postgres": "0.3.37",
+    "@cruba/crubal-postgres": "0.3.38",
     "pg": "^8.13.0"
   },
   "devDependencies": {
