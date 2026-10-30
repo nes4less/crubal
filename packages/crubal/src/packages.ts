@@ -6,6 +6,7 @@ import { type Dictionary, emptyDictionary, type Facet, readDefinitions, unquote 
 import { LANGUAGE } from "./read-text.ts";
 import { readContracts } from "./store.ts";
 import { readAccess } from "./access.ts";
+import { readViews } from "./views.ts";
 import { CrubalError, type Node, readTree } from "./tree.ts";
 
 export type PackageInfo = {
@@ -26,6 +27,8 @@ export type PackageInfo = {
   terms: { [audience: string]: string };
   /** The utilities the package declares (11.1, `utility:` blocks). */
   utilities: Utility[];
+  /** The subjects the package declares (12.10, `subject:` blocks). */
+  subjects: Subject[];
 };
 
 /**
@@ -43,6 +46,52 @@ export type Utility = {
   /** Package identities (`domain/name`, optionally ` /version`) and bare utility names. */
   needs: { name: string; version?: string; line: number }[];
   setup: ({ connection: string; line: number } | { setting: string; line: number })[];
+  /** The acts the utility provides by name (11.1, `acts:`), which a subject's presses may name (12.10). */
+  acts: { name: string; line: number }[];
+  line: number;
+};
+
+/** A press on a subject's home or card (12.10): a word, and where it lands: a path, `page`, or an act. */
+export type SubjectPress = { word: string; to: string; line: number };
+
+/**
+ * A subject (12.10): a row of the grid a package declares. What it lists (a view and the picks for what
+ * is ahead and what is done), whom it serves, how it sorts (band, house), what its home card shows and
+ * how its object cards map to the compass, with the presses that act on them. A utility's own subject
+ * (`serve:`) names the function the utility provides instead of a view.
+ */
+export type Subject = {
+  name: string;
+  version: string;
+  label?: string;
+  utility?: string;
+  view?: string;
+  serve?: string;
+  pick?: { filter: string; value: string; line: number };
+  done?: { filter: string; value: string; line: number } | "viewed";
+  band: "daily" | "weekly" | "rarely";
+  house: number;
+  serves: { as: string; items?: string[]; line: number }[];
+  home: {
+    figure?: { of: "count" } | { of: "sum" | "state"; slot: string };
+    word?: { one: string; many: string } | { word: string };
+    press?: SubjectPress;
+    chips: string[];
+    line: number;
+  };
+  card?: {
+    name: string[];
+    sub: string[];
+    lines: string[];
+    state?: string;
+    moment?: string;
+    figure?: string;
+    primary?: SubjectPress;
+    quiet?: SubjectPress;
+    quick: SubjectPress[];
+    opens: "page";
+    line: number;
+  };
   line: number;
 };
 
@@ -72,7 +121,7 @@ function splitServes(value: string): string[] {
 function readUtility(node: Node): Utility {
   const [name = "", version = ""] = node.value.split(/\s+\//).map((s) => s.trim());
   if (!/^[a-z][\w-]*$/.test(name)) throw new CrubalError(`a utility is "utility: <name> /<version>", the name a lower-case word: ${node.value}`, node.line);
-  const u: Utility = { name, version, serves: [], needs: [], setup: [], line: node.line };
+  const u: Utility = { name, version, serves: [], needs: [], setup: [], acts: [], line: node.line };
   for (const c of node.children) {
     if (!c.key) continue;
     if (c.key === "label") u.label = unquote(c.value.trim());
@@ -95,9 +144,105 @@ function readUtility(node: Node): Utility {
         if (!m) throw new CrubalError(`setup: ${s} is not "connection <name>" or "setting <facet>"`, c.line);
         u.setup.push(m[1] === "connection" ? { connection: m[2] as string, line: c.line } : { setting: m[2] as string, line: c.line });
       }
-    } else throw new CrubalError(`a utility has label, describe, serves, needs and setup, not ${c.key}`, c.line);
+    } else if (c.key === "acts") {
+      for (const a of splitList(c.value)) {
+        if (!/^[a-z][\w-]*$/.test(a)) throw new CrubalError(`acts: ${a} is not a lower-case word`, c.line);
+        u.acts.push({ name: a, line: c.line });
+      }
+    } else throw new CrubalError(`a utility has label, describe, serves, needs, setup and acts, not ${c.key}`, c.line);
   }
   return u;
+}
+
+/** `Word -> target`: a press's word and where it lands. */
+function readPress(value: string, line: number, what: string): SubjectPress {
+  const at = value.lastIndexOf(" -> ");
+  if (at < 0) throw new CrubalError(`${what} is "Word -> target": ${value}`, line);
+  const word = unquote(value.slice(0, at).trim());
+  const to = value.slice(at + 4).trim();
+  if (!word || !to) throw new CrubalError(`${what} is "Word -> target": ${value}`, line);
+  return { word, to, line };
+}
+
+/** `filter = value`: a view's filter pick. */
+function readPick(value: string, line: number, what: string): { filter: string; value: string; line: number } {
+  const m = value.match(/^([\w:-]+)\s*=\s*(.+)$/);
+  if (!m) throw new CrubalError(`${what} is "filter = value": ${value}`, line);
+  return { filter: m[1] as string, value: unquote((m[2] as string).trim()), line };
+}
+
+/** Read one `subject:` block (12.10). */
+function readSubject(node: Node): Subject {
+  const [name = "", version = ""] = node.value.split(/\s+\//).map((s) => s.trim());
+  if (!/^[a-z][\w-]*$/.test(name)) throw new CrubalError(`a subject is "subject: <name> /<version>", the name a lower-case word: ${node.value}`, node.line);
+  const s: Subject = { name, version, band: "rarely", house: 8, serves: [], home: { chips: [], line: node.line }, line: node.line };
+  for (const c of node.children) {
+    if (!c.key) continue;
+    const v = c.value.trim();
+    if (c.key === "label") s.label = unquote(v);
+    else if (c.key === "utility") s.utility = v;
+    else if (c.key === "view") s.view = v;
+    else if (c.key === "serve") s.serve = v;
+    else if (c.key === "pick") s.pick = readPick(v, c.line, "pick");
+    else if (c.key === "done") s.done = v === "viewed" ? "viewed" : readPick(v, c.line, "done");
+    else if (c.key === "band") {
+      if (v !== "daily" && v !== "weekly" && v !== "rarely") throw new CrubalError(`band is daily, weekly or rarely, not ${v}`, c.line);
+      s.band = v;
+    } else if (c.key === "house") {
+      if (!/^\d+$/.test(v)) throw new CrubalError(`house is a whole number, governance first: ${v}`, c.line);
+      s.house = Number(v);
+    } else if (c.key === "serves") {
+      for (const p of splitServes(v)) {
+        const m = p.match(/^([A-Za-z][\w-]*)(?:\((.*)\))?$/);
+        if (!m) throw new CrubalError(`serves: ${p} is not a name, or a name with items in parentheses`, c.line);
+        s.serves.push({ as: m[1] as string, ...(m[2] !== undefined ? { items: splitList(m[2]) } : {}), line: c.line });
+      }
+    } else if (c.key === "home") {
+      s.home.line = c.line;
+      for (const h of c.children) {
+        if (!h.key) continue;
+        const hv = h.value.trim();
+        if (h.key === "figure") {
+          const m = hv.match(/^(count|sum|state)(?:\s+(\S+))?$/);
+          if (!m) throw new CrubalError(`figure is count, "sum <slot>" or "state <slot>", not ${hv}`, h.line);
+          if (m[1] === "count") s.home.figure = { of: "count" };
+          else {
+            if (!m[2]) throw new CrubalError(`figure ${m[1]} names a slot`, h.line);
+            s.home.figure = { of: m[1] as "sum" | "state", slot: m[2] };
+          }
+        } else if (h.key === "word") {
+          const m = hv.match(/^one\s+("(?:[^"\\]|\\.)*")\s+many\s+("(?:[^"\\]|\\.)*")$/);
+          s.home.word = m ? { one: unquote(m[1] as string), many: unquote(m[2] as string) } : { word: unquote(hv) };
+        } else if (h.key === "press") s.home.press = readPress(hv, h.line, "home's press");
+        else if (h.key === "chips") s.home.chips = splitList(hv);
+        else throw new CrubalError(`a subject's home has figure, word, press and chips, not ${h.key}`, h.line);
+      }
+    } else if (c.key === "card") {
+      const card: NonNullable<Subject["card"]> = { name: [], sub: [], lines: [], quick: [], opens: "page", line: c.line };
+      for (const k of c.children) {
+        if (!k.key) continue;
+        const kv = k.value.trim();
+        if (k.key === "name") card.name = splitList(kv);
+        else if (k.key === "sub") card.sub = splitList(kv);
+        else if (k.key === "lines") card.lines = splitList(kv);
+        else if (k.key === "state") card.state = kv;
+        else if (k.key === "moment") card.moment = kv;
+        else if (k.key === "figure") card.figure = kv;
+        else if (k.key === "primary") card.primary = readPress(kv, k.line, "primary");
+        else if (k.key === "quiet") card.quiet = readPress(kv, k.line, "quiet");
+        else if (k.key === "quick") card.quick.push(readPress(kv, k.line, "quick"));
+        else if (k.key === "opens") {
+          if (kv !== "page") throw new CrubalError(`opens: ${kv}: a card opens its page; a nest is not in this language version`, k.line);
+        } else throw new CrubalError(`a subject's card has name, sub, lines, state, moment, figure, primary, quiet, quick and opens, not ${k.key}`, k.line);
+      }
+      if (!card.name.length) throw new CrubalError(`the subject ${name}'s card names nothing`, c.line);
+      s.card = card;
+    } else throw new CrubalError(`a subject has label, utility, view, serve, pick, done, band, house, serves, home and card, not ${c.key}`, c.line);
+  }
+  if (!s.view && !s.serve) throw new CrubalError(`the subject ${name} names no view and no serve`, node.line);
+  if (s.view && s.serve) throw new CrubalError(`the subject ${name} names both a view and a serve`, node.line);
+  if (s.serve && (s.pick || s.done || s.card)) throw new CrubalError(`the subject ${name} is a utility's own (serve): no pick, done or card`, node.line);
+  return s;
 }
 
 /** Split a file into its packages, keeping line numbers true. */
@@ -110,7 +255,7 @@ export function readPackages(source: string): PackageInfo[] {
     const [head, ...rest] = readTree(text);
     if (!head) throw new CrubalError("an empty package", start + 1);
     const [name = "", version = ""] = head.value.split(/\s+\//).map((s) => s.trim());
-    const info: PackageInfo = { name, version, owner: "", line: head.line, crubal: LANGUAGE, crubalLine: head.line, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {}, utilities: [] };
+    const info: PackageInfo = { name, version, owner: "", line: head.line, crubal: LANGUAGE, crubalLine: head.line, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {}, utilities: [], subjects: [] };
     for (const c of head.children) {
       if (c.key === "owner") info.owner = c.value;
       if (c.key === "crubal") {
@@ -133,6 +278,11 @@ export function readPackages(source: string): PackageInfo[] {
         const u = readUtility(node);
         if (info.utilities.some((x) => x.name === u.name)) throw new CrubalError(`the utility ${u.name} twice in one package`, node.line);
         info.utilities.push(u);
+      }
+      if (node.key === "subject") {
+        const s = readSubject(node);
+        if (info.subjects.some((x) => x.name === s.name)) throw new CrubalError(`the subject ${s.name} twice in one package`, node.line);
+        info.subjects.push(s);
       }
     }
     // Definitions are everything after the header block.
@@ -198,7 +348,79 @@ export function checkPackages(source: string): PackageInfo[] {
     }
   }
   checkUtilities(source, pkgs);
+  checkSubjects(source, pkgs);
   return pkgs;
+}
+
+const AUDIENCE_RANK: { [a: string]: number } = { public: 0, member: 1, staff: 2, owner: 3 };
+
+/**
+ * Subject blocks (12.10): a subject names its own package's view, the view's filters for its picks with
+ * real values of their facets, slots of the view's shapes for its card, its utility's acts for its presses,
+ * and serves nothing wider than its view shows. File-local, as the utility checks are.
+ */
+function checkSubjects(source: string, pkgs: PackageInfo[]): void {
+  if (!pkgs.some((p) => p.subjects.length)) return;
+  const { perms } = readAccess(source);
+  const dict = readDefinitions(source);
+  const views = readViews(source);
+  const known = (n: string) => perms.presets.has(n) || perms.relations.has(n) || AUDIENCES.has(n);
+  const item = (n: string) => perms.presets.has(n) || perms.menu.has(n) || perms.relations.has(n);
+  for (const p of pkgs) {
+    for (const s of p.subjects) {
+      const where = `the subject ${s.name}`;
+      const utility = s.utility ? p.utilities.find((u) => u.name === s.utility) : undefined;
+      if (s.utility && !utility) throw new CrubalError(`${where} names the utility ${s.utility}, which this package doesn't declare`, s.line);
+      const acts = new Set((utility?.acts ?? []).map((a) => a.name));
+      for (const sv of s.serves) {
+        if (!known(sv.as)) throw new CrubalError(`${where} serves ${sv.as}, which isn't a preset, relation or audience here`, sv.line);
+        for (const i of sv.items ?? []) if (!item(i)) throw new CrubalError(`${where} serves ${sv.as}(${i}): ${i} isn't a preset, menu item or relation`, sv.line);
+      }
+      const press = (pr: SubjectPress | undefined, what: string) => {
+        if (!pr) return;
+        if (pr.to === "page" || pr.to.startsWith("/")) return;
+        if (!acts.has(pr.to)) throw new CrubalError(`${where}'s ${what} ${pr.word} -> ${pr.to}: ${pr.to} isn't an act of ${s.utility ?? "its utility"}`, pr.line);
+      };
+      press(s.home.press, "press");
+      if (s.serve) {
+        if (!/^[a-z][\w-]*$/.test(s.serve)) throw new CrubalError(`${where}'s serve is a lower-case word: ${s.serve}`, s.line);
+        continue;
+      }
+      const view = views.views.get(s.view as string);
+      if (!view) throw new CrubalError(`${where} names the view ${s.view}, which this package doesn't declare`, s.line);
+      // Serves nothing wider than the view shows (12.4): an audience named must rank at or above the view's.
+      for (const sv of s.serves) {
+        const rank = AUDIENCE_RANK[sv.as];
+        if (rank !== undefined && rank < (AUDIENCE_RANK[view.show] ?? 0)) throw new CrubalError(`${where} serves ${sv.as}, wider than ${view.name} shows (${view.show})`, sv.line);
+      }
+      const pick = (pk: { filter: string; value: string; line: number } | undefined, what: string) => {
+        if (!pk) return;
+        if (!view.filters.includes(pk.filter)) throw new CrubalError(`${where}'s ${what} names ${pk.filter}, which isn't a filter of ${view.name}`, pk.line);
+        const f = views.filters.get(pk.filter);
+        const facet = f ? dict.facets.get(f.facet) : undefined;
+        if (facet?.values && !facet.values.some((x) => x.value === pk.value)) throw new CrubalError(`${where}'s ${what}: ${pk.value} is not a value of ${facet.key}`, pk.line);
+      };
+      pick(s.pick, "pick");
+      if (s.done && s.done !== "viewed") pick(s.done, "done");
+      for (const ch of s.home.chips) if (!view.filters.includes(ch)) throw new CrubalError(`${where}'s chips name ${ch}, which isn't a filter of ${view.name}`, s.home.line);
+      const slots = new Set<string>(["id"]);
+      for (const sh of view.shapes) for (const sl of views.shapes.get(sh)?.slots ?? []) slots.add(sl.to);
+      const slot = (k: string | undefined, what: string, line: number) => {
+        if (k !== undefined && !slots.has(k)) throw new CrubalError(`${where}'s ${what} names ${k}, which isn't a slot of ${view.name}'s shape`, line);
+      };
+      if (s.home.figure && s.home.figure.of !== "count") slot(s.home.figure.slot, "figure", s.home.line);
+      const card = s.card;
+      if (card) {
+        for (const k of [...card.name, ...card.sub, ...card.lines]) slot(k, "card", card.line);
+        slot(card.state, "state", card.line);
+        slot(card.moment, "moment", card.line);
+        slot(card.figure, "figure", card.line);
+        press(card.primary, "primary");
+        press(card.quiet, "quiet");
+        for (const q of card.quick) press(q, "quick");
+      }
+    }
+  }
 }
 
 /**

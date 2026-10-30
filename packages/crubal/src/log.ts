@@ -39,7 +39,7 @@ export function emptyState(): State {
 
 // A filter names its facet in a `facet` field, a view its `shape`, a contract its `kind`: the member kinds
 // that carry another kind's word are read first, so `{filter, facet}` is a filter and never a facet.
-const MEMBERS = ["filter", "view", "contract", "facet", "class", "rule", "kind", "shape", "display", "permissions", "ownership", "units", "utility"];
+const MEMBERS = ["filter", "view", "contract", "facet", "class", "rule", "kind", "shape", "display", "permissions", "ownership", "units", "utility", "subject"];
 
 /** The key of a `define` write's member: which kind of member, and its name. */
 function memberKey(def: JsonObject): string | null {
