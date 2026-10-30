@@ -12,7 +12,7 @@ import { type ClassDef, type ClassLine, type Dictionary, emptyDictionary, type F
 import { facetJson } from "./dictionary.ts";
 import { type Recipe, readRecipes, type Step } from "./migrate.ts";
 import type { Json, JsonObject } from "./model.ts";
-import { type PackageInfo, readPackages, type Utility } from "./packages.ts";
+import { type PackageInfo, readPackages, type Utility, type Subject, type SubjectPress } from "./packages.ts";
 import { readRules, type Rule } from "./rules.ts";
 import { type Contract, type Keys, readContracts, sha256, keyFor } from "./store.ts";
 import { type Display, emptyViewSet, type Filter, readViews, type Shape, VIEW_SET_KEYS, type View, type ViewSet } from "./views.ts";
@@ -265,6 +265,43 @@ export function utilityJson(u: Utility): JsonObject {
   if (u.serves.length) o.serves = u.serves.map((s) => ({ as: s.as, ...(s.items ? { items: [...s.items] } : {}) }));
   if (u.needs.length) o.needs = u.needs.map((n) => ({ name: n.name, ...(n.version ? { version: n.version } : {}) }));
   if (u.setup.length) o.setup = u.setup.map((s): JsonObject => ("connection" in s ? { connection: s.connection } : { setting: s.setting }));
+  if (u.acts.length) o.acts = u.acts.map((a) => a.name);
+  return o;
+}
+
+const pressJson = (p: SubjectPress): JsonObject => ({ word: p.word, to: p.to });
+
+/** A subject (12.10) in the bundle: as written, its presses as `{word, to}`, its picks as `{filter, value}`. */
+export function subjectJson(s: Subject): JsonObject {
+  const o: JsonObject = { subject: s.name, version: s.version };
+  if (s.label) o.label = s.label;
+  if (s.utility) o.utility = s.utility;
+  if (s.view) o.view = s.view;
+  if (s.serve) o.serve = s.serve;
+  if (s.pick) o.pick = { filter: s.pick.filter, value: s.pick.value };
+  if (s.done) o.done = s.done === "viewed" ? "viewed" : { filter: s.done.filter, value: s.done.value };
+  o.band = s.band;
+  o.house = String(s.house);
+  if (s.serves.length) o.serves = s.serves.map((x) => ({ as: x.as, ...(x.items ? { items: [...x.items] } : {}) }));
+  const home: JsonObject = {};
+  if (s.home.figure) home.figure = s.home.figure.of === "count" ? "count" : `${s.home.figure.of} ${s.home.figure.slot}`;
+  if (s.home.word) home.word = "one" in s.home.word ? { one: s.home.word.one, many: s.home.word.many } : s.home.word.word;
+  if (s.home.press) home.press = pressJson(s.home.press);
+  if (s.home.chips.length) home.chips = [...s.home.chips];
+  o.home = home;
+  if (s.card) {
+    const c: JsonObject = { name: [...s.card.name] };
+    if (s.card.sub.length) c.sub = [...s.card.sub];
+    if (s.card.lines.length) c.lines = [...s.card.lines];
+    if (s.card.state) c.state = s.card.state;
+    if (s.card.moment) c.moment = s.card.moment;
+    if (s.card.figure) c.figure = s.card.figure;
+    if (s.card.primary) c.primary = pressJson(s.card.primary);
+    if (s.card.quiet) c.quiet = pressJson(s.card.quiet);
+    if (s.card.quick.length) c.quick = s.card.quick.map(pressJson);
+    c.opens = s.card.opens;
+    o.card = c;
+  }
   return o;
 }
 
@@ -291,6 +328,7 @@ export function bundleOf(p: Parsed): JsonObject {
   for (const c of p.contracts) if (c.parts.version) members[`contract:${c.name}`] = c.parts.version;
   for (const v of p.views.views.values()) if (v.version) members[`view:${v.name}`] = v.version;
   for (const u of info.utilities) if (u.version) members[`utility:${u.name}`] = u.version;
+  for (const s of info.subjects) if (s.version) members[`subject:${s.name}`] = s.version;
   o.members = members;
   if (dict.kinds.size) o.kinds = [...dict.kinds.values()].map((k) => kindJson(dict, k));
   if (facets.length) o.facets = facets.map(facetJson);
@@ -310,6 +348,7 @@ export function bundleOf(p: Parsed): JsonObject {
   if (p.recipes.length) o.recipes = p.recipes.map(recipeJson);
   if (p.instructions.size) o.instructions = [...p.instructions].map(([issuer, list]): JsonObject => ({ issuer, instructions: list.map((i): JsonObject => ({ n: i.n, op: i.op, key: i.key, ...(i.to ? { to: i.to } : {}), ...(i.map.length ? { map: i.map.map(([a, b]) => ({ from: a, to: b })) } : {}) })) }));
   if (info.utilities.length) o.utilities = info.utilities.map(utilityJson);
+  if (info.subjects.length) o.subjects = info.subjects.map(subjectJson);
   return o;
 }
 
@@ -533,7 +572,44 @@ export function printBundle(b: JsonObject): string {
   if (isObj(b.ownership)) out.push("ownership:", ...Object.entries(b.ownership).map(([k, v]) => `  ${k}: ${(v as string[]).join(", ")}`), "");
   if (isObj(b.emergency)) out.push("emergency:", `  approvers: ${b.emergency.approvers}`, `  longest: ${b.emergency.longest}`, "");
   blocks("utilities", utilityText);
+  blocks("subjects", subjectText);
   return `${out.join("\n").trimEnd()}\n`;
+}
+
+const quoteWord = (w: string) => `"${w.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+const pressText = (p: Json | undefined): string | undefined =>
+  isObj(p) && typeof p.word === "string" && typeof p.to === "string" ? `${/[:\s]/.test(p.word) ? quoteWord(p.word) : p.word} -> ${p.to}` : undefined;
+const pickText = (p: Json | undefined): string | undefined => (isObj(p) ? `${p.filter} = ${String(p.value)}` : typeof p === "string" ? p : undefined);
+
+function subjectText(s: JsonObject): string[] {
+  const out = [`subject: ${s.subject} /${s.version}`, ...kv("  ", "label", s.label), ...kv("  ", "utility", s.utility), ...kv("  ", "view", s.view), ...kv("  ", "serve", s.serve)];
+  if (s.pick !== undefined) out.push(`  pick: ${pickText(s.pick)}`);
+  if (s.done !== undefined) out.push(`  done: ${pickText(s.done)}`);
+  out.push(...kv("  ", "band", s.band), ...kv("  ", "house", s.house));
+  if (Array.isArray(s.serves)) out.push(`  serves: ${(s.serves as JsonObject[]).map((x) => `${x.as}${Array.isArray(x.items) ? `(${(x.items as string[]).join(", ")})` : ""}`).join(", ")}`);
+  if (isObj(s.home)) {
+    const h = s.home;
+    out.push("  home:");
+    if (typeof h.figure === "string") out.push(`    figure: ${h.figure}`);
+    if (isObj(h.word)) out.push(`    word: one ${quoteWord(String(h.word.one))} many ${quoteWord(String(h.word.many))}`);
+    else if (typeof h.word === "string") out.push(`    word: ${quoteWord(h.word)}`);
+    const pr = pressText(h.press);
+    if (pr) out.push(`    press: ${pr}`);
+    if (Array.isArray(h.chips) && h.chips.length) out.push(`    chips: ${(h.chips as string[]).join(", ")}`);
+  }
+  if (isObj(s.card)) {
+    const c = s.card;
+    out.push("  card:");
+    for (const k of ["name", "sub", "lines"] as const) if (Array.isArray(c[k]) && (c[k] as string[]).length) out.push(`    ${k}: ${(c[k] as string[]).join(", ")}`);
+    for (const k of ["state", "moment", "figure"] as const) if (typeof c[k] === "string") out.push(`    ${k}: ${c[k]}`);
+    for (const k of ["primary", "quiet"] as const) {
+      const t = pressText(c[k]);
+      if (t) out.push(`    ${k}: ${t}`);
+    }
+    if (Array.isArray(c.quick)) for (const q of c.quick as JsonObject[]) { const t = pressText(q); if (t) out.push(`    quick: ${t}`); }
+    if (typeof c.opens === "string") out.push(`    opens: ${c.opens}`);
+  }
+  return out;
 }
 
 function utilityText(u: JsonObject): string[] {
@@ -541,6 +617,7 @@ function utilityText(u: JsonObject): string[] {
   if (Array.isArray(u.serves)) out.push(`  serves: ${(u.serves as JsonObject[]).map((s) => `${s.as}${Array.isArray(s.items) ? `(${(s.items as string[]).join(", ")})` : ""}`).join(", ")}`);
   if (Array.isArray(u.needs)) out.push(`  needs: ${(u.needs as JsonObject[]).map((n) => `${n.name}${n.version ? ` /${n.version}` : ""}`).join(", ")}`);
   if (Array.isArray(u.setup)) out.push(`  setup: ${(u.setup as JsonObject[]).map((s) => (typeof s.connection === "string" ? `connection ${s.connection}` : `setting ${s.setting}`)).join(", ")}`);
+  if (Array.isArray(u.acts) && u.acts.length) out.push(`  acts: ${(u.acts as string[]).join(", ")}`);
   return out;
 }
 
@@ -558,7 +635,7 @@ export function readBundleInto(b: JsonObject, into: Dictionary = emptyDictionary
 /** An empty Parsed to read packages onto, in order. */
 export function emptyParsed(): Parsed {
   const { perms } = readAccess("");
-  return { info: { name: "", version: "", owner: "", line: 0, crubal: 2, crubalLine: 0, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {}, utilities: [] }, dict: emptyDictionary(), rules: [], contracts: [], views: emptyViewSet(), perms, edges: [], recipes: [], instructions: new Map() };
+  return { info: { name: "", version: "", owner: "", line: 0, crubal: 2, crubalLine: 0, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {}, utilities: [], subjects: [] }, dict: emptyDictionary(), rules: [], contracts: [], views: emptyViewSet(), perms, edges: [], recipes: [], instructions: new Map() };
 }
 
 /**
@@ -569,7 +646,7 @@ export function readBundleOnto(bundle: JsonObject, base: Parsed): Parsed {
   const text = printBundle(bundle);
   readDefinitions(text, base.dict);
   const [info] = readPackages(text);
-  if (info) base.info = { ...info, dict: base.dict, terms: Object.keys(info.terms).length ? info.terms : base.info.terms, utilities: [...base.info.utilities.filter((h) => !info.utilities.some((n) => n.name === h.name)), ...info.utilities] };
+  if (info) base.info = { ...info, dict: base.dict, terms: Object.keys(info.terms).length ? info.terms : base.info.terms, utilities: [...base.info.utilities.filter((h) => !info.utilities.some((n) => n.name === h.name)), ...info.utilities], subjects: [...base.info.subjects.filter((h) => !info.subjects.some((n) => n.name === h.name)), ...info.subjects] };
   const byName = <T extends { name: string }>(have: T[], next: T[]) => [...have.filter((h) => !next.some((n) => n.name === h.name)), ...next];
   base.rules = byName(base.rules, readRules(text));
   base.contracts = byName(base.contracts, readContracts(text));

@@ -592,7 +592,7 @@ function readClass(node: Node): ClassDef {
   return c;
 }
 
-const SKIP = new Set(["rule", "contract", "view", "shape", "display", "filter", "role", "migration", "package", "resolve", "permissions", "ownership", "emergency", "edge", "instructions", "utility"]);
+const SKIP = new Set(["rule", "contract", "view", "shape", "display", "filter", "role", "migration", "package", "resolve", "permissions", "ownership", "emergency", "edge", "instructions", "utility", "subject"]);
 
 /** Read definition text (facets, classes and kinds) into a dictionary. Other blocks are skipped. */
 export function readDefinitions(source: string, into: Dictionary = emptyDictionary()): Dictionary {

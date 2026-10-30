@@ -375,6 +375,12 @@ view with its version when it has one (`"dvds /2026-11-01"`), and the first entr
 A display (12.9) is `{"display", "label", "describe", "layout", "slots": [{"from", "to"}], "tokens":
 {name: value}}` under `displays`, its slots in order and its tokens as the words they were written.
 
+A subject (12.10) is `{"subject", "version", "label", "utility", "view" | "serve", "pick": {"filter",
+"value"}, "done": {"filter", "value"} | "viewed", "band", "house", "serves": [{"as", "items"}], "home":
+{"figure", "word": {"one", "many"} | "…", "press": {"word", "to"}, "chips"}, "card": {"name", "sub",
+"lines", "state", "moment", "figure", "primary", "quiet", "quick": [{"word", "to"}], "opens"}}` under
+`subjects`, `house` as a string like every number.
+
 ## 12.8 Well-formed views
 
 A package MUST be refused at publish when:
@@ -386,6 +392,8 @@ A package MUST be refused at publish when:
 4. an `index` filter isn't among the view's `filters`;
 5. a role grants anything its audience can't see, or names a target that doesn't exist;
 6. a public view's slots or filters read a facet that `show` rules hide from `public`;
+8. a subject names a view, filter, value, slot, utility or act the package doesn't declare, serves an
+   audience wider than its view shows, opens anything but a page, or names both a view and a serve;
 7. a display names no layout, has a slot line that isn't `shapeSlot -> displaySlot`, or fills one of its
    slots twice.
 
@@ -424,3 +432,63 @@ display: menu
   new for it: the app reads the definition and draws.
 - A display never widens what a view shows. The screen it draws reads the view at the audience the display
   is for, which is never wider than the view's own (12.4).
+
+## 12.10 Subjects
+
+A **subject** is a row of the grid: one thing a place's people attend to (orders to pick, notices unread,
+items to review), declared by the package that holds its vocabulary, so a place's home is the subjects its
+packages declare and nothing an app wrote for one screen. A subject names what it lists, whom it serves,
+how it sorts, what its home card shows and how its object cards are laid out, with the presses that act
+on them. The app draws it; the engine reads, checks and carries it.
+
+```crubal
+subject: ordersToPick /2026-11-05
+  label: Orders to pick
+  utility: orders
+  view: desk
+  pick: orderState = paid
+  done: orderState = picking
+  band: daily
+  house: 7
+  serves: owner, fulfiller(pick)
+  home:
+    figure: count
+    word: one "order is paid and waiting to be picked." many "orders are paid and waiting to be picked."
+    press: Pick -> /orders?tab=pick
+    chips: orderState
+  card:
+    name: id, buyer
+    sub: state
+    lines: total, placed
+    state: state
+    moment: placed
+    figure: total
+    primary: Pick -> pick
+    quiet: Open -> page
+    quick: "Confirm address" -> confirmAddress
+    opens: page
+```
+
+| Setting | Holds |
+|---|---|
+| `subject` | its name (a lower-case word) and dated version; a member like a view, listed in `members` |
+| `label` | its word on a screen |
+| `utility` | the utility of this package whose acts its presses may name |
+| `view` | the view of this package that serves its cards; the view's shapes give the slots a card may name |
+| `serve` | instead of a view: the name of a function the utility provides, for a subject the app serves itself (a setup, a tally); such a subject has no pick, done or card |
+| `pick` | `filter = value`: the view's filter pick for what is ahead (the to-dos) |
+| `done` | `filter = value` for what is done (the history), or `viewed`: a card is done once the person has viewed it; the mark is the person's own, never the place's |
+| `band` | `daily`, `weekly` or `rarely`: how soon it wants attention; `rarely` unless said |
+| `house` | a whole number, governance first (0) and the doing rows after; 8 unless said |
+| `serves` | whom the row is for, as a utility's `serves` (14.6): presets, relations or audiences, each optionally narrowed to items; never wider than the view's `show` |
+| `home` | the home card: `figure` is `count` (the view's tally under the pick), `sum <slot>` or `state <slot>`; `word` is `one "…" many "…"` or one text; `press` is `Word -> target`; `chips` are the view's filters the home carries |
+| `card` | the object card on the compass: `name`, `sub` and `lines` name slots in order; `state`, `moment` and `figure` name one slot each; `primary`, `quiet` and `quick` are `Word -> target`; `opens` is `page` |
+
+A press's target is a path (`/orders?tab=pick`), `page` (the object's own page) or an act the subject's
+utility declares. A package MUST be refused at publish when a subject names a view, filter, value, slot,
+utility or act it doesn't declare, serves an audience wider than its view shows, opens anything but a page,
+or names both a view and a serve (12.8). A subject reads only through its view's served pages (12.6): the
+figure is the index's tally, the cards a page, the history the same view under the `done` pick; it never
+widens what the view shows. A reader that doesn't know the block carries it unchanged (13.5). What a
+subject's card looks like on a screen is the app's; the compass (the positions its parts take) is a
+convention of the app that draws it, not of the language.
