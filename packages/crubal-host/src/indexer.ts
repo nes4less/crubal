@@ -431,17 +431,23 @@ export class Index {
 
   private linkedColumn: Promise<void> | undefined;
   /**
-   * The `linked` column and its index (a `linked <facet>` partition, 12.2), for a store from before them:
-   * looked for first, as the tally upgrade is, since an add-if-not-exists takes the table's lock before it
-   * looks; the index is built concurrently, the table being hot.
+   * The `linked` column (a `linked <facet>` partition, 12.2) for a store from before it: looked for first,
+   * since an add-if-not-exists takes the table's lock before it looks; the add itself waits at most two
+   * seconds for the lock, so a serve or an ingest on a serverless host is never held behind a long scan (a
+   * request waited 155 s and died with the column still missing, 2026-10-31). A failed look or add is not
+   * remembered: the next call tries again. The partial index over the column is the host's migration
+   * (schema.sql), never built here: a request may not scan a million rows, and the column alone is correct.
    */
   private linkedReady(): Promise<void> {
     this.linkedColumn ??= (async () => {
       const col = await this.pool.query("select 1 from information_schema.columns where table_schema = current_schema() and table_name = 'index_rows' and column_name = 'linked'");
-      if (!col.rows.length) await this.pool.query("alter table index_rows add column linked text");
-      const idx = await this.pool.query("select 1 from pg_indexes where schemaname = current_schema() and tablename = 'index_rows' and indexname = 'index_rows_linked'");
-      if (!idx.rows.length) await this.pool.query("create index concurrently index_rows_linked on index_rows (owner, view, version, audience, linked) where linked is not null");
-    })().then(() => undefined, () => undefined);
+      if (!col.rows.length) await this.pool.query("set lock_timeout = '2s'; alter table index_rows add column linked text; set lock_timeout = 0");
+    })().then(
+      () => undefined,
+      () => {
+        this.linkedColumn = undefined;
+      },
+    );
     return this.linkedColumn;
   }
 

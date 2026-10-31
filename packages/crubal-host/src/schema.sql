@@ -44,6 +44,8 @@ create index if not exists index_rows_order on index_rows (owner, view, version,
 -- The platform index (14.8, 14.10): rows reached by an edge on an ancestor, across owners.
 create index if not exists index_rows_ancestors on index_rows using gin (ancestors);
 create index if not exists index_rows_record on index_rows (record);
+-- A store from before the column (0.3.40): the host's migration adds it and its index; a request never builds the index.
+alter table index_rows add column if not exists linked text;
 create index if not exists index_rows_linked on index_rows (owner, view, version, audience, linked) where linked is not null;
 
 -- The counts, sums and nested counts of a view under its picks at one index head (the filter tally): one pass
