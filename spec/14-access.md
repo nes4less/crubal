@@ -254,7 +254,9 @@ release.
 - **Relations drive feeds and notifications.** A view MAY declare `partition: relation follower` (or any
   relation, `owned` or `administered`): each projection row carries its record and ancestors, the host hands
   the index the verified caller's edges, and the index serves a caller only the rows they stand in that
-  relation to. The store decides the rows; the index only matches them (chapter 12.6.1).
+  relation to. The store decides the rows; the index only matches them (chapter 12.6.1). What is addressed
+  to a person rather than shared with them, a notice or an invitation, is served by `partition: linked <facet>`
+  (12.2): the record's own link names the caller, and no edge is made for each.
 - **Paid subscriptions are contracts.** A checkout that sells a season's stats creates an edge with
   `mode: view`, `relation: subscriber` and an `until`, and usually a `follower` relation beside it. The
   purchase decides access; the relation decides the feed.

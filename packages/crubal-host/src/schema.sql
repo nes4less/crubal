@@ -33,6 +33,8 @@ create table if not exists index_rows (
   pin integer,
   seq bigint not null,
   search tsvector,
+  -- Whom the record's link facet names, in a `linked <facet>` partition (12.2): the caller's bound.
+  linked text,
   primary key (owner, view, version, audience, record)
 );
 create index if not exists index_rows_search on index_rows using gin (search);
@@ -42,6 +44,7 @@ create index if not exists index_rows_order on index_rows (owner, view, version,
 -- The platform index (14.8, 14.10): rows reached by an edge on an ancestor, across owners.
 create index if not exists index_rows_ancestors on index_rows using gin (ancestors);
 create index if not exists index_rows_record on index_rows (record);
+create index if not exists index_rows_linked on index_rows (owner, view, version, audience, linked) where linked is not null;
 
 -- The counts, sums and nested counts of a view under its picks at one index head (the filter tally): one pass
 -- over the view's rows, kept here so every process answers the same question from the table until the index

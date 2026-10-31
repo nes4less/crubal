@@ -324,6 +324,12 @@ export class Access {
   /** Does the caller stand in a view's partition to the record (12.6, 14.10)? */
   standsIn(callerId: string, recordId: string, partition: string): boolean {
     if (!partition || partition === "none") return true;
+    // `linked <facet>` (12.2): the record's own link names the caller; no edge is read.
+    const linked = partition.match(/^linked (\S+)$/);
+    if (linked) {
+      const t = this.records.get(recordId)?.values[linked[1] as string];
+      return typeof t === "object" && t !== null && !Array.isArray(t) && (t as { $link?: unknown }).$link === callerId;
+    }
     const eff = this.effective(callerId, recordId);
     if (partition === "owned") return this.owns(callerId, recordId);
     if (partition === "administered") return eff.mode === "admin";
