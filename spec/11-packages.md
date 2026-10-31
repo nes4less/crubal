@@ -163,8 +163,12 @@ Adopted values (chapter 8.2) are outside the trust order: they don't change unti
   names its own key. The same key with the same type in two packages is one definition, which is how a key
   passes between packages: the taker declares it, the giver retires it with `hand` (chapter 10.3), and the
   values never move.
-- **Outside, adopters pin.** `extends: commerce /2026-10-01` uses exactly that version until the package
-  moves its pin, which is itself a new version of the package.
+- **Outside, adopters pin.** `extends: commerce /2026-10-01` names the least version the package was
+  written against, until the package moves its pin, which is itself a new version of the package. A later
+  version the deployment holds satisfies the pin, since a dated revision only adds (11.8); a store MUST NOT
+  install an older version of a dependency beside a newer one in force, which would put the older
+  definitions in force again. The version in force is the last installed; installing a held version again
+  makes it the one in force (a rollback, asked for by name).
 - **Extending** (UCP's word, kept for packages and contracts) lets a package add facets, classes, rules,
   contracts and views, add aliases and values to the extended package's facets, add vary steps, and narrow
   its classes in classes of its own. It MUST NOT change the extended package's definitions or widen them.

@@ -745,9 +745,15 @@ export class Host {
    */
   async installFrom(owner: string, pkg: string, version?: string, seen = new Set<string>(), opts: { budgetMs?: number } = {}): Promise<JsonObject[]> {
     const store = await this.storeFor(owner);
-    // A dependency pinned to a version the owner already holds needs no publisher at all (the standard
-    // packages a deployment took at provisioning, for one).
-    if (version && (await store.installed()).some((i) => i.package === pkg && String(i.version) === version)) return [];
+    // A dependency's pin names the least version (11.4): one the owner holds at that version or later
+    // needs no publisher at all, and is never installed older beside the version in force (cashierfu.com
+    // took commerce /2026-12-04 under operations' pin after /2026-12-06, and the older came into force,
+    // 2026-10-31). The version asked for by name is another matter: held but not in force, it is installed
+    // again and comes into force (a rollback); in force already, nothing.
+    if (version && seen.size > 0) {
+      const held = (await store.installed()).filter((i) => i.package === pkg).map((i) => String(i.version));
+      if (held.some((h) => h >= version)) return [];
+    }
     const domain = pkg.split("/")[0] as string;
     const wk = await this.wellKnownOf(domain);
     const listed = ((wk.packages as JsonObject[] | undefined) ?? []).find((p) => p.package === pkg);
@@ -760,7 +766,8 @@ export class Host {
     seen.add(key);
     const out: JsonObject[] = [];
     const installed = await store.installed();
-    if (installed.some((i) => i.package === pkg && String(i.version) === v)) return out;
+    // In force already: nothing. Held but not in force: installed again, so it comes into force.
+    if (installed.filter((i) => i.package === pkg).map((i) => String(i.version)).at(-1) === v) return out;
     const bundle = await this.fetchJson(url);
     // A bundle names what it extends by short name within its own publisher, or by id across publishers.
     for (const e of (bundle.extends as JsonObject[] | undefined) ?? []) {

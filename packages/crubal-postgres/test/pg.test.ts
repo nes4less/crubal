@@ -415,6 +415,12 @@ view: discs
   await assert.rejects(store.install(shop1, keys), /extends shop.example\/base \/2026-10-01, which isn't installed/);
   await store.install(base1, keys, "2026-10-15T20:00:00Z");
   await store.install(shop1, keys, "2026-10-15T20:00:01Z");
+  // A pin names the least version (11.4, revision 12): a later one held satisfies it.
+  const laterOwner = new PgStore(pool, "later.example");
+  const baseLater = publish(baseV1.replace("/2026-10-01", "/2026-11-01"), { date: "2026-11-01", key }).bundle;
+  await laterOwner.install(baseLater, keys, "2026-11-15T20:00:00Z");
+  await laterOwner.install(shop1, keys, "2026-11-15T20:00:01Z");
+  assert.deepEqual((await laterOwner.installed()).map((i) => `${i.package} /${i.version}`), ["shop.example/base /2026-11-01", "shop.example/shop /2026-10-01"]);
   const defs = await store.definitions();
   assert.ok(defs.dict.facets.has("title") && defs.dict.facets.has("price") && defs.dict.classes.has("Item"));
   assert.ok(defs.views.views.has("discs"));
