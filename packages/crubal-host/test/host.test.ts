@@ -1116,3 +1116,53 @@ permissions: linkedbox
   const col = (await pool.query("select linked from index_rows where owner = $1 and view = 'inbox' and record = 'N-2'", ["linked.example"])).rows[0] as { linked: string } | undefined;
   assert.equal(col?.linked, "person:cashierfu.com:P-2");
 });
+
+test("revision 12: a dependency's pin is the least version, a later one held is never downgraded; a held version asked for by name comes into force again", { skip: !url }, async () => {
+  const key = (globalThis as { pubKey?: { d: string; x: string } }).pubKey as { d: string; x: string };
+  const BASE1 = `package: pbase /2026-10-01
+  owner: pub.example
+  crubal: 2
+pnotes$
+`;
+  const BASE2 = BASE1.replace("/2026-10-01", "/2026-11-01");
+  const EXT = `package: pext /2026-10-01
+  owner: pub.example
+  crubal: 2
+  extends: pbase /2026-10-01
+kind: pthing
+  levels: pthing
+class: Pnoted
+  for: pthing
+  facets:
+    pnotes
+`;
+  const b1 = publish(BASE1, { date: "2026-10-01", key }).bundle;
+  const b2 = publish(BASE2, { date: "2026-11-01", key }).bundle;
+  const ext = publish(EXT, { date: "2026-10-01", key }).bundle;
+  docs.set(`${base}/.well-known/crubal.json`, {
+    crubal: "2", owner: "pub.example",
+    keys: { "pub.example": { alg: "Ed25519", public: key.x } },
+    packages: [
+      { package: "pub.example/pbase", latest: "2026-11-01", versions: { "2026-10-01": `${base}/pbase/2026-10-01/package.json`, "2026-11-01": `${base}/pbase/2026-11-01/package.json` } },
+      { package: "pub.example/pext", latest: "2026-10-01", versions: { "2026-10-01": `${base}/pext/2026-10-01/package.json` } },
+    ],
+  });
+  docs.set(`${base}/pbase/2026-10-01/package.json`, b1);
+  docs.set(`${base}/pbase/2026-11-01/package.json`, b2);
+  docs.set(`${base}/pext/2026-10-01/package.json`, ext);
+  await host.createOwner("pins.example");
+  const store = await host.storeFor("pins.example");
+  const held = async () => (await store.installed()).map((i) => `${i.package} /${i.version}`);
+  await host.installFrom("pins.example", "pub.example/pbase");
+  assert.deepEqual(await held(), ["pub.example/pbase /2026-11-01"], "the latest base");
+  const r = await host.installFrom("pins.example", "pub.example/pext");
+  assert.deepEqual(r.map((d) => `${d.installed} /${d.version}`), ["pub.example/pext /2026-10-01"], "the pin is satisfied by the later base: nothing older installed");
+  assert.deepEqual(await held(), ["pub.example/pbase /2026-11-01", "pub.example/pext /2026-10-01"]);
+  assert.deepEqual(await host.installFrom("pins.example", "pub.example/pbase", "2026-11-01"), [], "in force already: nothing");
+  const back = await host.installFrom("pins.example", "pub.example/pbase", "2026-10-01");
+  assert.deepEqual(back.map((d) => d.version), ["2026-10-01"], "a held version asked for by name comes into force again");
+  assert.equal((await held()).at(-1), "pub.example/pbase /2026-10-01");
+  const forward = await host.installFrom("pins.example", "pub.example/pbase", "2026-11-01");
+  assert.deepEqual(forward.map((d) => d.version), ["2026-11-01"], "and forward again");
+  assert.equal((await held()).at(-1), "pub.example/pbase /2026-11-01");
+});
