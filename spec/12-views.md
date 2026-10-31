@@ -62,7 +62,7 @@ view: dvds
 | Part | Holds | Default |
 |---|---|---|
 | `select` | which records: the classes they `wear` (all of them must be worn), a `level`, and a `when` condition (chapter 6.3); or `list: L-…`, a hand-made list. `level` is optional when `wears` is given: the view then selects wearers at every level, standing-alone ones included (chapter 1.7) | required |
-| `partition` | what a caller must stand in to a record to be served its row: `administered`, `controlled`, `owned`, `relation <name>` (chapter 14.10), or `none` for every row | `controlled` above `member`; `none` otherwise |
+| `partition` | what a caller must stand in to a record to be served its row: `administered`, `controlled`, `owned`, `relation <name>` (chapter 14.10), `linked <facet>` (the caller is whom the record's link facet names: a notice addressed to them, an invitation naming them), or `none` for every row | `controlled` above `member`; `none` otherwise |
 | `of` | for a view inside a page: how the page's record narrows the selection, as a condition over `context` (`work is context.work and not id is context.id`) | none |
 | `pin` · `hide` | curation: records shown first, in this order · records never shown | none |
 | `order` | keys to sort by, in priority order; `after` means newest or largest first, `before` the reverse | ID |
@@ -241,6 +241,9 @@ finally reads decides its visibility, wherever it is read from.
   owner's root matches every row, an edge on one league matches that league's rows. Views above `member`
   are partitioned by default, so a caller with `control` over one corner of the owner's data never sees the
   rest of a staff projection. The store decides the rows and their ancestors; the index only matches.
+  In a `linked <facet>` partition the row carries instead whom the record's link facet names, and the index
+  serves a caller only the rows that name them: a person's own notices out of a place's thousands, bounded
+  by the link, never by the view; no edge per record is needed.
 - **Role marks.** In a view above `member`, a slot whose value only some roles may `see` (12.4) carries the
   role it needs. The store decides the marks; the index only drops a marked slot for a caller without that
   role, using the roles of the verified caller the host hands it (chapter 7.6). Roles never add a slot a
@@ -272,8 +275,9 @@ choice.
 
 - An index MUST read only the projection streams of the views it serves. It never reads records, the log or
   another view's rows, so it can't show anything a view leaves out.
-- It MUST serve only the rows the caller's edges match in a partitioned view, MUST drop role-marked slots
-  for callers without the role, and decides nothing else about visibility.
+- It MUST serve only the rows the caller's edges match in a partitioned view (the rows that name the caller
+  in a `linked` partition), MUST drop role-marked slots for callers without the role, and decides nothing
+  else about visibility.
 - Its pages, counts and sums MUST follow 12.2 and 12.3, over the rows it holds. For a filter whose facet
   has no value list, or whose buckets are periods (12.3), it MAY count only the buckets the request names,
   since a vocabulary's tree has thousands and time has no end; it MUST pick on any of them. A sum is read

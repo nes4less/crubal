@@ -1042,3 +1042,77 @@ test("brief 40: a request that declines a backlog leaves a cursor at 0 for a vie
   const rows = (await pool.query("select record from index_rows where owner = 'root.example' and view = 'shelf' order by record")).rows as { record: string }[];
   assert.deepEqual(rows.map((r) => r.record), ["P-1", "P-2", "P-3", "P-4", "P-5"]);
 });
+
+test("revision 11: a view partitioned by a link facet serves each person the rows that name them, the owner all, bounded in the database by the linked column", { skip: !url }, async () => {
+  await host.createOwner("linked.example");
+  const dev = new PgStore(pool, "linked.example", { allowUnsigned: true });
+  const store = await host.storeFor("linked.example");
+  for (const text of [STANDARD_PACKAGES.core, STANDARD_PACKAGES.units, STANDARD_PACKAGES.party])
+    await dev.install(publish(text, { date: text.match(/^package: \S+ \/(\S+)/m)?.[1] ?? "2026-10-16" }).bundle, undefined, clock);
+  const pkg = `package: linkedbox /2026-10-01
+  owner: linked.example
+  label: Box
+  crubal: 2
+  extends: crubal.com/party /2026-10-16
+
+kind: shop
+  levels: shop
+  base: Shop
+kind: notice
+  levels: notice
+  base: Notice
+
+shopName$
+words$
+to&person
+
+class: Shop
+  for: shop
+  facets:
+    shopName
+class: Notice
+  for: notice
+  facets:
+    words
+    to
+
+shape: line
+  slots:
+    words -> words
+view: inbox
+  select:
+    level: notice
+  partition: linked to
+  order: words
+  shape: line
+  show: member
+
+permissions: linkedbox
+  menu:
+    keep: edit shopName
+  presets:
+    keeper: keep   audience: staff
+  relations: operator, staff, customer
+`;
+  await dev.install(publish(pkg, { date: "2026-10-01" }).bundle, undefined, clock);
+  await store.commit({ person: "linked.example" }, (d) => {
+    d.records.set("ROOT", { id: "ROOT", kind: "shop", level: "shop", owner: "linked.example", values: { shopName: "Box" }, sources: { "*": { origin: "declared", via: "L-1" } } });
+    d.edges.set("E-a", { edge: "E-a", who: "person:cashierfu.com:P-1", relation: "operator", mode: "admin", on: "ROOT", grants: [], by: "owner" });
+    d.edges.set("E-c", { edge: "E-c", who: "person:cashierfu.com:P-2", relation: "customer", mode: "consume", on: "ROOT", grants: [], by: "E-a" });
+    d.records.set("N-1", { id: "N-1", kind: "notice", level: "notice", owner: "linked.example", within: "ROOT", values: { words: "for one", to: { $link: "person:cashierfu.com:P-1" } }, sources: { "*": { origin: "declared", via: "L-1" } } });
+    d.records.set("N-2", { id: "N-2", kind: "notice", level: "notice", owner: "linked.example", within: "ROOT", values: { words: "for two", to: { $link: "person:cashierfu.com:P-2" } }, sources: { "*": { origin: "declared", via: "L-1" } } });
+    d.records.set("N-3", { id: "N-3", kind: "notice", level: "notice", owner: "linked.example", within: "ROOT", values: { words: "for nobody" }, sources: { "*": { origin: "declared", via: "L-1" } } });
+  }, clock);
+  const index = new Index(pool);
+  await index.apply(store, "inbox");
+  const words = async (caller?: string) => {
+    const page = await index.serve(store, "inbox", caller ? { caller } : {});
+    return { total: page.total, words: (page.rows as JsonObject[]).map((r) => r.words), linked: (page.rows as JsonObject[]).map((r) => r.linked) };
+  };
+  assert.deepEqual(await words("linked.example"), { total: 3, words: ["for nobody", "for one", "for two"], linked: [undefined, undefined, undefined] }, "the owner reads everything; the bound is never served");
+  assert.deepEqual(await words("person:cashierfu.com:P-1"), { total: 1, words: ["for one"], linked: [undefined] }, "the admin is a person too: served what names them");
+  assert.deepEqual(await words("person:cashierfu.com:P-2"), { total: 1, words: ["for two"], linked: [undefined] }, "a member is served what names them, by the column");
+  await assert.rejects(words("person:cashierfu.com:P-3"), /inbox is for member/, "a stranger is below the view");
+  const col = (await pool.query("select linked from index_rows where owner = $1 and view = 'inbox' and record = 'N-2'", ["linked.example"])).rows[0] as { linked: string } | undefined;
+  assert.equal(col?.linked, "person:cashierfu.com:P-2");
+});

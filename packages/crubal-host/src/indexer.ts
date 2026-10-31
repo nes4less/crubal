@@ -127,6 +127,7 @@ export class Index {
 
   /** Apply stream entries to the rows, idempotently by seq (12.6.2): from a store's stream or pushed by a presenter. */
   async ingest(owner: string, view: string, version: string, audience: string, entries: StreamEntry[], from?: number): Promise<number> {
+    await this.linkedReady();
     const cur = (await this.pool.query("select seq from index_cursors where owner = $1 and view = $2 and version = $3 and audience = $4", [owner, view, version, audience])).rows[0] as Row | undefined;
     let seq = from ?? (cur ? Number(cur.seq) : 0);
     // Rows land in batches of 500, one statement each, in stream order: a reset or a removal flushes what
@@ -139,13 +140,13 @@ export class Index {
       for (const e of pending) latest.set(String(e.record), e);
       pending = [...latest.values()];
       await this.pool.query(
-        `insert into index_rows (owner, view, version, audience, record, row, buckets, marks, ancestors, sort, pin, seq, search)
+        `insert into index_rows (owner, view, version, audience, record, row, buckets, marks, ancestors, sort, pin, seq, search, linked)
          select $1, $2, $3, $4, e ->> 'record', e -> 'row', coalesce(e -> 'buckets', '{}'::jsonb), e -> 'row' -> 'marks',
            coalesce(array(select jsonb_array_elements_text(case when jsonb_typeof(e -> 'row' -> 'ancestors') = 'array' then e -> 'row' -> 'ancestors' else '[]'::jsonb end)), '{}'),
-           coalesce(e -> 'sort', '[]'::jsonb), (e ->> 'pin')::integer, (e ->> 'seq')::bigint, to_tsvector('simple', e ->> 'search')
+           coalesce(e -> 'sort', '[]'::jsonb), (e ->> 'pin')::integer, (e ->> 'seq')::bigint, to_tsvector('simple', e ->> 'search'), e -> 'row' ->> 'linked'
          from jsonb_array_elements($5::jsonb) as t(e)
          on conflict (owner, view, version, audience, record) do update set row = excluded.row, buckets = excluded.buckets, marks = excluded.marks,
-           ancestors = excluded.ancestors, sort = excluded.sort, pin = excluded.pin, seq = excluded.seq, search = excluded.search`,
+           ancestors = excluded.ancestors, sort = excluded.sort, pin = excluded.pin, seq = excluded.seq, search = excluded.search, linked = excluded.linked`,
         [owner, view, version, audience, JSON.stringify(pending)],
       );
       pending = [];
@@ -234,9 +235,19 @@ export class Index {
     // Partition (12.6): a caller who isn't the owner is served the rows their edges stand in the relation to,
     // or an ancestor; the candidates are bounded by the caller's own edges, never the view.
     const partition = partitionOf(v);
+    // A `linked <facet>` partition (12.2): the row names whom the record links to, and a caller is served the
+    // rows that name them, bounded in the database by that column, never by the view or by their edges.
+    const linked = /^linked \S+$/.test(partition);
     const roles = new Set<string>();
     let standsOn: string[] | undefined;
-    if (partition !== "none" && o.caller !== owner) {
+    if (partition !== "none" && o.caller !== owner && linked) {
+      if (!o.caller) standsOn = [];
+      else {
+        await this.linkedReady();
+        params.push(o.caller);
+        where.push(`linked = $${params.length}`);
+      }
+    } else if (partition !== "none" && o.caller !== owner) {
       if (!needsAccess || !o.caller) standsOn = [];
       else {
         const caller = o.caller;
@@ -272,12 +283,12 @@ export class Index {
     const counts: Page["counts"] = {};
     const sums: Sums = {};
     const nested: Nested = {};
-    const key = `${owner}|${view}|${version}|${v.show}|${seq}|${JSON.stringify(pickList)}|${o.q ?? ""}|${standsOn ? standsOn.join(",") : ""}|${JSON.stringify(o.only ?? {})}`;
+    const key = `${owner}|${view}|${version}|${v.show}|${seq}|${JSON.stringify(pickList)}|${o.q ?? ""}|${standsOn ? standsOn.join(",") : ""}|${linked ? (o.caller ?? "") : ""}|${JSON.stringify(o.only ?? {})}`;
     // A standard ask (no search, no pick or one pick on an indexable filter): its tally is kept a week, any
     // other's a day (pruneTallies), so crawlers walking combinations never fill the table. The page is not in
     // the key, so every page of one selection shares the tally; it is not in the standard either (a crawler
     // paging a list made a non-standard tally a page, 2026-10-28).
-    const standardAsk = !o.q && (pickList.length === 0 || (pickList.length === 1 && v.index.includes(pickList[0]?.[0] as string) && pickList[0]?.[1].length === 1));
+    const standardAsk = !o.q && !linked && (pickList.length === 0 || (pickList.length === 1 && v.index.includes(pickList[0]?.[0] as string) && pickList[0]?.[1].length === 1));
     // "standard": the host decides by its own rule whether a cold tally may be built here (the app's rule had
     // drifted from it, and crawlers walking filter combinations built a thousand tallies an hour, ten seconds
     // of database time each, 2026-10-28); any other ask is served with its total and the counts it has.
@@ -395,7 +406,7 @@ export class Index {
       onPage = (await this.pool.query(`select record, row, buckets, marks, ancestors, sort, pin from index_rows where ${paged.sql} order by ${order} limit $${paged.ps.length - 1} offset $${paged.ps.length}`, paged.ps)).rows as Row[];
     }
     const pages = Math.max(1, Math.ceil(total / v.page));
-    const indexable = !o.q && page === 1 && (pickList.length === 0 || (pickList.length === 1 && v.index.includes(pickList[0]?.[0] as string) && pickList[0]?.[1].length === 1));
+    const indexable = !o.q && !linked && page === 1 && (pickList.length === 0 || (pickList.length === 1 && v.index.includes(pickList[0]?.[0] as string) && pickList[0]?.[1].length === 1));
     if (o.shape && !v.shapes.includes(o.shape)) throw Object.assign(new Error(`${view} has no shape ${o.shape}`), { status: 404 });
     const out = onPage.map((r): JsonObject => {
       const stored = r.row as JsonObject;
@@ -412,9 +423,26 @@ export class Index {
         delete row.marks;
       }
       delete row.ancestors;
+      delete row.linked;
       return row;
     });
     return { view, version, audience: v.show, seq, page, pages, total, rows: out, counts, ...(Object.keys(sums).length ? { sums } : {}), ...(Object.keys(nested).length ? { nested } : {}), indexable };
+  }
+
+  private linkedColumn: Promise<void> | undefined;
+  /**
+   * The `linked` column and its index (a `linked <facet>` partition, 12.2), for a store from before them:
+   * looked for first, as the tally upgrade is, since an add-if-not-exists takes the table's lock before it
+   * looks; the index is built concurrently, the table being hot.
+   */
+  private linkedReady(): Promise<void> {
+    this.linkedColumn ??= (async () => {
+      const col = await this.pool.query("select 1 from information_schema.columns where table_schema = current_schema() and table_name = 'index_rows' and column_name = 'linked'");
+      if (!col.rows.length) await this.pool.query("alter table index_rows add column linked text");
+      const idx = await this.pool.query("select 1 from pg_indexes where schemaname = current_schema() and tablename = 'index_rows' and indexname = 'index_rows_linked'");
+      if (!idx.rows.length) await this.pool.query("create index concurrently index_rows_linked on index_rows (owner, view, version, audience, linked) where linked is not null");
+    })().then(() => undefined, () => undefined);
+    return this.linkedColumn;
   }
 
   /** Counts and totals per index cursor, picks and search: a few hundred recent answers, the oldest going first. */

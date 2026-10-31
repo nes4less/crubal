@@ -91,7 +91,7 @@ export type View = {
   indexLine: number;
   show: string;
   fresh: string;
-  /** `administered`, `controlled`, `owned`, `relation <name>` or `none` (12.2); absent takes the default. */
+  /** `administered`, `controlled`, `owned`, `relation <name>`, `linked <facet>` or `none` (12.2); absent takes the default. */
   partition?: string;
   /** The dated version; a new version starts the view's stream over (12.6). */
   version?: string;
@@ -291,6 +291,13 @@ export function checkViews(set: ViewSet, dict: Dictionary): void {
     for (const f of v.filters) if (!set.filters.has(f)) throw new CrubalError(`${v.name} names the filter ${f}, which doesn't exist`, v.line);
     for (const i of v.index) if (!v.filters.includes(i)) throw new CrubalError(`${v.name} indexes ${i}, which isn't one of its filters`, v.indexLine);
     for (const c of v.wears) if (!dict.classes.has(c)) throw new CrubalError(`${v.name} selects by ${c}, which isn't a class`, v.line);
+    // A `linked <facet>` partition (12.2, 14.10) names a link facet: the row carries whom the record links to.
+    const linked = v.partition?.match(/^linked (\S+)$/);
+    if (linked) {
+      const f = facetOf(linked[1] as string, dict);
+      if (!f) throw new CrubalError(`${v.name} is partitioned by ${linked[1]}, which isn't a facet`, v.line);
+      if (f.type !== "link") throw new CrubalError(`${v.name} is partitioned by ${linked[1]}, which isn't a link`, v.line);
+    } else if (v.partition && !/^(none|owned|administered|controlled|relation \S+)$/.test(v.partition)) throw new CrubalError(`${v.name} has the partition ${v.partition}; a partition is administered, controlled, owned, relation <name>, linked <facet> or none`, v.line);
     if (v.show === "public") {
       const reads = [
         ...v.shapes.flatMap((s) => (set.shapes.get(s)?.slots ?? []).flatMap((sl) => slotKeys(sl.from))),
@@ -743,6 +750,12 @@ export class Views {
       if (Object.keys(shapes).length) row.shapes = shapes;
       // A partitioned view's row carries its record's ancestors, so an index can match edges to it.
       if (partition !== "none" && opts.access) row.ancestors = opts.access.ancestors(r.id);
+      // A linked partition's row carries whom the record's link facet names (12.2), so an index can bound by it.
+      const linked = partition.match(/^linked (\S+)$/);
+      if (linked && opts.access) {
+        const t = r.values[linked[1] as string];
+        if (isObj(t) && typeof t.$link === "string") row.linked = t.$link;
+      }
       return row;
     });
     return { rows, records: onPage.map((r) => r.id), counts, ...(Object.keys(sums).length ? { sums } : {}), ...(Object.keys(nested).length ? { nested } : {}), pages, indexable };

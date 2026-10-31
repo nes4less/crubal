@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { Access, emptyPermissions } from "../src/access.ts";
 import { readDefinitions } from "../src/defs.ts";
+import { MemoryRecords } from "../src/records.ts";
 import { checkViews, readViews, Views } from "../src/views.ts";
 import { CrubalError } from "../src/tree.ts";
 
@@ -230,4 +232,52 @@ test("a display without a layout, with a malformed slot, or filling one slot twi
   assert.throws(() => readViews("display: x\n  layout: menu\n  slots:\n    a b\n"), (e: unknown) => e instanceof CrubalError && /shapeSlot -> displaySlot/.test(e.message));
   const twice = readViews("display: x\n  layout: menu\n  slots:\n    a -> n\n    b -> n\n");
   assert.throws(() => checkViews(twice, readDefinitions("kind: item\n  levels: product\n")), (e: unknown) => e instanceof CrubalError && /fills the slot n twice/.test(e.message));
+});
+
+// ─── A view partitioned by a link facet (12.2, 14.10; revision 11) ─────────────────────────────────────
+const linkedSrc = `
+kind: notice
+  levels: notice
+kind: person
+  levels: person
+words$
+to&person
+shape: n
+  slots:
+    words -> words
+view: mine
+  select:
+    level: notice
+  partition: linked to
+  order: words
+  shape: n
+  show: member
+`;
+
+test("revision 11: a linked partition names a link facet; the row carries whom it names; a caller is served their own rows", () => {
+  const d = readDefinitions(linkedSrc);
+  const vs = readViews(linkedSrc);
+  checkViews(vs, d);
+  const bad = (partition: string) => readViews(`shape: n\n  slots:\n    words -> words\nview: w\n  select:\n    level: notice\n  partition: ${partition}\n  shape: n\n`);
+  assert.throws(() => checkViews(bad("linked nope"), d), /isn't a facet/);
+  assert.throws(() => checkViews(bad("linked words"), d), /isn't a link/);
+  assert.throws(() => checkViews(bad("beside"), d), /a partition is/);
+  const pairs: [string, { id: string; kind: string; level: string; owner: string; values: Record<string, unknown> }][] = [
+    ["N-1", { id: "N-1", kind: "notice", level: "notice", owner: "t", values: { words: "a", to: { $link: "person:P-1" } } }],
+    ["N-2", { id: "N-2", kind: "notice", level: "notice", owner: "t", values: { words: "b", to: { $link: "person:P-2" } } }],
+    ["N-3", { id: "N-3", kind: "notice", level: "notice", owner: "t", values: { words: "c" } }],
+  ];
+  const access = new Access(d, emptyPermissions(), new MemoryRecords(pairs as never), [], "t");
+  const v = new Views(d, vs);
+  for (const [, r] of pairs) v.put(r as never);
+  const caller = { id: "person:P-1", kind: "person", level: "person", owner: "t", values: {} };
+  const p = v.project("mine", { caller: caller as never, access });
+  assert.deepEqual(p.records, ["N-1"], "the caller is served the rows that name them, none other");
+  assert.equal((p.rows[0] as { linked?: unknown }).linked, "person:P-1", "the row carries whom it names");
+  const whole = v.project("mine", { audience: "member", access });
+  assert.deepEqual(whole.records, ["N-1", "N-2", "N-3"], "with no caller the projection is the whole selection, for the stream");
+  assert.deepEqual(whole.rows.map((r) => (r as { linked?: unknown }).linked), ["person:P-1", "person:P-2", undefined]);
+  assert.ok(access.standsIn("person:P-2", "N-2", "linked to"));
+  assert.ok(!access.standsIn("person:P-2", "N-1", "linked to"));
+  assert.ok(!access.standsIn("person:P-2", "N-3", "linked to"));
 });
