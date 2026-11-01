@@ -206,7 +206,12 @@ A form is a contract with a person. Its screen assembles itself:
 - `writes` shows current values, `reads` takes the person's answers; a form with no `reads` of its own
   takes each answer by its facet's name, since its fields are its needs;
 - `who` is the person, and `origin` says what the person is doing: `declared` when they state it,
-  `observed` when they read it off a real instance in front of them.
+  `observed` when they read it off a real instance in front of them;
+- `role` says what the form is for, one of three words: `make` brings a record into being and asks its
+  name; `keep` sets facts or settings on a record that exists; `act` moves a state (pick, pack, cancel).
+  A form without a role reads as `keep`. Any other word is refused. A kind has one make form per level;
+  a class is data a record wears, never a way of making it, so a class's facets come through keep forms.
+  Only a form has a role. (Revision 14.)
 
 ## 7.8 Offer and take
 
