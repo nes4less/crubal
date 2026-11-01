@@ -48,8 +48,16 @@ export type Utility = {
   setup: ({ connection: string; line: number } | { setting: string; line: number })[];
   /** The acts the utility provides by name (11.1, `acts:`), which a lane's presses may name (12.10). */
   acts: { name: string; line: number }[];
+  /** The utility's look wherever it shows (11.1, `mark:`, revision 13): a glyph the mounting app's kit
+   * draws and a hue from the eight words. */
+  mark?: { glyph: string; hue: Hue; line: number };
   line: number;
 };
+
+/** The eight hue words a mark may name (11.1, revision 13); an app maps each to its own colors. */
+export const HUES = ["amber", "blue", "violet", "slate", "teal", "plum", "coral", "olive"] as const;
+export type Hue = (typeof HUES)[number];
+export const isHue = (v: unknown): v is Hue => typeof v === "string" && (HUES as readonly string[]).includes(v);
 
 /** A press on a lane's home or card (12.10): a word, and where it lands: a path, `page`, or an act. */
 export type LanePress = { word: string; to: string; line: number };
@@ -149,7 +157,12 @@ function readUtility(node: Node): Utility {
         if (!/^[a-z][\w-]*$/.test(a)) throw new CrubalError(`acts: ${a} is not a lower-case word`, c.line);
         u.acts.push({ name: a, line: c.line });
       }
-    } else throw new CrubalError(`a utility has label, describe, serves, needs, setup and acts, not ${c.key}`, c.line);
+    } else if (c.key === "mark") {
+      const m = c.value.trim().match(/^([a-z][\w-]*)\s+([a-z]+)$/);
+      if (!m) throw new CrubalError(`mark: is "<glyph> <hue>", the glyph a lower-case word and the hue one of ${HUES.join(", ")}: ${c.value.trim()}`, c.line);
+      if (!isHue(m[2])) throw new CrubalError(`mark: ${m[2]} is not a hue; the eight are ${HUES.join(", ")}`, c.line);
+      u.mark = { glyph: m[1] as string, hue: m[2], line: c.line };
+    } else throw new CrubalError(`a utility has label, describe, serves, needs, setup, acts and mark, not ${c.key}`, c.line);
   }
   return u;
 }

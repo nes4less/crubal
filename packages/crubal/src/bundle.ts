@@ -266,6 +266,7 @@ export function utilityJson(u: Utility): JsonObject {
   if (u.needs.length) o.needs = u.needs.map((n) => ({ name: n.name, ...(n.version ? { version: n.version } : {}) }));
   if (u.setup.length) o.setup = u.setup.map((s): JsonObject => ("connection" in s ? { connection: s.connection } : { setting: s.setting }));
   if (u.acts.length) o.acts = u.acts.map((a) => a.name);
+  if (u.mark) o.mark = { glyph: u.mark.glyph, hue: u.mark.hue };
   return o;
 }
 
@@ -618,6 +619,10 @@ function utilityText(u: JsonObject): string[] {
   if (Array.isArray(u.needs)) out.push(`  needs: ${(u.needs as JsonObject[]).map((n) => `${n.name}${n.version ? ` /${n.version}` : ""}`).join(", ")}`);
   if (Array.isArray(u.setup)) out.push(`  setup: ${(u.setup as JsonObject[]).map((s) => (typeof s.connection === "string" ? `connection ${s.connection}` : `setting ${s.setting}`)).join(", ")}`);
   if (Array.isArray(u.acts) && u.acts.length) out.push(`  acts: ${(u.acts as string[]).join(", ")}`);
+  if (u.mark && typeof u.mark === "object" && !Array.isArray(u.mark)) {
+    const m = u.mark as JsonObject;
+    if (typeof m.glyph === "string" && typeof m.hue === "string") out.push(`  mark: ${m.glyph} ${m.hue}`);
+  }
   return out;
 }
 
