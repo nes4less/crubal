@@ -107,6 +107,9 @@ export type Contract = {
   ref?: string;
   /** A quorum (7.6): the root's flag facet that, while true, makes a run need a met proposal it cites. */
   quorum?: string;
+  /** A form's role (7.7): make brings a record into being, keep sets facts on one that exists, act moves a
+   * state. Absent reads as keep. */
+  role?: "make" | "keep" | "act";
   /** For a send contract that carries projection streams (12.6.2): the views. */
   stream: string[];
   /** Every part as written, with its line, for the publish checks. */
@@ -182,6 +185,11 @@ export function readContracts(source: string): Contract[] {
       else if (p.key === "undo") c.undo = p.value;
       else if (p.key === "ref") c.ref = p.value;
       else if (p.key === "quorum") c.quorum = p.value.trim();
+      else if (p.key === "role") {
+        const r = p.value.trim();
+        if (r !== "make" && r !== "keep" && r !== "act") throw new CrubalError(`${c.name}: role is make, keep or act, not ${r || "nothing"}`, p.line);
+        c.role = r;
+      }
       else if (p.key === "stream") c.stream = list();
       else if (p.key === "terms") {
         // `terms:` with one term per line, or `terms: reshare no, expires 2027-01-01` on the line.
@@ -204,9 +212,10 @@ export function readContracts(source: string): Contract[] {
       else if (p.key === "absorb") c.absorb = p.value !== "no";
       else if (p.key === "lands") c.lands = p.value;
       // Free text the printer may have quoted (2.5) reads back as text; every other part is kept as written.
-      if (!["kind", "origin", "prefix", "reads", "writes", "stores", "ignore", "keep-raw", "absorb", "lands", "gives", "who", "when", "from", "mode", "undo", "ref", "stream", "terms"].includes(p.key)) c.parts[p.key] = p.key === "label" || p.key === "describe" ? unquote(p.value) : p.value;
+      if (!["kind", "origin", "prefix", "reads", "writes", "stores", "ignore", "keep-raw", "absorb", "lands", "gives", "who", "when", "from", "mode", "undo", "ref", "stream", "terms", "role"].includes(p.key)) c.parts[p.key] = p.key === "label" || p.key === "describe" ? unquote(p.value) : p.value;
     }
     if (!c.origin) c.origin = c.kind === "form" ? "declared" : "reported";
+    if (c.role && c.kind !== "form") throw new CrubalError(`${c.name}: only a form has a role`, c.partLines.role ?? c.line);
     if (c.keepRaw.length && !c.prefix) throw new CrubalError(`${c.name} keeps raw fields, so it needs a prefix`, c.line);
     // A form's fields are its needs (7.7): with no reads of its own, each answer lands on its facet by name.
     if (c.kind === "form" && !c.reads.length && c.needs.length) c.reads = c.needs.map((l) => ({ from: l.facet, to: l.facet, values: [] as [string, string][], line: l.line, valueLines: [] }));
