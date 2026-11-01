@@ -128,6 +128,8 @@ export function contractJson(c: Contract): JsonObject {
   }
   if (c.stream.length) o.stream = [...c.stream];
   for (const k of ["when", "who", "from", "to", "mode", "undo", "ref", "prefix"] as const) if (c[k]) o[k] = c[k] as string;
+  // A form's role (7.7, revision 14) rides the bundle too, else an installed form reads as keep.
+  if (c.role) o.role = c.role;
   // origin is a part of the kinds that bring values in (7.2); the reader defaults it for the rest.
   if (c.origin && ["receive", "form", "take"].includes(c.kind)) o.origin = c.origin;
   if (c.lands !== "value") o.lands = c.lands;
@@ -135,7 +137,7 @@ export function contractJson(c: Contract): JsonObject {
   if (c.ignore.length) o.ignore = [...c.ignore];
   if (c.keepRaw.length) o["keep-raw"] = [...c.keepRaw];
   for (const [k, v] of Object.entries(c.parts)) {
-    if (["label", "describe", "for", "needs", "gives", "terms", "writes", "reads", "stream", "when", "who", "from", "to", "mode", "undo", "ref", "origin", "prefix", "lands", "absorb", "ignore", "keep-raw", "kind"].includes(k)) continue;
+    if (["label", "describe", "for", "needs", "gives", "terms", "writes", "reads", "stream", "when", "who", "from", "to", "mode", "undo", "ref", "origin", "prefix", "lands", "absorb", "ignore", "keep-raw", "kind", "role"].includes(k)) continue;
     if (k === "retry") {
       const m = v.match(/^(\d+)\s+every\s+(\S+)$/);
       o.retry = m ? { times: m[1] as string, every: m[2] as string } : v;
@@ -451,14 +453,14 @@ function contractText(c: JsonObject): string[] {
   for (const k of ["label", "describe", "for"]) out.push(...kv("  ", k, c[k]));
   if (Array.isArray(c.needs)) out.push("  needs:", ...c.needs.map((l) => `    ${lineText(l as JsonObject)}`));
   for (const k of ["writes", "reads", "stores"]) if (Array.isArray(c[k])) out.push(`  ${k}:`, ...(c[k] as JsonObject[]).flatMap(mapText));
-  for (const k of ["gives", "stream", "when", "who", "from", "to", "mode", "undo", "ref", "origin", "prefix", "lands", "ignore", "keep-raw"]) out.push(...kv("  ", k, c[k]));
+  for (const k of ["role", "gives", "stream", "when", "who", "from", "to", "mode", "undo", "ref", "origin", "prefix", "lands", "ignore", "keep-raw"]) out.push(...kv("  ", k, c[k]));
   if (isObj(c.terms) && Object.keys(c.terms).length) {
     out.push("  terms:");
     for (const [k, v] of Object.entries(c.terms)) out.push(`    ${k}: ${String(v)}`);
   }
   if (c.absorb === false) out.push("  absorb: no");
   for (const [k, v] of Object.entries(c)) {
-    if (["contract", "kind", "label", "describe", "for", "needs", "writes", "reads", "stores", "gives", "terms", "stream", "when", "who", "from", "to", "mode", "undo", "ref", "origin", "prefix", "lands", "ignore", "keep-raw", "absorb"].includes(k)) continue;
+    if (["contract", "kind", "label", "describe", "for", "needs", "writes", "reads", "stores", "gives", "terms", "stream", "when", "who", "from", "to", "mode", "undo", "ref", "origin", "prefix", "lands", "ignore", "keep-raw", "absorb", "role"].includes(k)) continue;
     if (k === "retry" && isObj(v)) out.push(`  retry: ${v.times} every ${v.every}`);
     else out.push(...kv("  ", k, v));
   }

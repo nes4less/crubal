@@ -3,6 +3,7 @@
 // a form is refused.
 import assert from "node:assert/strict";
 import test from "node:test";
+import { bundleOf, parsePackage, printBundle, readBundle } from "../src/bundle.ts";
 import { readContracts } from "../src/store.ts";
 
 const pkg = (role: string, kind = "form") => `package: t /2026-01-01
@@ -33,4 +34,13 @@ test("a form's role reads: make, keep, act; absent is undefined", () => {
 test("any other word is refused, with the line; a role on a receive contract is refused", () => {
   assert.throws(() => readContracts(pkg("delete")), /role is make, keep or act, not delete/);
   assert.throws(() => readContracts(pkg("make", "receive")), /only a form has a role/);
+});
+
+test("the role rides the bundle: in its JSON, in its printed text, and back through the reader", () => {
+  const b = bundleOf(parsePackage(pkg("act")));
+  const c = (b.contracts as { contract: string; role?: string }[])[0];
+  assert.equal(c?.role, "act");
+  assert.match(printBundle(b), /\n  role: act\n/);
+  assert.equal(readBundle(b).contracts[0]?.role, "act");
+  assert.equal(readContracts(printBundle(b))[0]?.role, "act");
 });
