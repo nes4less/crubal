@@ -946,7 +946,7 @@ permissions: shopperms
   assert.equal(await host.secret("conn.example", "legacy"), "plain_old_key");
 });
 
-test("the root is the last ancestor (14.2, 12.6): a staff view served to a caller whose edge is on ROOT lists the records that name no within, as it lists those within ROOT; a member is still refused the view", async () => {
+test("the root is the last ancestor (14.2, 12.6): a staff view served to a caller whose edge is on ROOT lists the records that name no within, as it lists those within ROOT; a member is still refused the view", { skip: !url }, async () => {
   await host.createOwner("root.example");
   const dev = new PgStore(pool, "root.example", { allowUnsigned: true });
   const store = await host.storeFor("root.example");

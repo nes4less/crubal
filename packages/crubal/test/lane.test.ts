@@ -52,6 +52,7 @@ utility: orders /2026-11-05
   label: Orders
   serves: owner, fulfiller(pick)
   acts: pick, pack, confirmAddress
+  mark: parcel amber
 
 ${tail}
 `;
@@ -150,4 +151,22 @@ test("a lane is refused when it names what the package doesn't declare", () => {
   refused(toPick.replace("opens: page", "opens: nest"), /nest is not in this language version/);
   refused(toPick.replace("serves: owner, fulfiller(pick)", "serves: member"), /wider than desk shows/);
   refused(`${toPick}\n${toPick}`, /twice in one package/);
+});
+
+// Revision 13 (11.1): a utility's mark, a glyph and a hue from the eight words.
+test("a utility's mark is read, carried through the bundle and back, and refused outside the eight hues", () => {
+  const [info] = readPackages(shop(toPick));
+  assert.deepEqual([info?.utilities[0]?.mark?.glyph, info?.utilities[0]?.mark?.hue], ["parcel", "amber"]);
+  const first = bundleOf(parsePackage(shop(toPick)));
+  assert.deepEqual((first.utilities as { mark?: { glyph: string; hue: string } }[])[0]?.mark, { glyph: "parcel", hue: "amber" });
+  const text = printBundle(first);
+  assert.match(text, /^  mark: parcel amber$/m);
+  assert.equal(serialize(bundleOf(readBundle(first))), serialize(first));
+  const bad = (m: string, why: RegExp) => assert.throws(() => readPackages(shop(toPick.replace("mark: parcel amber", m)).replace("mark: parcel amber", m)), (e: unknown) => e instanceof CrubalError && why.test(e.message));
+  bad("mark: parcel pink", /pink is not a hue/);
+  bad("mark: parcel", /is "<glyph> <hue>"/);
+  bad("mark: Parcel amber", /is "<glyph> <hue>"/);
+  // No mark: none.
+  const [plain] = readPackages(shop(toPick).replace("  mark: parcel amber\n", ""));
+  assert.equal(plain?.utilities[0]?.mark, undefined);
 });

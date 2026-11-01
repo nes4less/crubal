@@ -53,6 +53,7 @@ utility: orders /2026-10-16
   needs: cashierfu.com/commerce, cashierfu.com/location, notifications
   setup: connection stripe, connection shippo, setting shippingOrigin
   acts: pick, pack, ship
+  mark: parcel amber
 ```
 
 | Setting | Holds |
@@ -63,12 +64,13 @@ utility: orders /2026-10-16
 | `needs` | the packages (`domain/name`, optionally with a version) and the other utilities it depends on |
 | `acts` | the acts the utility provides by name (lower-case words), which a lane's presses may name (12.10); the app that mounts the utility provides their bodies |
 | `setup` | what a deployment provides before it runs: `connection <name>` (a credential the host holds, chapter 7.6) and `setting <facet>` (a value on the deployment's own record) |
+| `mark` (revision 13) | the utility's look wherever it shows: a glyph and a hue, `mark: <glyph> <hue>`. The glyph is a lower-case word the mounting app's kit draws (an unknown one is drawn as the app's default); the hue is one of eight words, `amber`, `blue`, `violet`, `slate`, `teal`, `plum`, `coral`, `olive`, which the app maps to its own colors in light and dark. A utility without a mark has none |
 
 A utility is a member like any other: versioned, listed in `members`, carried in the bundle (11.6). It
 grants nothing: who may use it is still edges (chapter 14). A package MUST be refused at publish when a
 utility serves a name that isn't a preset, relation or audience, narrows to something that isn't a preset,
-menu item or relation, or needs a setting that isn't a facet. A reader that doesn't know the block carries
-it unchanged (chapter 13.5).
+menu item or relation, needs a setting that isn't a facet, or marks a hue outside the eight. A reader that
+doesn't know the block carries it unchanged (chapter 13.5).
 
 **Prefixes are nicknames.** Identity is always the full `domain/name`; a prefix only abbreviates it inside a
 package or a wrapper, and readers compare after resolving (chapter 1.3). Two packages may use different
