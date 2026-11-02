@@ -12,7 +12,7 @@ import { type ClassDef, type ClassLine, type Dictionary, emptyDictionary, type F
 import { facetJson } from "./dictionary.ts";
 import { type Recipe, readRecipes, type Step } from "./migrate.ts";
 import type { Json, JsonObject } from "./model.ts";
-import { type PackageInfo, readPackages, type Utility, type Lane, type LanePress } from "./packages.ts";
+import { type PackageInfo, readPackages, type Utility, type Lane, type LanePress, type Flow } from "./packages.ts";
 import { readRules, type Rule } from "./rules.ts";
 import { type Contract, type Keys, readContracts, sha256, keyFor } from "./store.ts";
 import { type Display, emptyViewSet, type Filter, readViews, type Shape, VIEW_SET_KEYS, type View, type ViewSet } from "./views.ts";
@@ -274,6 +274,18 @@ export function utilityJson(u: Utility): JsonObject {
 
 const pressJson = (p: LanePress): JsonObject => ({ word: p.word, to: p.to });
 
+/** A flow (12.11) in the bundle: as written, its stops as `{name, act?, of?}`, its done as `{filter, value}`. */
+export function flowJson(f: Flow): JsonObject {
+  const o: JsonObject = { flow: f.name, version: f.version };
+  if (f.label) o.label = f.label;
+  if (f.utility) o.utility = f.utility;
+  o.follow = f.follow;
+  if (f.serves.length) o.serves = f.serves.map((x) => ({ as: x.as, ...(x.items ? { items: [...x.items] } : {}) }));
+  o.stops = f.stops.map((st) => ({ name: st.name, ...(st.act ? { act: st.act } : {}), ...(st.of ? { of: st.of } : {}) }));
+  if (f.done) o.done = { filter: f.done.filter, value: f.done.value };
+  return o;
+}
+
 /** A lane (12.10) in the bundle: as written, its presses as `{word, to}`, its picks as `{filter, value}`. */
 export function laneJson(s: Lane): JsonObject {
   const o: JsonObject = { lane: s.name, version: s.version };
@@ -332,6 +344,7 @@ export function bundleOf(p: Parsed): JsonObject {
   for (const v of p.views.views.values()) if (v.version) members[`view:${v.name}`] = v.version;
   for (const u of info.utilities) if (u.version) members[`utility:${u.name}`] = u.version;
   for (const s of info.lanes) if (s.version) members[`lane:${s.name}`] = s.version;
+  for (const f of info.flows) if (f.version) members[`flow:${f.name}`] = f.version;
   o.members = members;
   if (dict.kinds.size) o.kinds = [...dict.kinds.values()].map((k) => kindJson(dict, k));
   if (facets.length) o.facets = facets.map(facetJson);
@@ -352,6 +365,7 @@ export function bundleOf(p: Parsed): JsonObject {
   if (p.instructions.size) o.instructions = [...p.instructions].map(([issuer, list]): JsonObject => ({ issuer, instructions: list.map((i): JsonObject => ({ n: i.n, op: i.op, key: i.key, ...(i.to ? { to: i.to } : {}), ...(i.map.length ? { map: i.map.map(([a, b]) => ({ from: a, to: b })) } : {}) })) }));
   if (info.utilities.length) o.utilities = info.utilities.map(utilityJson);
   if (info.lanes.length) o.lanes = info.lanes.map(laneJson);
+  if (info.flows.length) o.flows = info.flows.map(flowJson);
   return o;
 }
 
@@ -576,6 +590,7 @@ export function printBundle(b: JsonObject): string {
   if (isObj(b.emergency)) out.push("emergency:", `  approvers: ${b.emergency.approvers}`, `  longest: ${b.emergency.longest}`, "");
   blocks("utilities", utilityText);
   blocks("lanes", laneText);
+  blocks("flows", flowText);
   return `${out.join("\n").trimEnd()}\n`;
 }
 
@@ -583,6 +598,17 @@ const quoteWord = (w: string) => `"${w.replace(/\\/g, "\\\\").replace(/"/g, '\\"
 const pressText = (p: Json | undefined): string | undefined =>
   isObj(p) && typeof p.word === "string" && typeof p.to === "string" ? `${/[:\s]/.test(p.word) ? quoteWord(p.word) : p.word} -> ${p.to}` : undefined;
 const pickText = (p: Json | undefined): string | undefined => (isObj(p) ? `${p.filter} = ${String(p.value)}` : typeof p === "string" ? p : undefined);
+
+function flowText(f: JsonObject): string[] {
+  const out = [`flow: ${f.flow} /${f.version}`, ...kv("  ", "label", f.label), ...kv("  ", "utility", f.utility), ...kv("  ", "follow", f.follow)];
+  if (Array.isArray(f.serves)) out.push(`  serves: ${(f.serves as JsonObject[]).map((x) => `${x.as}${Array.isArray(x.items) ? `(${(x.items as string[]).join(", ")})` : ""}`).join(", ")}`);
+  if (Array.isArray(f.stops)) {
+    out.push("  stops:");
+    for (const st of f.stops as JsonObject[]) out.push(`    ${st.name}${typeof st.act === "string" ? ` -> ${st.act}` : ""}${typeof st.of === "string" ? ` of ${st.of}` : ""}`);
+  }
+  if (f.done !== undefined) out.push(`  done: ${pickText(f.done)}`);
+  return out;
+}
 
 function laneText(s: JsonObject): string[] {
   const out = [`lane: ${s.lane} /${s.version}`, ...kv("  ", "label", s.label), ...kv("  ", "utility", s.utility), ...kv("  ", "view", s.view), ...kv("  ", "serve", s.serve)];
@@ -642,7 +668,7 @@ export function readBundleInto(b: JsonObject, into: Dictionary = emptyDictionary
 /** An empty Parsed to read packages onto, in order. */
 export function emptyParsed(): Parsed {
   const { perms } = readAccess("");
-  return { info: { name: "", version: "", owner: "", line: 0, crubal: 2, crubalLine: 0, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {}, utilities: [], lanes: [] }, dict: emptyDictionary(), rules: [], contracts: [], views: emptyViewSet(), perms, edges: [], recipes: [], instructions: new Map() };
+  return { info: { name: "", version: "", owner: "", line: 0, crubal: 2, crubalLine: 0, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {}, utilities: [], lanes: [], flows: [] }, dict: emptyDictionary(), rules: [], contracts: [], views: emptyViewSet(), perms, edges: [], recipes: [], instructions: new Map() };
 }
 
 /**
@@ -653,7 +679,7 @@ export function readBundleOnto(bundle: JsonObject, base: Parsed): Parsed {
   const text = printBundle(bundle);
   readDefinitions(text, base.dict);
   const [info] = readPackages(text);
-  if (info) base.info = { ...info, dict: base.dict, terms: Object.keys(info.terms).length ? info.terms : base.info.terms, utilities: [...base.info.utilities.filter((h) => !info.utilities.some((n) => n.name === h.name)), ...info.utilities], lanes: [...base.info.lanes.filter((h) => !info.lanes.some((n) => n.name === h.name)), ...info.lanes] };
+  if (info) base.info = { ...info, dict: base.dict, terms: Object.keys(info.terms).length ? info.terms : base.info.terms, utilities: [...base.info.utilities.filter((h) => !info.utilities.some((n) => n.name === h.name)), ...info.utilities], lanes: [...base.info.lanes.filter((h) => !info.lanes.some((n) => n.name === h.name)), ...info.lanes], flows: [...base.info.flows.filter((h) => !info.flows.some((n) => n.name === h.name)), ...info.flows] };
   const byName = <T extends { name: string }>(have: T[], next: T[]) => [...have.filter((h) => !next.some((n) => n.name === h.name)), ...next];
   base.rules = byName(base.rules, readRules(text));
   base.contracts = byName(base.contracts, readContracts(text));

@@ -398,6 +398,9 @@ A package MUST be refused at publish when:
 6. a public view's slots or filters read a facet that `show` rules hide from `public`;
 8. a lane names a view, filter, value, slot, utility or act the package doesn't declare, serves an
    audience wider than its view shows, opens anything but a page, or names both a view and a serve;
+9. a flow names a utility it doesn't declare, a stop that is neither a lane nor a form of the package, an
+   act its utility lacks, a level its kinds lack, or a done that is not a declared filter with a real value
+   (12.11);
 7. a display names no layout, has a slot line that isn't `shapeSlot -> displaySlot`, or fills one of its
    slots twice.
 
@@ -496,3 +499,55 @@ figure is the index's tally, the cards a page, the history the same view under t
 widens what the view shows. A reader that doesn't know the block carries it unchanged (13.5). What a
 lane's card looks like on a screen is the app's; the compass (the positions its parts take) is a
 convention of the app that draws it, not of the language.
+
+## 12.11 Flows
+
+A **flow** is an objective's line of stops: the lanes and blocks a record walks, in order, from the thing's
+making to its being done (a unit from its making to its label; an order from paid to shipped). A lane is
+a stop that holds records in a state; a block is a form (a make form, or an act's) that moves them. A flow
+is declared by the package whose lanes and forms it walks, belongs to a utility and is served like a lane.
+The app draws it at a room's head, its stops as a strip, and lets a person follow the queue (empty one
+stop for every record) or the card (walk one record down the line); the engine reads, checks and carries
+it.
+
+```crubal
+flow: pickPackShip /2026-12-20
+  label: Pick, pack, ship
+  utility: orders
+  follow: queue
+  serves: owner, fulfiller(ship)
+  stops:
+    ordersToPick -> pick
+    ordersToPack -> pack
+    ordersToShip -> ship
+  done: orderState = shipped
+
+flow: unitizer /2026-12-20
+  label: Unitizer
+  utility: bench
+  follow: card
+  serves: owner, bencher
+  stops:
+    unitizer of product
+    unitsToFile -> file
+    unitsToLabel -> label
+  done: filingState = labelled
+```
+
+| Setting | Holds |
+|---|---|
+| `flow` | its name (a lower-case word) and dated version; a member like a lane, listed in `members` |
+| `label` | its word on a screen |
+| `utility` | the utility of this package whose acts its stops may name |
+| `follow` | `queue` or `card`: how a new person walks it; a person's own choice stands over it; `queue` unless said |
+| `serves` | whom the line is for, as a lane's `serves` |
+| `stops` | one line per stop, in walking order: `<lane> -> <act>` is a lane of this package with the act of the utility that moves a card on; `<lane>` alone is a lane whose cards move by their own presses; `<form> of <level>` is a block, a form of this package making or acting on a record of that level (the record of the stop before, when it has one) |
+| `done` | `filter = value`: the state a record leaves the line in |
+
+A package MUST be refused at publish when a flow names a utility it doesn't declare, a stop that is
+neither a lane nor a form of the package, an act its utility lacks, a level its kinds lack, or a done
+that is not a declared filter with a real value (12.8). A flow adds nothing to what its lanes show: a
+person sees the stops whose lanes they are served, and a block only where the form's `who` admits them.
+Where a block's form is pressed is the app's (a generic make screen, a path of its own); what a flow
+looks like is the app's; the order of the stops is the package's. A reader that doesn't know the block
+carries it unchanged (13.5).
