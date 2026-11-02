@@ -4,6 +4,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { bundleOf, parsePackage, printBundle, readBundle } from "../src/bundle.ts";
+import { readDefinitions } from "../src/defs.ts";
+import { checkContracts } from "../src/exchange.ts";
 import { readContracts } from "../src/store.ts";
 
 const pkg = (role: string, kind = "form") => `package: t /2026-01-01
@@ -43,4 +45,13 @@ test("the role rides the bundle: in its JSON, in its printed text, and back thro
   assert.match(printBundle(b), /\n  role: act\n/);
   assert.equal(readBundle(b).contracts[0]?.role, "act");
   assert.equal(readContracts(printBundle(b))[0]?.role, "act");
+});
+
+test("the publish check (7.10) takes a form's role as a part of the form: an install of a package carrying roles passes", () => {
+  // 0.3.45 had refused every such package at install ("a form contract has no part role"), the role's line
+  // standing among the part lines while the form's allowed parts lacked it.
+  const defs = readDefinitions("kind: deployment\n  levels: deployment\nname$\n");
+  const text = "contract: thing\n  kind: form\n  role: make\n  origin: declared\n  audience: staff\n  needs:\n    !name\n";
+  assert.doesNotThrow(() => checkContracts(readContracts(text), defs));
+  assert.throws(() => checkContracts(readContracts(text.replace("role: make", "rolf: make")), defs), /has no part rolf/);
 });
