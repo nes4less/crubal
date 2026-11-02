@@ -762,8 +762,12 @@ export class Host {
     const wk = await this.wellKnownOf(domain);
     const listed = ((wk.packages as JsonObject[] | undefined) ?? []).find((p) => p.package === pkg);
     if (!listed) throw new Error(`${domain} doesn't publish ${pkg}`);
-    const v = version ?? String(listed.latest);
-    const url = (listed.versions as { [v: string]: string } | undefined)?.[v];
+    const versions = (listed.versions as { [v: string]: string } | undefined) ?? {};
+    // A dependency's pin the publisher no longer lists takes the lowest version listed at or past it
+    // (0.3.48): the pin is a floor, as above; a version asked for by name is taken as named or refused.
+    const floor = version && seen.size > 0 && !versions[version] ? Object.keys(versions).sort().find((k) => k >= version) : undefined;
+    const v = floor ?? version ?? String(listed.latest);
+    const url = versions[v];
     if (!url) throw new Error(`${pkg} has no version ${v} at ${domain}`);
     const key = `${pkg} /${v}`;
     if (seen.has(key)) throw new Error(`${key} extends itself through its dependencies`);
