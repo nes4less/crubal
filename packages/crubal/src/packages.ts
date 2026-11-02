@@ -29,6 +29,8 @@ export type PackageInfo = {
   utilities: Utility[];
   /** The lanes the package declares (12.10, `lane:` blocks). */
   lanes: Lane[];
+  /** The flows the package declares (12.11, `flow:` blocks). */
+  flows: Flow[];
 };
 
 /**
@@ -100,6 +102,30 @@ export type Lane = {
     opens: "page";
     line: number;
   };
+  line: number;
+};
+
+/**
+ * A stop of a flow (12.11): a lane of the package with the act that moves a card on, or a form (a block)
+ * with where its record comes from. Which it is, the check decides by the name: a lane's name is a lane
+ * stop, a form contract's name a block; `act` says lane, `of` says block.
+ */
+export type FlowStop = { name: string; act?: string; of?: string; line: number };
+
+/**
+ * A flow (12.11): an objective's line of stops, declared by the package whose lanes and forms it walks,
+ * served like a lane, walked by a record. The app draws it at the room's head; the engine reads, checks
+ * and carries it.
+ */
+export type Flow = {
+  name: string;
+  version: string;
+  label?: string;
+  utility?: string;
+  follow: "queue" | "card";
+  serves: { as: string; items?: string[]; line: number }[];
+  stops: FlowStop[];
+  done?: { filter: string; value: string; line: number };
   line: number;
 };
 
@@ -258,6 +284,40 @@ function readLane(node: Node): Lane {
   return s;
 }
 
+/** Read one `flow:` block (12.11). */
+function readFlow(node: Node): Flow {
+  const [name = "", version = ""] = node.value.split(/\s+\//).map((s) => s.trim());
+  if (!/^[a-z][\w-]*$/.test(name)) throw new CrubalError(`a flow is "flow: <name> /<version>", the name a lower-case word: ${node.value}`, node.line);
+  const f: Flow = { name, version, follow: "queue", serves: [], stops: [], line: node.line };
+  for (const c of node.children) {
+    if (!c.key) continue;
+    const v = c.value.trim();
+    if (c.key === "label") f.label = unquote(v);
+    else if (c.key === "utility") f.utility = v;
+    else if (c.key === "follow") {
+      if (v !== "queue" && v !== "card") throw new CrubalError(`follow is queue or card, not ${v}`, c.line);
+      f.follow = v;
+    } else if (c.key === "serves") {
+      for (const part of splitServes(v)) {
+        const m = part.match(/^([A-Za-z][\w-]*)(?:\((.*)\))?$/);
+        if (!m) throw new CrubalError(`serves: ${part} is not a name, or a name with items in parentheses`, c.line);
+        f.serves.push({ as: m[1] as string, ...(m[2] !== undefined ? { items: splitList(m[2]) } : {}), line: c.line });
+      }
+    } else if (c.key === "done") f.done = readPick(v, c.line, "done");
+    else if (c.key === "stops") {
+      for (const st of c.children) {
+        const text = st.text.trim();
+        if (!text) continue;
+        const m = text.match(/^([a-z][\w-]*)(?:\s+->\s+([a-z][\w-]*)|\s+of\s+([a-z][\w-]*))?$/);
+        if (!m) throw new CrubalError(`a stop is "<lane> -> <act>", "<lane>", or "<form> of <level>", not ${text}`, st.line);
+        f.stops.push({ name: m[1] as string, ...(m[2] ? { act: m[2] } : {}), ...(m[3] ? { of: m[3] } : {}), line: st.line });
+      }
+    } else throw new CrubalError(`a flow has label, utility, follow, serves, stops and done, not ${c.key}`, c.line);
+  }
+  if (!f.stops.length) throw new CrubalError(`the flow ${name} has no stops`, node.line);
+  return f;
+}
+
 /** Split a file into its packages, keeping line numbers true. */
 export function readPackages(source: string): PackageInfo[] {
   const lines = source.split(/\r?\n/);
@@ -268,7 +328,7 @@ export function readPackages(source: string): PackageInfo[] {
     const [head, ...rest] = readTree(text);
     if (!head) throw new CrubalError("an empty package", start + 1);
     const [name = "", version = ""] = head.value.split(/\s+\//).map((s) => s.trim());
-    const info: PackageInfo = { name, version, owner: "", line: head.line, crubal: LANGUAGE, crubalLine: head.line, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {}, utilities: [], lanes: [] };
+    const info: PackageInfo = { name, version, owner: "", line: head.line, crubal: LANGUAGE, crubalLine: head.line, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {}, utilities: [], lanes: [], flows: [] };
     for (const c of head.children) {
       if (c.key === "owner") info.owner = c.value;
       if (c.key === "crubal") {
@@ -296,6 +356,11 @@ export function readPackages(source: string): PackageInfo[] {
         const s = readLane(node);
         if (info.lanes.some((x) => x.name === s.name)) throw new CrubalError(`the lane ${s.name} twice in one package`, node.line);
         info.lanes.push(s);
+      }
+      if (node.key === "flow") {
+        const f = readFlow(node);
+        if (info.flows.some((x) => x.name === f.name)) throw new CrubalError(`the flow ${f.name} twice in one package`, node.line);
+        info.flows.push(f);
       }
     }
     // Definitions are everything after the header block.
@@ -362,6 +427,7 @@ export function checkPackages(source: string): PackageInfo[] {
   }
   checkUtilities(source, pkgs);
   checkLanes(source, pkgs);
+  checkFlows(source, pkgs);
   return pkgs;
 }
 
@@ -455,6 +521,50 @@ function checkUtilities(source: string, pkgs: PackageInfo[]): void {
       }
       for (const s of u.setup) if ("setting" in s && !s.setting.includes(":") && !dict.facets.has(s.setting)) throw new CrubalError(`${u.name} needs the setting ${s.setting}, which isn't a facet here`, s.line);
       if (u.needs.some((n) => n.name === u.name)) throw new CrubalError(`${u.name} needs itself`, u.line);
+    }
+  }
+}
+
+/**
+ * Flow blocks (12.11): a flow names its own package's utility and serves what that package knows; each
+ * stop is a lane of the package (with an act of the utility when one is named) or a form contract of the
+ * package (with a level of the package's kinds when `of` is named); its done pick is a declared filter
+ * with a real value. File-local, as the lane checks are.
+ */
+function checkFlows(source: string, pkgs: PackageInfo[]): void {
+  if (!pkgs.some((p) => p.flows.length)) return;
+  const { perms } = readAccess(source);
+  const dict = readDefinitions(source);
+  const views = readViews(source);
+  const forms = new Set(readContracts(source).filter((c) => c.kind === "form").map((c) => c.name));
+  const known = (n: string) => perms.presets.has(n) || perms.relations.has(n) || AUDIENCES.has(n);
+  const item = (n: string) => perms.presets.has(n) || perms.menu.has(n) || perms.relations.has(n);
+  for (const p of pkgs) {
+    const lanes = new Set(p.lanes.map((l) => l.name));
+    for (const f of p.flows) {
+      const where = `the flow ${f.name}`;
+      const utility = f.utility ? p.utilities.find((u) => u.name === f.utility) : undefined;
+      if (f.utility && !utility) throw new CrubalError(`${where} names the utility ${f.utility}, which this package doesn't declare`, f.line);
+      const acts = new Set((utility?.acts ?? []).map((a) => a.name));
+      for (const sv of f.serves) {
+        if (!known(sv.as)) throw new CrubalError(`${where} serves ${sv.as}, which isn't a preset, relation or audience here`, sv.line);
+        for (const i of sv.items ?? []) if (!item(i)) throw new CrubalError(`${where} serves ${sv.as}(${i}): ${i} isn't a preset, menu item or relation`, sv.line);
+      }
+      for (const st of f.stops) {
+        const isLane = lanes.has(st.name);
+        const isForm = forms.has(st.name);
+        if (st.act !== undefined && !isLane) throw new CrubalError(`${where}'s stop ${st.name} -> ${st.act}: ${st.name} isn't a lane of this package`, st.line);
+        if (st.of !== undefined && !isForm) throw new CrubalError(`${where}'s stop ${st.name} of ${st.of}: ${st.name} isn't a form of this package`, st.line);
+        if (!isLane && !isForm) throw new CrubalError(`${where}'s stop ${st.name} is neither a lane nor a form of this package`, st.line);
+        if (st.act !== undefined && !acts.has(st.act)) throw new CrubalError(`${where}'s stop ${st.name} -> ${st.act}: ${st.act} isn't an act of ${f.utility ?? "its utility"}`, st.line);
+        if (st.of !== undefined && !dict.levels.has(st.of) && !dict.kinds.has(st.of)) throw new CrubalError(`${where}'s stop ${st.name} of ${st.of}: ${st.of} isn't a level or kind of this package`, st.line);
+      }
+      if (f.done) {
+        const flt = views.filters.get(f.done.filter);
+        if (!flt) throw new CrubalError(`${where}'s done names ${f.done.filter}, which isn't a filter of this package`, f.done.line);
+        const facet = dict.facets.get(flt.facet);
+        if (facet?.values && !facet.values.some((x) => x.value === f.done?.value)) throw new CrubalError(`${where}'s done: ${f.done.value} is not a value of ${facet.key}`, f.done.line);
+      }
     }
   }
 }
