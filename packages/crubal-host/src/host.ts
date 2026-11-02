@@ -666,9 +666,13 @@ export class Host {
   async installFromOwner(target: string, source: string, pkg: string, version?: string, at = this.now()): Promise<JsonObject[]> {
     const have = (await (await this.storeFor(target)).installed()).map((i) => `${i.package} /${i.version}`);
     const rows = (await this.pool.query("select package, version, json from bundles where owner = $1", [source])).rows as { package: string; version: string; json: JsonObject }[];
+    // The pinned version, or failing it the lowest the source holds at or past the pin (0.3.47): a bundle's
+    // `extends` is a floor at the store, a later version satisfying it, so the copy takes the same rule and a
+    // source that no longer holds the exact version still hands on what satisfies the pin.
     const find = (id: string, v?: string) => {
       const mine = rows.filter((r) => r.package === id || r.package === id.split("/").pop());
-      const pick = v ? mine.find((r) => r.version === v) : mine.sort((a, b) => (a.version < b.version ? 1 : -1))[0];
+      const byVersion = [...mine].sort((a, b) => (a.version < b.version ? -1 : 1));
+      const pick = v ? (mine.find((r) => r.version === v) ?? byVersion.find((r) => r.version >= v)) : byVersion.at(-1);
       if (!pick) throw new Error(`${source} holds no ${id}${v ? ` /${v}` : ""} to install into ${target}`);
       return pick;
     };

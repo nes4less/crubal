@@ -808,6 +808,36 @@ notes$
   const chain = await host.storeFor("platform.example:P-2");
   assert.equal((await chain.definitions()).dict.levels.get("note"), "note");
   await assert.rejects(host.installFromOwner("platform.example:P-2", "platform.example", "pub.example/nothing"), /holds no pub.example\/nothing/);
+  // 0.3.47: a pin on a version the source no longer holds takes the lowest it holds at or past it, as the
+  // store's own floor would; a pin past everything the source holds is still refused.
+  const LATER = `package: later /2026-10-18
+  owner: pub.example
+  crubal: 2
+  extends: ground /2026-10-15
+kind: memo
+  levels: memo
+text$
+class: Memo
+  for: memo
+  facets:
+    text
+ownership:
+  person: memo
+`;
+  await platform.install(publish(LATER, { date: "2026-10-18", key }).bundle, { "pub.example": { alg: "Ed25519", public: key.x } }, "2026-10-16T12:00:05Z");
+  const floor = await host.installFromOwner("platform.example:P-2", "platform.example", "pub.example/later");
+  assert.deepEqual(floor.map((d) => d.installed), ["pub.example/later"], "ground /2026-10-16 already satisfies the pin");
+  await host.createOwner("platform.example:P-3");
+  const fresh = await host.installFromOwner("platform.example:P-3", "platform.example", "pub.example/later");
+  assert.deepEqual(fresh.map((d) => [d.installed, d.version]), [["pub.example/ground", "2026-10-16"], ["pub.example/later", "2026-10-18"]]);
+  const AHEAD = `package: ahead /2026-10-18
+  owner: pub.example
+  crubal: 2
+  extends: ground /2026-12-01
+sketch$
+`;
+  await platform.install(publish(AHEAD, { date: "2026-10-18", key }).bundle, { "pub.example": { alg: "Ed25519", public: key.x } }, "2026-10-16T12:00:06Z").catch(() => undefined);
+  await assert.rejects(host.installFromOwner("platform.example:P-3", "platform.example", "pub.example/ground", "2026-12-01"), /holds no pub.example\/ground \/2026-12-01/);
 });
 
 test("publishing (11.5, 11.7): a package the host signs with the owner's key is listed in the well-known file, served, installed by name from it with its dependency first, and refused when tampered", { skip: !url }, async () => {
