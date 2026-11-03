@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { bundleOf, parsePackage, printBundle, readBundle } from "../src/bundle.ts";
 import { serialize } from "../src/canonical.ts";
 import { checkPackages } from "../src/packages.ts";
+import { publish } from "../src/publish.ts";
 import { readContracts } from "../src/store.ts";
 import { CrubalError } from "../src/tree.ts";
 
@@ -149,6 +150,9 @@ test("a form's utility and act round-trip through the bundle", () => {
   assert.match(text, /^  utility: orders$/m);
   assert.match(text, /^  act: pick$/m);
   assert.equal(serialize(bundleOf(readBundle(first))), serialize(first));
+  // The contract checks (7.10) admit the two parts on a form: the package publishes whole.
+  const { bundle } = publish(shop(judge), { date: "2026-11-06" });
+  assert.ok(bundle);
 });
 
 const refused = (tail: string, why: RegExp) =>
