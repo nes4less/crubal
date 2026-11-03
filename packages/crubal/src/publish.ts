@@ -2,6 +2,7 @@
 // that didn't change keeps its version; one that did takes the date. A breaking change needs a recipe step
 // that covers it, from the previous version to this one; a recipe is refused when nothing broke.
 
+import { nextVersion } from "./versions.ts";
 import { checkRecipe } from "./migrate.ts";
 import { bundleHash, bundleOf, type Parsed, parsePackage, signBundle } from "./bundle.ts";
 import { serialize } from "./canonical.ts";
@@ -176,9 +177,8 @@ export function publish(source: string | Parsed, o: PublishOptions): { bundle: J
   const prevMembers = (o.previous?.members ?? {}) as JsonObject;
   const members: JsonObject = {};
   // Versions: unchanged keeps the previous version; everything else takes the date (`.2`… for a second cut that day).
-  let suffix = "";
-  if (o.previous && String(o.previous.version).split(".")[0] === o.date) suffix = `.${Number(String(o.previous.version).split(".")[1] ?? 1) + 1}`;
-  const version = `${o.date}${suffix}`;
+  // Never earlier than the version it follows (versions.ts): a date behind it carries on with its next suffix.
+  const version = nextVersion(o.date, o.previous ? String(o.previous.version) : undefined);
   for (const [member, [section, key]] of Object.entries(SECTIONS)) {
     for (const x of (b[section] as JsonObject[] | undefined) ?? []) {
       const name = `${member}:${x[key]}`;

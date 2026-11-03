@@ -2,6 +2,7 @@
 // chain, build the entry, apply it with the engine's applyEntry, persist the difference, append the log.
 // The log is the truth; `rebuild` gives every other table back from it.
 
+import { compareVersions } from "@cruba/crubal";
 import { applyEntry, diffWrites, differs, type Draft, type Entry, type State, MemoryRecords } from "@cruba/crubal";
 import { type Contract, proposalMet, quorumHolds } from "@cruba/crubal";
 
@@ -146,8 +147,8 @@ function viewsChangedBy(previous: JsonObject, next: JsonObject, p: Projecting): 
 function recipesBetween<R extends { from: string; to: string }>(recipes: R[], pkg: string, installed: string, target: string): R[] {
   const version = (s: string) => s.slice(s.lastIndexOf("/") + 1);
   return recipes
-    .filter((r) => r.from.startsWith(`${pkg} /`) && version(r.from) >= installed && version(r.to) <= target)
-    .sort((a, b) => (version(a.from) < version(b.from) ? -1 : version(a.from) > version(b.from) ? 1 : 0));
+    .filter((r) => r.from.startsWith(`${pkg} /`) && compareVersions(version(r.from), installed) >= 0 && compareVersions(version(r.to), target) <= 0)
+    .sort((a, b) => compareVersions(version(a.from), version(b.from)));
 }
 
 export class PgStore {
@@ -325,7 +326,7 @@ export class PgStore {
       // Named by short name within the bundle's own publisher, or by id across publishers.
       const dep = String(e.package).includes("/") ? String(e.package) : `${bundle.owner}/${e.package}`;
       // A pin names the least version (11.4): a later one held satisfies it, since a revision only adds.
-      if (!have(dep).some((v) => v >= String(e.version))) throw new Error(`${bundle.id} extends ${e.package} /${e.version}, which isn't installed`);
+      if (!have(dep).some((v) => compareVersions(v, String(e.version)) >= 0)) throw new Error(`${bundle.id} extends ${e.package} /${e.version}, which isn't installed`);
     }
     const previous = have(String(bundle.id)).at(-1);
     if (previous === bundle.version) throw new Error(`${bundle.id} /${bundle.version} is already installed`);

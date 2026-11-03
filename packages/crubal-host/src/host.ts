@@ -4,6 +4,7 @@
 
 import { createHash, createPrivateKey, generateKeyPairSync, randomBytes, sign as edSign } from "node:crypto";
 import { ChainedSecrets, EnvSecrets, FunctionSecrets, type SecretStore } from "./secrets.ts";
+import { compareVersions } from "@cruba/crubal";
 import { type Offer, readBundle, restamp, verifyBorder, versionGate } from "@cruba/crubal";
 import { Access, type Record as CrubalRecord } from "@cruba/crubal";
 import type { StreamEntry } from "@cruba/crubal";
@@ -671,8 +672,8 @@ export class Host {
     // source that no longer holds the exact version still hands on what satisfies the pin.
     const find = (id: string, v?: string) => {
       const mine = rows.filter((r) => r.package === id || r.package === id.split("/").pop());
-      const byVersion = [...mine].sort((a, b) => (a.version < b.version ? -1 : 1));
-      const pick = v ? (mine.find((r) => r.version === v) ?? byVersion.find((r) => r.version >= v)) : byVersion.at(-1);
+      const byVersion = [...mine].sort((a, b) => compareVersions(a.version, b.version));
+      const pick = v ? (mine.find((r) => r.version === v) ?? byVersion.find((r) => compareVersions(r.version, v) >= 0)) : byVersion.at(-1);
       if (!pick) throw new Error(`${source} holds no ${id}${v ? ` /${v}` : ""} to install into ${target}`);
       return pick;
     };
@@ -765,7 +766,7 @@ export class Host {
     const versions = (listed.versions as { [v: string]: string } | undefined) ?? {};
     // A dependency's pin the publisher no longer lists takes the lowest version listed at or past it
     // (0.3.48): the pin is a floor, as above; a version asked for by name is taken as named or refused.
-    const floor = version && seen.size > 0 && !versions[version] ? Object.keys(versions).sort().find((k) => k >= version) : undefined;
+    const floor = version && seen.size > 0 && !versions[version] ? Object.keys(versions).sort(compareVersions).find((k) => compareVersions(k, version) >= 0) : undefined;
     const v = floor ?? version ?? String(listed.latest);
     const url = versions[v];
     if (!url) throw new Error(`${pkg} has no version ${v} at ${domain}`);
