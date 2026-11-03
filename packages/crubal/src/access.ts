@@ -457,6 +457,9 @@ export class Access {
       if (!c) throw new CrubalError(`${r.id} wears ${w}, which isn't a class`, line);
       if (c.for.length && !c.for.includes(r.kind)) throw new CrubalError(`${r.id} wears ${w}, which is for ${c.for.join(", ")}, not ${r.kind}`, line);
     }
+    // A carrier names a class the record wears (5.5, revision 18), never one it doesn't.
+    for (const cls of Object.keys(r.carriers ?? {}))
+      if (!worn.includes(cls)) throw new CrubalError(`${r.id} names a carrier for ${cls}, which it doesn't wear`, line);
     if (worn.length > 1) {
       try {
         resolve(this.dict, worn);

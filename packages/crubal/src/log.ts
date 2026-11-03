@@ -6,7 +6,7 @@
 
 import type { Edge } from "./access.ts";
 import { serialize } from "./canonical.ts";
-import type { Json, JsonObject, Record, Source, Status } from "./model.ts";
+import type { Carrier, Json, JsonObject, Record, Source, Status } from "./model.ts";
 import { MemoryRecords, type RecordSet } from "./records.ts";
 import { writeHash } from "./store.ts";
 import { CrubalError } from "./tree.ts";
@@ -257,6 +257,7 @@ function applyEnvelope(state: State, entry: Entry, w: JsonObject) {
     if (typeof v.of === "string") r.of = v.of;
     if (typeof v.within === "string") r.within = v.within;
     if (Array.isArray(v.wears)) r.wears = v.wears.map(String);
+    if (isObj(v.carriers) && Object.keys(v.carriers).length) r.carriers = carriersOf(v.carriers);
     if (typeof entry.at === "string") {
       r.created = entry.at;
       r.updated = entry.at;
@@ -270,6 +271,11 @@ function applyEnvelope(state: State, entry: Entry, w: JsonObject) {
     if (w.removed === true) delete r[member];
     else r[member] = String(w.value);
   } else if (member === "wears") r.wears = Array.isArray(w.value) ? w.value.map(String) : [];
+  else if (member === "carriers") {
+    const c = isObj(w.value) ? carriersOf(w.value) : {};
+    if (Object.keys(c).length) r.carriers = c;
+    else delete r.carriers;
+  }
   else if (member === "status") {
     const s = isObj(w.value) ? w.value : {};
     if (s.state === "archived") {
@@ -282,6 +288,17 @@ function applyEnvelope(state: State, entry: Entry, w: JsonObject) {
     const v = isObj(w.value) ? w.value : {};
     r.applied = { ...(r.applied ?? {}), ...Object.fromEntries(Object.entries(v).map(([k, n]) => [k, Number(n)])) };
   } else throw new CrubalError(`entry ${entry.log}: no envelope member ${member}`);
+}
+
+/** A carriers envelope as the engine holds it (5.5, revision 18): each class's carriers, `by` and `version`. */
+function carriersOf(v: JsonObject): { [cls: string]: Carrier[] } {
+  const out: { [cls: string]: Carrier[] } = {};
+  for (const [cls, list] of Object.entries(v)) {
+    if (!Array.isArray(list)) continue;
+    const cs = list.filter(isObj).filter((c) => typeof c.by === "string").map((c) => ({ by: String(c.by), ...(typeof c.version === "string" ? { version: c.version } : {}) }));
+    if (cs.length) out[cls] = cs;
+  }
+  return out;
 }
 
 /** Rebuild a store's state from its log alone (8.5.3). */
@@ -346,6 +363,7 @@ export function diffWrites(before: State, after: Draft): JsonObject[] {
       if (now.of) v.of = now.of;
       if (now.within) v.within = now.within;
       if (now.wears) v.wears = now.wears;
+      if (now.carriers && Object.keys(now.carriers).length) v.carriers = now.carriers as unknown as JsonObject;
       writes.push({ record: id, envelope: "created", value: v });
     } else {
       for (const m of ["of", "within"] as const) {
@@ -353,6 +371,7 @@ export function diffWrites(before: State, after: Draft): JsonObject[] {
         writes.push(now[m] ? { record: id, envelope: m, value: now[m] as string } : { record: id, envelope: m, removed: true });
       }
       if (!sameJson(was.wears ?? [], now.wears ?? [])) writes.push({ record: id, envelope: "wears", value: now.wears ?? [] });
+      if (!sameJson((was.carriers ?? {}) as unknown as Json, (now.carriers ?? {}) as unknown as Json)) writes.push({ record: id, envelope: "carriers", value: (now.carriers ?? {}) as unknown as JsonObject });
     }
     if (!sameJson((was?.status ?? {}) as unknown as Json, (now.status ?? {}) as unknown as Json)) writes.push({ record: id, envelope: "status", value: (now.status ?? { state: "active" }) as unknown as JsonObject });
     if (!sameJson(was?.applied ?? {}, now.applied ?? {})) writes.push({ record: id, envelope: "applied", value: now.applied ?? {} });

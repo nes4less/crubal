@@ -24,6 +24,7 @@ engine makes it on behalf of whoever decided it.
 | `status` | `active` or `archived`, with a `reason`, and `into` for a merge | 1.12 |
 | `applied` | for a record below the top level: for each issuer of instructions (the record above, each kind version, each class version), the last one it has applied | chapter 10.7 |
 | `wears` | the classes the record wears, in order | classes refine the kind (chapter 5) |
+| `carriers` | by worn class, what brought it: `{by, version}` each (revision 18) | a class worn with no carrier was worn by hand (5.5) |
 | `created` · `updated` | times, UTC | RFC 3339, `Z` |
 | `parts` | owned parts (1.6) | absent when there are none |
 | `sources` | where each value came from (1.9) | |
