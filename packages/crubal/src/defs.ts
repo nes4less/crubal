@@ -346,8 +346,15 @@ function parseLine(text: string, line: number): Parsed {
   for (let i = 0; i < tails.length; i++) {
     const t = tails[i] as string;
     if (t === "frame:") {
-      // Placement (5.3.3): which photo slot an image fills; a class line's setting, never the facet's.
-      frame = tails[++i];
+      // Placement (5.3.3): the photo slots an image facet fills, in order (revision 19: one or several, comma
+      // separated, one image each); a class line's setting, never the facet's.
+      const slots: string[] = [];
+      while (i + 1 < tails.length) {
+        const next = tails[++i] as string;
+        slots.push(next.replace(/,$/, ""));
+        if (!next.endsWith(",")) break;
+      }
+      frame = slots.filter(Boolean).join(", ");
       continue;
     }
     if (t.startsWith("~")) facet.aliases.push(unquote(t.slice(1)));
