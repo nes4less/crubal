@@ -88,7 +88,7 @@ const PARTS: { [kind: string]: string[] } = {
   send: ["quorum", "needs", "gives", "writes", "reads", "stream", "to", "when", "missed", "who", "audience", "auth", "scope", "credential", "retry", "undo", "for", "label", "describe", "version"],
   receive: ["quorum", "needs", "gives", "reads", "when", "missed", "who", "audience", "origin", "lands", "evidence", "absorb", "ignore", "keep-raw", "prefix", "ref", "relation", "auth", "scope", "credential", "retry", "undo", "for", "label", "describe", "version"],
   store: ["quorum", "needs", "stores", "origin", "when", "who", "audience", "for", "label", "describe", "version"],
-  form: ["quorum", "needs", "gives", "writes", "reads", "when", "who", "audience", "origin", "lands", "ref", "relation", "role", "for", "label", "describe", "version"],
+  form: ["quorum", "needs", "gives", "writes", "reads", "when", "who", "audience", "origin", "lands", "ref", "relation", "role", "utility", "act", "for", "label", "describe", "version"],
   offer: ["quorum", "needs", "gives", "to", "mode", "terms", "for", "when", "who", "audience", "label", "describe", "version"],
   take: ["quorum", "needs", "from", "offer", "reads", "mode", "lands", "origin", "absorb", "ignore", "keep-raw", "prefix", "ref", "when", "who", "audience", "for", "label", "describe", "version"],
 };
