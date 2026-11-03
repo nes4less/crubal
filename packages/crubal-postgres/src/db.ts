@@ -17,7 +17,10 @@ const SCHEMA_SQL = readFileSync(new URL("./schema.sql", import.meta.url), "utf8"
 export function connect(
   url = process.env.CRUBAL_PG_URL,
   schema = process.env.CRUBAL_PG_SCHEMA,
-  o: { statementTimeoutMs?: number } = {},
+  /** `max` and `idleMs` size the pool (`CRUBAL_PG_POOL_MAX`, `CRUBAL_PG_IDLE_MS`): a serverless host runs many
+   * instances, each with its own pool, against one pooler's limit (2026-11-03: 600 reached 73 times in three
+   * hours), so each keeps few connections and lets idle ones go soon. */
+  o: { statementTimeoutMs?: number; max?: number; idleMs?: number } = {},
 ): Pool {
   if (!url) throw new Error("no Postgres URL: pass one or set CRUBAL_PG_URL");
   if (schema && !/^[a-z_][a-z0-9_]*$/.test(schema)) throw new Error(`a schema is a lower-case word: ${schema}`);
@@ -29,7 +32,10 @@ export function connect(
   // The schema rides as a startup parameter, which Postgres and the Supabase session pooler both honour; a
   // query on each connection's open would race the first statement (pg warns, and will refuse).
   const options = [...(schema ? [`-c search_path=${schema}`] : []), ...(timeout ? [`-c statement_timeout=${timeout}`] : [])].join(" ");
-  return new pg.Pool({ connectionString: url, ...(options ? { options } : {}) });
+  const num = (v: string | undefined) => (v && Number.isInteger(Number(v)) && Number(v) > 0 ? Number(v) : undefined);
+  const max = o.max ?? num(process.env.CRUBAL_PG_POOL_MAX);
+  const idle = o.idleMs ?? num(process.env.CRUBAL_PG_IDLE_MS);
+  return new pg.Pool({ connectionString: url, ...(options ? { options } : {}), ...(max ? { max } : {}), ...(idle ? { idleTimeoutMillis: idle } : {}) });
 }
 
 /** Create or update the store's tables in the current search path. Idempotent. */

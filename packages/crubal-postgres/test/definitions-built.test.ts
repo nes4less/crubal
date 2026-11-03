@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { publish } from "@cruba/crubal";
 import { connect, type Pool, testSchema } from "../src/db.ts";
-import { definitionsOf, forgetParsedShared } from "../src/definitions.ts";
+import { definitionsOf, forgetParsedShared, latestInstalls } from "../src/definitions.ts";
 import { PgStore } from "../src/store.ts";
 
 const url = process.env.CRUBAL_PG_URL;
@@ -88,6 +88,37 @@ test("inside a transaction a failing keep never aborts the caller's work", { ski
     await definitionsOf(client, "built.example");
     await client.query("insert into t_guard values (1)");
     await client.query("commit");
+  } finally {
+    client.release();
+  }
+});
+
+test("the versions in force are each package's latest install, where it was last installed", () => {
+  const row = (p: string, v: string) => ({ json: { package: p, version: v } });
+  const got = latestInstalls([row("a", "1"), row("b", "1"), row("a", "2"), row("c", "1"), row("b", "2")]);
+  assert.deepEqual(
+    got.map((r) => `${r.json.package}/${r.json.version}`),
+    ["a/2", "c/1", "b/2"],
+  );
+});
+
+test("a place that installed two versions reads the same definitions as one that installed the latest alone", { skip: !url }, async () => {
+  const v1 = publish(text("2026-10-01", "S|M|L"), { date: "2026-10-01" }).bundle;
+  const v2 = publish(text("2026-10-02", "S|M|L|XL"), { date: "2026-10-02", previous: v1 }).bundle;
+  const both = new PgStore(pool, "both.example", { allowUnsigned: true });
+  await both.install(v1, undefined, "2026-10-17T00:00:00Z");
+  await both.install(v2, undefined, "2026-10-17T00:00:01Z");
+  const latest = new PgStore(pool, "latest.example", { allowUnsigned: true });
+  await latest.install(v2, undefined, "2026-10-17T00:00:00Z");
+  const client = await pool.connect();
+  try {
+    forgetParsedShared();
+    const a = await definitionsOf(client, "both.example");
+    const b = await definitionsOf(client, "latest.example");
+    assert.deepStrictEqual(a.dict, b.dict);
+    assert.deepStrictEqual(a.contracts, b.contracts);
+    assert.deepStrictEqual(a.views, b.views);
+    assert.deepStrictEqual(a.perms, b.perms);
   } finally {
     client.release();
   }

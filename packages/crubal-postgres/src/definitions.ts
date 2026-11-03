@@ -134,6 +134,13 @@ async function writeBuilt(client: Client, owner: string, key: string, parsed: Pa
   });
 }
 
+/** Each package's latest install alone, in the order of those last installs. Pure. */
+export function latestInstalls<T extends { [column: string]: unknown }>(installed: T[]): T[] {
+  const last = new Map<string, number>();
+  installed.forEach((r, i) => last.set(String((r.json as JsonObject).package), i));
+  return installed.filter((r, i) => last.get(String((r.json as JsonObject).package)) === i);
+}
+
 /** Forget this process's parsed copies (a test standing in for a new instance). */
 export function forgetParsedShared(): void {
   parsedShared.clear();
@@ -171,10 +178,14 @@ export async function definitionsOf(client: Client, owner: string, extra: JsonOb
     return stored;
   }
   const base = emptyParsed();
+  // The versions in force (the operator's ruling, 2026-11-03: "I don't see any reason it needs all the old
+  // versions"): each package's latest install alone, standing where it was last installed, so a later install
+  // still wins an overlap as before; the versions it replaced are history, never definitions.
+  const current = latestInstalls(installed);
   // Every bundle the installs name, in one read (the speed round, 2026-11-03: a cold build read them one
   // query at a time, 245 at Media Encyclopedia, holding a connection the whole while); applied in the
   // installs' order as before.
-  const pairs = [...new Set(installed.map((r) => `${String((r.json as JsonObject).package)}\u0000${String((r.json as JsonObject).version)}`))];
+  const pairs = [...new Set(current.map((r) => `${String((r.json as JsonObject).package)}\u0000${String((r.json as JsonObject).version)}`))];
   const bundles = new Map<string, JsonObject>();
   if (pairs.length) {
     const { rows } = await client.query(
@@ -183,7 +194,7 @@ export async function definitionsOf(client: Client, owner: string, extra: JsonOb
     );
     for (const r of rows as { package: string; version: string; json: JsonObject }[]) bundles.set(`${r.package}\u0000${r.version}`, r.json);
   }
-  for (const row of installed) {
+  for (const row of current) {
     const w = row.json as JsonObject;
     const bundle = bundles.get(`${String(w.package)}\u0000${String(w.version)}`);
     if (!bundle) throw new Error(`${w.package} /${w.version} is installed but its bundle is missing`);
