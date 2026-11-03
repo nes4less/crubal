@@ -281,6 +281,8 @@ function readLane(node: Node): Lane {
   if (!s.view && !s.serve) throw new CrubalError(`the lane ${name} names no view and no serve`, node.line);
   if (s.view && s.serve) throw new CrubalError(`the lane ${name} names both a view and a serve`, node.line);
   if (s.serve && (s.pick || s.done || s.card)) throw new CrubalError(`the lane ${name} is a utility's own (serve): no pick, done or card`, node.line);
+  // A list (12.10, revision 17): a lane without a pick holds every record its view serves and has no history.
+  if (s.view && !s.pick && s.done) throw new CrubalError(`the lane ${name} is a list (no pick), so it has no done`, node.line);
   return s;
 }
 

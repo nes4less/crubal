@@ -483,7 +483,7 @@ lane: ordersToPick /2026-11-05
 | `utility` | the utility of this package whose acts its presses may name |
 | `view` | the view of this package that serves its cards; the view's shapes give the slots a card may name |
 | `serve` | instead of a view: the name of a function the utility provides, for a lane the app serves itself (a setup, a tally); such a lane has no pick, done or card |
-| `pick` | `filter = value`: the view's filter pick for what is ahead (the to-dos) |
+| `pick` | `filter = value`: the view's filter pick for what is ahead (the to-dos); absent, the lane is a **list**: every record its view serves, in the view's order (revision 17) |
 | `done` | `filter = value` for what is done (the history), or `viewed`: a card is done once the person has viewed it; the mark is the person's own, never the place's |
 | `band` | `daily`, `weekly` or `rarely`: how soon it wants attention; `rarely` unless said |
 | `house` | a whole number, governance first (0) and the doing rows after; 8 unless said |
@@ -499,6 +499,13 @@ figure is the index's tally, the cards a page, the history the same view under t
 widens what the view shows. A reader that doesn't know the block carries it unchanged (13.5). What a
 lane's card looks like on a screen is the app's; the compass (the positions its parts take) is a
 convention of the app that draws it, not of the language.
+
+A lane without a `pick` is a **list** (revision 17): it holds the records of a kind that wait in no state
+(the place's locations, its organizations, its pages), every record its view serves in the view's order.
+Its figure is the view's tally, it has no `done` and so no history, and nothing in it is work waiting: an
+app draws a list where the place keeps the kind, never among the rows of what wants attention, and never
+counts it toward what is waiting. A package MUST be refused at publish when a lane without a `pick`
+names a `done`.
 
 ## 12.11 Flows
 
