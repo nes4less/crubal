@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { deserialize, serialize as v8serialize } from "node:v8";
 // definitions.ts: what the engine runs with, built from the store (docs/design/publishing.md): the installed
 // bundles in install order (extended before extending, because a dependency is installed first), then the
 // owner's working package, every `define` write as the member now stands. The publish checks run on the
@@ -65,6 +67,79 @@ const parsedShared = new Map<string, Parsed>();
 const PARSED_SHARED_MAX = 64;
 
 /**
+ * The definitions as built, kept in the store (the speed round, 2026-11-03: every new serverless instance
+ * rebuilt a place's definitions by replaying every version ever installed, 245 bundles at Media
+ * Encyclopedia, each printed and parsed again). Keyed by what they were built from (the installed versions,
+ * the define writes' hash) and by what wrote them (this engine's version, V8's serialization), so a stale
+ * or foreign copy is never read: a miss builds as before and keeps the result. Never a trial's.
+ */
+const builtFormat = (() => {
+  let dir = new URL(".", import.meta.url);
+  for (let i = 0; i < 4; i++) {
+    const at = new URL("package.json", dir);
+    if (existsSync(at)) {
+      const p = JSON.parse(readFileSync(at, "utf8")) as { name?: string; version?: string };
+      if (p.name === "@cruba/crubal-postgres") return `engine ${p.version}|v8 ${process.versions.v8}`;
+    }
+    dir = new URL("..", dir);
+  }
+  return `engine ?|v8 ${process.versions.v8}`;
+})();
+let builtTable: Promise<void> | undefined;
+const builtReady = (client: Client): Promise<void> => {
+  builtTable ??= client
+    .query("create table if not exists definitions_built (owner text primary key, key text not null, blob bytea not null, at timestamptz not null default now())")
+    .then(() => undefined)
+    .catch((e: unknown) => {
+      builtTable = undefined;
+      throw e;
+    });
+  return builtTable;
+};
+/** Run a statement that may fail without harm: inside a transaction behind a savepoint, so a failure never
+ * aborts the caller's work; outside one, as it is. */
+async function harmless<T>(client: Client, run: () => Promise<T>): Promise<T | undefined> {
+  let inside = false;
+  try {
+    await client.query("savepoint definitions_built");
+    inside = true;
+  } catch {
+    // Not in a transaction: nothing to guard.
+  }
+  try {
+    const out = await run();
+    if (inside) await client.query("release savepoint definitions_built");
+    return out;
+  } catch {
+    if (inside) await client.query("rollback to savepoint definitions_built").catch(() => undefined);
+    return undefined;
+  }
+}
+async function readBuilt(client: Client, owner: string, key: string): Promise<Parsed | undefined> {
+  return harmless(client, async () => {
+    await builtReady(client);
+    const { rows } = await client.query("select blob from definitions_built where owner = $1 and key = $2", [owner, key]);
+    const blob = (rows[0] as { blob?: Buffer } | undefined)?.blob;
+    return blob ? (deserialize(blob) as Parsed) : undefined;
+  });
+}
+async function writeBuilt(client: Client, owner: string, key: string, parsed: Parsed): Promise<void> {
+  // Kept next time when it fails; a store that can't keep it builds as before.
+  await harmless(client, async () => {
+    await builtReady(client);
+    await client.query(
+      "insert into definitions_built (owner, key, blob) values ($1, $2, $3) on conflict (owner) do update set key = excluded.key, blob = excluded.blob, at = now()",
+      [owner, key, v8serialize(parsed)],
+    );
+  });
+}
+
+/** Forget this process's parsed copies (a test standing in for a new instance). */
+export function forgetParsedShared(): void {
+  parsedShared.clear();
+}
+
+/**
  * Build the definitions in force: installed bundles in order, then the working package. `own` asks for a
  * copy of the caller's own, never the shared one: a dry run or an install reads the next bundle onto what it
  * is given, and read onto the shared object that became every store's definitions until the key changed
@@ -83,6 +158,17 @@ export async function definitionsOf(client: Client, owner: string, extra: JsonOb
     resetUnits();
     if (measures.length) extendUnits(unitsExtensionText(measures));
     return shared;
+  }
+  // A new instance reads what another built (the speed round): the same installs, the same defines, the
+  // same engine.
+  const stored = key ? await readBuilt(client, owner, `${builtFormat}|${key}`) : undefined;
+  if (stored && key) {
+    parsedShared.set(key, stored);
+    while (parsedShared.size > PARSED_SHARED_MAX) parsedShared.delete(parsedShared.keys().next().value as string);
+    const measures = (stored as Parsed & { units?: JsonObject[] }).units ?? [];
+    resetUnits();
+    if (measures.length) extendUnits(unitsExtensionText(measures));
+    return stored;
   }
   const base = emptyParsed();
   // Every bundle the installs name, in one read (the speed round, 2026-11-03: a cold build read them one
@@ -118,6 +204,7 @@ export async function definitionsOf(client: Client, owner: string, extra: JsonOb
   if (key) {
     parsedShared.set(key, base);
     while (parsedShared.size > PARSED_SHARED_MAX) parsedShared.delete(parsedShared.keys().next().value as string);
+    await writeBuilt(client, owner, `${builtFormat}|${key}`, base);
   }
   return base;
 }
