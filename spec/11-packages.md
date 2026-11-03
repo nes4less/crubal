@@ -62,7 +62,7 @@ utility: orders /2026-10-16
 | `label` · `describe` | what people see |
 | `serves` | whom it mounts for: presets, relations or audiences (chapter 14.6, 12.4), each optionally narrowed in parentheses to the presets, menu items or relations it shows screens for |
 | `needs` | the packages (`domain/name`, optionally with a version) and the other utilities it depends on |
-| `acts` | the acts the utility provides by name (lower-case words), which a lane's presses may name (12.10); the app that mounts the utility provides their bodies |
+| `acts` | the acts the utility provides by name (lower-case words), which a lane's presses may name (12.10); the app that mounts the utility provides their bodies; an act a form names (7.7, revision 16) opens that form before it runs |
 | `setup` | what a deployment provides before it runs: `connection <name>` (a credential the host holds, chapter 7.6) and `setting <facet>` (a value on the deployment's own record) |
 | `mark` (revision 13) | the utility's look wherever it shows: a glyph and a hue, `mark: <glyph> <hue>`. The glyph is a lower-case word the mounting app's kit draws (an unknown one is drawn as the app's default); the hue is one of eight words, `amber`, `blue`, `violet`, `slate`, `teal`, `plum`, `coral`, `olive`, which the app maps to its own colors in light and dark. A utility without a mark has none |
 

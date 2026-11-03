@@ -428,6 +428,7 @@ export function checkPackages(source: string): PackageInfo[] {
   checkUtilities(source, pkgs);
   checkLanes(source, pkgs);
   checkFlows(source, pkgs);
+  checkFormUtilities(source, pkgs);
   return pkgs;
 }
 
@@ -566,5 +567,28 @@ function checkFlows(source: string, pkgs: PackageInfo[]): void {
         if (facet?.values && !facet.values.some((x) => x.value === f.done?.value)) throw new CrubalError(`${where}'s done: ${f.done.value} is not a value of ${facet.key}`, f.done.line);
       }
     }
+  }
+}
+
+/**
+ * A form's utility and act (7.7, revision 16): a form names a utility its package declares, an act that
+ * utility provides, and no two forms name one act of a utility. File-local, as the lane checks are.
+ */
+function checkFormUtilities(source: string, pkgs: PackageInfo[]): void {
+  const forms = readContracts(source).filter((c) => c.kind === "form" && c.parts.utility !== undefined);
+  if (!forms.length) return;
+  const utilities = new Map(pkgs.flatMap((p) => p.utilities).map((u) => [u.name, u] as const));
+  const taken = new Map<string, string>();
+  for (const c of forms) {
+    const name = c.parts.utility as string;
+    const u = utilities.get(name);
+    if (!u) throw new CrubalError(`the form ${c.name} names the utility ${name}, which this package doesn't declare`, c.partLines.utility ?? c.line);
+    const act = c.parts.act;
+    if (act === undefined) continue;
+    if (!u.acts.some((a) => a.name === act)) throw new CrubalError(`the form ${c.name} names the act ${act}, which ${name} doesn't provide`, c.partLines.act ?? c.line);
+    const key = `${name}/${act}`;
+    const was = taken.get(key);
+    if (was) throw new CrubalError(`the forms ${was} and ${c.name} both name the act ${act} of ${name}: one form per act`, c.partLines.act ?? c.line);
+    taken.set(key, c.name);
   }
 }

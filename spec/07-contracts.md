@@ -212,6 +212,32 @@ A form is a contract with a person. Its screen assembles itself:
   A form without a role reads as `keep`. Any other word is refused. A kind has one make form per level;
   a class is data a record wears, never a way of making it, so a class's facets come through keep forms.
   Only a form has a role. (Revision 14.)
+- `utility` names the utility the form belongs to (chapter 11.1), one this package declares: where an app
+  that mounts the utility finds the form, for its setup, its lanes and its screens. A form without one
+  belongs to its kind alone, reached where its records are made. (Revision 16.)
+- `act` names the act the form asks for (chapter 11.1), an act of the form's utility, on a form whose role
+  is `act`: a lane's press naming that act (12.10) opens this form, and the act runs with what the person
+  answered. One form per act of a utility; an act without a form runs on the press alone. The form's
+  fields are the package's word; how its screen is drawn and what the act's body does with the answers
+  are the mounting app's, as the act's body is. (Revision 16.)
+
+```crubal
+contract: judge
+  kind: form
+  role: act
+  utility: orders
+  act: judge
+  label: Judge
+  for: Return
+  needs:
+    !judgement
+    declineReason
+```
+
+A package MUST be refused at publish when a contract that isn't a form names a utility or an act, when a
+form names a utility its package doesn't declare, when a form names an act without a utility, an act its
+utility lacks, or an act on a form whose role isn't `act`, or when two forms name the same act of one
+utility.
 
 ## 7.8 Offer and take
 

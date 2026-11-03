@@ -216,6 +216,16 @@ export function readContracts(source: string): Contract[] {
     }
     if (!c.origin) c.origin = c.kind === "form" ? "declared" : "reported";
     if (c.role && c.kind !== "form") throw new CrubalError(`${c.name}: only a form has a role`, c.partLines.role ?? c.line);
+    // A form's utility and act (7.7, revision 16): only a form names them; an act needs a utility and an act role.
+    for (const k of ["utility", "act"]) {
+      const v = c.parts[k];
+      if (v === undefined) continue;
+      if (c.kind !== "form") throw new CrubalError(`${c.name}: only a form names ${k === "act" ? "an act" : "a utility"}`, c.partLines[k] ?? c.line);
+      if (!/^[a-z][\w-]*$/.test(v.trim())) throw new CrubalError(`${c.name}: ${k} is a lower-case word, not ${v || "nothing"}`, c.partLines[k] ?? c.line);
+      c.parts[k] = v.trim();
+    }
+    if (c.parts.act !== undefined && c.parts.utility === undefined) throw new CrubalError(`${c.name}: a form names an act of its utility; it names no utility`, c.partLines.act ?? c.line);
+    if (c.parts.act !== undefined && (c.role ?? "keep") !== "act") throw new CrubalError(`${c.name}: only an act form names an act; its role is ${c.role ?? "keep"}`, c.partLines.act ?? c.line);
     if (c.keepRaw.length && !c.prefix) throw new CrubalError(`${c.name} keeps raw fields, so it needs a prefix`, c.line);
     // A form's fields are its needs (7.7): with no reads of its own, each answer lands on its facet by name.
     if (c.kind === "form" && !c.reads.length && c.needs.length) c.reads = c.needs.map((l) => ({ from: l.facet, to: l.facet, values: [] as [string, string][], line: l.line, valueLines: [] }));
