@@ -100,7 +100,7 @@ Placement says where and when a facet is collected. It never changes a value.
 | order | the order of the lines | the order forms and pages show the facets in |
 | section | a `section: Name` line | the lines after it, until the next section, are shown under that heading |
 | level | `unit::` before the key | the facet **varies** at that level for records wearing this class: it is collected there and stored there (chapter 1.7) |
-| frame | `frame: front` on an image facet's line | which photo slot the image fills |
+| frame | `frame: front, back, spine` on an image facet's line | the photo slots the facet fills, in order, one image each (revision 19: one or several); an image value names the slot it fills as `frame` beside its `$image`, and a slot no value names is a gap; images naming no slot fill the slots left, in order |
 
 The level prefix names a level of the wearer's kind. It declares a vary step in addition to the kind's own
 `vary` declarations; it never stops a facet from varying where the kind says it does. A class is a
