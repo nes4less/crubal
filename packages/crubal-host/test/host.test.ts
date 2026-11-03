@@ -863,10 +863,18 @@ class: Noted
   assert.equal(g.already, false);
   assert.equal(typeof t.bundle.sig, "string", "signed with the owner's host-held key");
   assert.deepEqual((await host.publishPackage("shop.example", TOWER)).already, true, "a version publishes once");
+  // A second cut the same day (0.3.58): the header's `.2` publishes as itself, past the day's first; again, it is
+  // already published; a header behind what is published is too.
+  const TOWER2 = TOWER.replace("package: tower /2026-10-17", "package: tower /2026-10-17.2").replace("    notes\n", "    notes\nclass: Tagged\n  for: thing\n  facets:\n    notes\n");
+  const t2 = await host.publishPackage("shop.example", TOWER2);
+  assert.equal(t2.already, false, "a same-day suffix publishes");
+  assert.equal(t2.bundle.version, "2026-10-17.2");
+  assert.equal((await host.publishPackage("shop.example", TOWER2)).already, true);
+  assert.equal((await host.publishPackage("shop.example", TOWER)).already, true, "the day's first stays behind it");
   const wk = await call("GET", "/.well-known/crubal.json");
   const listed = (wk.body.packages as JsonObject[]).find((p) => p.package === "shop.example/tower");
   assert.ok(listed, JSON.stringify(wk.body.packages));
-  assert.equal(listed?.latest, "2026-10-17");
+  assert.equal(listed?.latest, "2026-10-17.2");
   const where = String((listed?.versions as JsonObject)["2026-10-17"]);
   assert.equal(where, `${base}/packages/shop.example/tower/2026-10-17/package.json`);
   const served = await fetch(where);
@@ -888,7 +896,7 @@ class: Noted
     assert.equal(defs.dict.levels.get("thing"), "thing");
     // Tampered on the wire: the signature doesn't verify against the published key, nothing installs.
     const inner = host.o.fetchJson;
-    host.o.fetchJson = async (u) => { const d = await (inner as (u: string) => Promise<JsonObject>)(u); return u.endsWith("tower/2026-10-17/package.json") ? { ...d, label: "tampered" } : d; };
+    host.o.fetchJson = async (u) => { const d = await (inner as (u: string) => Promise<JsonObject>)(u); return u.endsWith("tower/2026-10-17.2/package.json") ? { ...d, label: "tampered" } : d; };
     await host.createOwner("fresh2.example");
     const k2 = await host.issueKey("fresh2.example", "fresh2.example", "owner");
     const bad = await call("POST", "/o/fresh2.example/install", k2, { package: "shop.example/tower" });

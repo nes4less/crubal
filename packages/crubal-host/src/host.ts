@@ -814,9 +814,13 @@ export class Host {
     const head = source.match(/^package: (\S+) \/(\S+)/m);
     if (!head) throw new Error("the text has no package: line");
     const [, name, version] = head as unknown as [string, string, string];
-    const date = o.date ?? version.split(".")[0] ?? this.now().slice(0, 10);
-    const have = (await this.pool.query("select version, json from host_published where owner = $1 and package = $2 order by version desc", [owner, name])).rows as { version: string; json: JsonObject }[];
-    const same = have.find((r) => r.version === version || r.version.startsWith(`${date}`));
+    // The header's whole version, a same-day suffix included (`2026-12-29.2`): a second cut that day publishes
+    // as itself. A header a published version is at or past is already published; before 0.3.58 any version
+    // of the header's date counted, so a `.2` cut after the day's first never published.
+    const date = o.date ?? version ?? this.now().slice(0, 10);
+    const have = ((await this.pool.query("select version, json from host_published where owner = $1 and package = $2", [owner, name])).rows as { version: string; json: JsonObject }[])
+      .sort((a, b) => compareVersions(b.version, a.version));
+    const same = have.find((r) => r.version === version) ?? (have[0] && compareVersions(have[0].version, version) >= 0 ? have[0] : undefined);
     if (same) return { bundle: same.json, changes: [], already: true };
     const previous = have[0]?.json;
     const { bundle, changes } = publish(source, { date, ...(previous ? { previous } : {}), ...(o.records?.length ? { records: o.records } : {}), key: { d: key.private, x: key.public } });
