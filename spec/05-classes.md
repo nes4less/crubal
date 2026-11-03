@@ -145,6 +145,14 @@ common value of a facet).
 class that requires it. Incomplete is a state of the record, not an intake outcome; chapter 6 defines it with
 the rest of the rule results.
 
+**Carriers** (revision 18). A record MAY say what brought each class it wears: `carriers`, by class, a list
+of `{by, version}`, where `by` names the carrier (a record such as a place or a location by its id, a taxonomy
+node as `gpc:<code>`, a kind's selling step as `step:<name>`, a channel as `channel:<name>`) and `version` the
+carrier's version when it brought the class. A class worn with no carrier was worn by hand. A carrier leaving
+takes off the classes only it brought; a class another carrier also brought, or worn by hand, stays. Carriers
+change nothing about the meet: they say why a class is worn, not what it asks. A write that names a carrier for
+a class the record doesn't wear MUST be refused.
+
 **Unasked values.** A record may hold a value for a facet that no worn class asks for (a class was taken
 off, a line was removed, intake brought it). The value is kept, stays readable, and is flagged as
 **unasked**. It is never dropped silently.

@@ -113,7 +113,7 @@ Each write is one of these:
 | Write | Names | Effect |
 |---|---|---|
 | **value** | `record`, `address`, `value` or `"removed": true`, `as`, and `source` when it differs from the entry's | `as` says where the value lands: `current` (the default), `alternative`, `suggestion` or `held` |
-| **envelope** | `record` and one `envelope` member: `created`, `of`, `within`, `wears`, `status`, `applied`; or `record`, an `address` of the form `parts[row]` and the member `wears` or `row` (parts, below) | the record's envelope (chapter 1.12), or a part's |
+| **envelope** | `record` and one `envelope` member: `created`, `of`, `within`, `wears`, `carriers` (revision 18), `status`, `applied`; or `record`, an `address` of the form `parts[row]` and the member `wears` or `row` (parts, below) | the record's envelope (chapter 1.12), or a part's |
 | **edge** | the edge (chapter 14.3), or its ID and `"removed": true` | access and relations; a lapse it causes down the grantor chain is computed, not written |
 | **observation** | the observation document (chapter 3.8) | it is kept, beside the record it supports |
 | **binding** | `contract`, `ref`, and `record` or `"removed": true` | an arrival binding (chapter 9.2a) |

@@ -21,6 +21,9 @@ export type Source = {
 /** A record's status (1.12): absent means active. */
 export type Status = { state: "active" | "archived"; reason?: string; into?: string };
 
+/** What brought a worn class (5.5, revision 18): `by` names the carrier, `version` its version when it did. */
+export type Carrier = { by: string; version?: string };
+
 export type Record = {
   id: string;
   kind: string;
@@ -34,6 +37,12 @@ export type Record = {
   /** Per issuer of instructions, the last one applied (10.7). */
   applied?: { [issuer: string]: number };
   wears?: string[];
+  /**
+   * What brought each worn class (5.5, revision 18): the carriers by class, each naming what brought it (a
+   * record, a taxonomy node, a kind's step, a channel) and its version then. A worn class with no carrier was
+   * worn by hand; a carrier leaving takes off the classes only it brought.
+   */
+  carriers?: { [cls: string]: Carrier[] };
   created?: string;
   updated?: string;
   values: JsonObject;

@@ -25,7 +25,7 @@ export function recordOf(row: Row): Record {
   if (row.created) r.created = String(row.created);
   if (row.updated) r.updated = String(row.updated);
   const extra = r as unknown as JsonObject;
-  for (const m of ["parts", "sources", "alternatives", "suggestions", "held"]) if (doc[m] !== undefined) extra[m] = doc[m] as Json;
+  for (const m of ["parts", "sources", "alternatives", "suggestions", "held", "carriers"]) if (doc[m] !== undefined) extra[m] = doc[m] as Json;
   return r;
 }
 
@@ -33,7 +33,7 @@ export function recordOf(row: Row): Record {
 function docOf(r: Record): JsonObject {
   const x = r as unknown as JsonObject;
   const doc: JsonObject = { owner: r.owner, values: r.values };
-  for (const m of ["parts", "sources", "alternatives", "suggestions", "held"]) if (x[m] !== undefined) doc[m] = x[m] as Json;
+  for (const m of ["parts", "sources", "alternatives", "suggestions", "held", "carriers"]) if (x[m] !== undefined) doc[m] = x[m] as Json;
   return doc;
 }
 

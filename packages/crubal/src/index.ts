@@ -6,7 +6,8 @@ export { readDefinitions, emptyDictionary, type ClassDef, type Dictionary, type 
 export { readText } from "./read-text.ts";
 export { printText, type PrintMode } from "./print-text.ts";
 export { canonical, serialize } from "./canonical.ts";
-export { checkWrapper, parseJson, type Wrapper, type Record, type Json, type JsonObject, type Source } from "./model.ts";
+export { checkWrapper, parseJson, type Carrier, type Wrapper, type Record, type Json, type JsonObject, type Source } from "./model.ts";
+export { carriedBy, shedBy, wearBy } from "./carriers.ts";
 export { decide as decideReview, openItems, unitsExtensionText, type Decision } from "./review.ts";
 export { extendUnits, resetUnits, unitsTableWith, type UnitsTable } from "./units.ts";
 export { runCorpus, type CaseResult } from "./corpus.ts";
