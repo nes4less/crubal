@@ -85,10 +85,21 @@ export async function definitionsOf(client: Client, owner: string, extra: JsonOb
     return shared;
   }
   const base = emptyParsed();
+  // Every bundle the installs name, in one read (the speed round, 2026-11-03: a cold build read them one
+  // query at a time, 245 at Media Encyclopedia, holding a connection the whole while); applied in the
+  // installs' order as before.
+  const pairs = [...new Set(installed.map((r) => `${String((r.json as JsonObject).package)}\u0000${String((r.json as JsonObject).version)}`))];
+  const bundles = new Map<string, JsonObject>();
+  if (pairs.length) {
+    const { rows } = await client.query(
+      "select package, version, json from bundles where owner = $1 and (package, version) in (select * from unnest($2::text[], $3::text[]))",
+      [owner, pairs.map((x) => x.split("\u0000")[0]), pairs.map((x) => x.split("\u0000")[1])],
+    );
+    for (const r of rows as { package: string; version: string; json: JsonObject }[]) bundles.set(`${r.package}\u0000${r.version}`, r.json);
+  }
   for (const row of installed) {
     const w = row.json as JsonObject;
-    const { rows } = await client.query("select json from bundles where owner = $1 and package = $2 and version = $3", [owner, String(w.package), String(w.version)]);
-    const bundle = (rows[0] as Row | undefined)?.json as JsonObject | undefined;
+    const bundle = bundles.get(`${String(w.package)}\u0000${String(w.version)}`);
     if (!bundle) throw new Error(`${w.package} /${w.version} is installed but its bundle is missing`);
     readBundleOnto(bundle, base);
   }
