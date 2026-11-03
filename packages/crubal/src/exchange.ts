@@ -3,6 +3,7 @@
 // record. Runs are idempotent (7.5). Offer and take share between owners, and only the overlap flows
 // (7.8). Data crossing a border is verified against the presenter's published key (8.5.1).
 
+import { compareVersions, latestVersion } from "./versions.ts";
 import type { Access, Edge } from "./access.ts";
 import { arrive, type Arrival } from "./arrival.ts";
 import type { Journal } from "./log.ts";
@@ -963,10 +964,10 @@ export function versionGate(theirs: string | undefined, installed: { package: st
   if (at < 0) return { kind: "take" };
   const pkg = theirs.slice(0, at).trim();
   const version = theirs.slice(at + 2).trim();
-  const ours = installed.filter((i) => i.package === pkg).map((i) => i.version).sort().at(-1);
+  const ours = latestVersion(installed.filter((i) => i.package === pkg).map((i) => i.version));
   if (!ours) return { kind: "take" };
-  if (version > ours) return { kind: "hold", package: pkg, theirs: version, ours };
-  if (version < ours) return { kind: "restamp", package: pkg, theirs: version, ours };
+  if (compareVersions(version, ours) > 0) return { kind: "hold", package: pkg, theirs: version, ours };
+  if (compareVersions(version, ours) < 0) return { kind: "restamp", package: pkg, theirs: version, ours };
   return { kind: "take" };
 }
 
