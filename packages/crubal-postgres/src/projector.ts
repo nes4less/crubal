@@ -34,8 +34,16 @@ export async function markStale(client: Client, owner: string, p: Projecting, be
     for (const name of p.views.views.keys()) for (const r of changed) for (const id of views.staleAfter(name, r)) marks.push([name, id]);
     return marks;
   });
-  for (const [view, record] of out) {
-    await client.query("insert into stale (owner, view, record, since) values ($1, $2, $3, $4) on conflict (owner, view, record) do update set since = least(stale.since, excluded.since)", [owner, view, record, seq]);
+  // In batches, one statement each (0.3.59): a statement per mark made a commit of 500 records over fifteen
+  // views thousands of round trips inside its transaction (the commons seed, 2026-11-04). A mark twice in one
+  // batch is one row: an upsert can't touch a row twice in one statement.
+  const unique = [...new Map(out.map(([view, record]) => [`${view}\u0000${record}`, [view, record] as [string, string]])).values()];
+  for (let i = 0; i < unique.length; i += 2000) {
+    const part = unique.slice(i, i + 2000);
+    await client.query(
+      "insert into stale (owner, view, record, since) select $1, v, r, $4 from unnest($2::text[], $3::text[]) as t(v, r) on conflict (owner, view, record) do update set since = least(stale.since, excluded.since)",
+      [owner, part.map((m) => m[0]), part.map((m) => m[1]), seq],
+    );
   }
 }
 
