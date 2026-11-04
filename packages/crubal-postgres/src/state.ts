@@ -70,22 +70,50 @@ export async function loadState(client: Client, owner: string): Promise<State> {
   return state;
 }
 
+/** How many records one upsert statement carries. */
+const PERSIST_BATCH = 500;
+
 /** Write what changed between two states of one owner: upserts, deletes, and appends to the lists. */
 export async function persist(client: Client, owner: string, before: State, after: State): Promise<void> {
   const changed = (a: unknown, b: unknown) => serialize((a ?? null) as Json) !== serialize((b ?? null) as Json);
   const beforeRecords = new Map<string, Record>(Map.prototype.entries.call(before.records) as Iterable<[string, Record]>);
+  // The changed records go in batches, one statement each (0.3.59): a statement per record made a commit of 500
+  // records 500 round trips inside its transaction, and from a client far from the database that held the
+  // transaction (and the locks it took) for minutes (the commons seed, 2026-11-04). Log order is kept: the rows
+  // go in the order the state holds them, `ord` taken in that order.
+  const rows: { [column: string]: unknown }[] = [];
   for (const [id, r] of Map.prototype.entries.call(after.records) as Iterable<[string, Record]>) {
     const was = beforeRecords.get(id);
     const ancestors = ancestorsOf(after.records, r);
     const wasAncestors = was ? ancestorsOf(beforeRecords, was) : undefined;
     if (was && !changed(was, r) && !changed(wasAncestors, ancestors)) continue;
+    rows.push({
+      id,
+      kind: r.kind,
+      level: r.level,
+      of: r.of ?? null,
+      within: r.within ?? null,
+      ancestors,
+      ...(r.status !== undefined && r.status !== null ? { status: r.status } : {}),
+      ...(r.applied !== undefined && r.applied !== null ? { applied: r.applied } : {}),
+      wears: r.wears ?? [],
+      created: r.created ?? null,
+      updated: r.updated ?? null,
+      doc: docOf(r),
+    });
+  }
+  for (let i = 0; i < rows.length; i += PERSIST_BATCH) {
     await client.query(
       `insert into records (owner, id, kind, level, "of", within, ancestors, status, applied, wears, created, updated, doc)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       select $1, e.j ->> 'id', e.j ->> 'kind', e.j ->> 'level', e.j ->> 'of', e.j ->> 'within',
+              array(select jsonb_array_elements_text(e.j -> 'ancestors')), e.j -> 'status', e.j -> 'applied',
+              array(select jsonb_array_elements_text(e.j -> 'wears')), e.j ->> 'created', e.j ->> 'updated', e.j -> 'doc'
+         from jsonb_array_elements($2::jsonb) with ordinality as e(j, n)
+        order by e.n
        on conflict (owner, id) do update set kind = excluded.kind, level = excluded.level, "of" = excluded."of", within = excluded.within,
          ancestors = excluded.ancestors, status = excluded.status, applied = excluded.applied, wears = excluded.wears,
          created = excluded.created, updated = excluded.updated, doc = excluded.doc`,
-      [owner, id, r.kind, r.level, r.of ?? null, r.within ?? null, ancestors, r.status ?? null, r.applied ?? null, r.wears ?? [], r.created ?? null, r.updated ?? null, docOf(r)],
+      [owner, JSON.stringify(rows.slice(i, i + PERSIST_BATCH))],
     );
   }
   // Plain copies: a working map notes every walk and miss, and persisting is neither.
