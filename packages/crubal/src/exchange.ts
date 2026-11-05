@@ -172,6 +172,7 @@ function wire(v: Json): Json {
     if ("$qty" in v) return String(v.$qty);
     if ("$link" in v) return String(v.$link);
     if ("$image" in v) return String(v.$image);
+    if ("$color" in v) return String(v.$color);
     if ("$empty" in v) return "";
   }
   if (Array.isArray(v)) return v.map(wire);

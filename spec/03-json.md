@@ -87,6 +87,7 @@ never be mistaken for a compound.
 | yes-no | `true` · `false` | `true` |
 | link | `{"$link": target}` | `{"$link": "wd:Q311319"}`; a definition, `{"$link": "def:facet:title"}` (4.2.2) |
 | image | `{"$image": location}` plus optional `sha256`, `w`, `h` (integers) and `type` | `{"$image": "https://…", "w": 1600}` |
+| color | a hex code alone: string `#RRGGBB`, uppercase; a name: `{"$color": name}` plus optional `hex` (1.4.9a) | `"#1F2A5C"`, `{"$color": "Navy"}`, `{"$color": "Navy", "hex": "#1F2A5C"}` |
 | unknown | `{"$empty": "unknown"}` | |
 | does not apply | `{"$empty": "n/a"}` | |
 | qualified | `{"$value": any value but an empty, …qualifiers}` | `{"$value": "PG-13", "region": "US"}` |

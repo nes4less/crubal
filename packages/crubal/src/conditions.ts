@@ -70,6 +70,7 @@ function plain(v: Json): string {
     if ("$link" in v) return `&${v.$link}`;
     if ("$qty" in v) return `${v.$qty}${v.unit}`;
     if ("$money" in v) return `${v.$money}${v.currency}`;
+    if ("$color" in v) return String(v.$color);
   }
   return JSON.stringify(v);
 }

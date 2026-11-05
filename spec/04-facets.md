@@ -45,7 +45,7 @@ A definition is a block under `facet: key`. Its settings:
 
 | Setting | Holds | Default |
 |---|---|---|
-| `type` | `text`, `number`, `date`, `time`, `yes-no`, `choice`, `link`, `image` or `compound` | required |
+| `type` | `text`, `number`, `date`, `time`, `yes-no`, `choice`, `link`, `image`, `color` or `compound` | required |
 | `label` | the name people see | the key, split at capitals |
 | `ask` | the short question beside the control | none |
 | `describe` | what the facet means: where it comes from, what it drives | none |
@@ -196,6 +196,7 @@ sealed?
 condition{NM|VG|G|F|P} ranked
 cast(person&Person character$)* identity: person
 genres{Comedy|Holiday|Drama|...}*
+colors%*
 ```
 
 Read left to right:
@@ -210,6 +211,7 @@ type     = "$" [ digits ]                      ; text, optional length
          / "{" choice *( "|" choice ) [ "|..." ] "}"   ; choice, optionally open
          / "&" target                          ; link
          / "^"                                 ; image
+         / "%"                                 ; color (1.4.9a)
          / "(" line *( " " line ) ")"          ; compound
 choice   = value *( "~" value )                ; a value and its spellings
 count    = "*" [ digits ]                      ; any, or up to N
@@ -308,6 +310,7 @@ chapter 9's intake outcomes, and the checks are:
 |---|---|
 | the value has the facet's shape (a date where a date is wanted) | contradiction, citing `type` |
 | a date has a precision the facet accepts; a more precise date is cut to what the facet keeps, and the intake record keeps the rest | flagged when less precise than every accepted precision (it still lands) |
+| a color is a hex code `#RRGGBB`, a name of at most 60 characters, or a name with a hex code (1.4.9a) | contradiction, citing `type` |
 | a quantity's unit is `unit` or in `accepts` | contradiction, citing `type`; a spelling the units table lacks is instead **new**, citing the unit: a unit question (chapter 11.9) |
 | a choice value is in the list | **new** for an open or closed list; contradiction, citing `type`, for a fixed list |
 | no more values than `pick` allows | contradiction, citing `type`; review offers both fixes |

@@ -112,6 +112,7 @@ Without quotes, a value's spelling suggests its shape. The facet decides (chapte
 | `14:30` · `14:30:15` | time of day | 24-hour; a zone goes in the detail: `[zone: America/Chicago]` |
 | `yes` · `no`, or the facet's words | yes-no | |
 | a URL | image, under an image facet | image fields go in the detail (2.6) |
+| `#1F2A5C` · `Navy` · `Navy [hex: #1F2A5C]` | color, under a color facet | a hex code alone, a name, or a name with `hex` in its detail (1.4.9a); a name starting with `#` is quoted |
 | anything else | text, choice, or raw for an unknown key | |
 
 ### 2.4.1 Long text
@@ -173,6 +174,7 @@ pair is `name: value`, and the values follow 2.4 and 2.5.
 - `row`, `origin`, `via` and `owner` are reserved (chapter 1.8). `row` is allowed only on a row's own line
   (2.7). The other three are the value's source.
 - Under an image facet, `sha256`, `w`, `h` and `type` are the image's fields.
+- Under a color facet, `hex` beside a name is the color's hex code (1.4.9a).
 - Every other name is a qualifier: a facet, with its own type.
 
 ```crubal

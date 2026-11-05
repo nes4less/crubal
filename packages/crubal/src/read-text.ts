@@ -67,6 +67,10 @@ function scalar(f: Facet, p: Piece): Json {
     }
     case "image":
       return { $image: t };
+    case "color":
+      // A hex code alone is the plain string, in uppercase; anything else is a color's name (1.4.9a).
+      if (/^#[0-9A-Fa-f]{6}$/.test(t)) return t.toUpperCase();
+      return t.startsWith("#") && !p.quoted ? t : { $color: t };
     case "date":
       // Canonical form writes a zero offset as Z (1.4.5).
       return /T\d{2}(:\d{2}){0,2}[+-]00:00$/.test(t) ? t.replace(/[+-]00:00$/, "Z") : t;
@@ -84,6 +88,10 @@ function value(f: Facet, p: Piece, ctx: Ctx, address: string | null, line: numbe
     if (RESERVED_DETAIL.has(name)) continue;
     if (f.type === "image" && IMAGE_FIELDS.has(name) && typeof v === "object" && v && "$image" in v) {
       (v as JsonObject)[name] = name === "w" || name === "h" ? Number(d.text) : d.text;
+      continue;
+    }
+    if (f.type === "color" && name === "hex" && typeof v === "object" && v && "$color" in v) {
+      (v as JsonObject).hex = /^#[0-9A-Fa-f]{6}$/.test(d.text) ? d.text.toUpperCase() : d.text;
       continue;
     }
     const qf = ctx.dict.facets.get(name);

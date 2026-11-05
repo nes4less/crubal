@@ -200,6 +200,7 @@ function textOf(v: Json): string {
   if (isObj(v) && "$qty" in v) return `${v.$qty}${v.unit}`;
   if (isObj(v) && "$money" in v) return `${v.$money}${v.currency}`;
   if (isObj(v) && "$link" in v) return `&${v.$link}`;
+  if (isObj(v) && "$color" in v) return String(v.$color);
   if (isObj(v) && "$value" in v) return textOf(v.$value as Json);
   return JSON.stringify(v);
 }

@@ -814,6 +814,7 @@ export class Views {
         if (isObj(x) && "$qty" in x) return `${x.$qty} ${x.unit}`;
         if (isObj(x) && "$link" in x) return { "@id": String(x.$link) };
         if (isObj(x) && "$image" in x) return String(x.$image);
+        if (isObj(x) && "$color" in x) return String(x.$color);
         return plainText(x);
       });
       out[prop] = plain.length === 1 ? (plain[0] as Json) : plain;

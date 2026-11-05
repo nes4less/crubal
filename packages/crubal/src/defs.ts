@@ -10,7 +10,7 @@ import { unitOf } from "./units.ts";
 /** The table's unit for a spelling (`hr` → `h`); a currency, `currency` or an unknown word as written. */
 const canonicalUnit = (u: string) => unitOf(u) ?? u;
 
-export const TYPES = ["text", "number", "date", "time", "yes-no", "choice", "link", "image", "compound"] as const;
+export const TYPES = ["text", "number", "date", "time", "yes-no", "choice", "link", "image", "color", "compound"] as const;
 export type FacetType = (typeof TYPES)[number];
 export type Precision = "year" | "month" | "day" | "hour" | "minute" | "second" | "any";
 
@@ -319,6 +319,9 @@ function parseLine(text: string, line: number): Parsed {
     rest = rest.slice(1 + (to?.[0].length ?? 0));
   } else if (mark === "^") {
     facet.type = "image";
+    rest = rest.slice(1);
+  } else if (mark === "%") {
+    facet.type = "color";
     rest = rest.slice(1);
   } else if (mark === "(") {
     facet.type = "compound";

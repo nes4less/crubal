@@ -305,10 +305,19 @@ function foldQuantity(f: Facet, v: Json, units?: UnitsTable): Json {
   return amount === null ? v : { $qty: amount, unit: f.unit };
 }
 
+/** A color's hex code in its canonical uppercase (1.4.9a): a value as given, its hex folded. */
+function foldColor(v: Json): Json {
+  if (typeof v === "string" && HEX.test(v)) return v.toUpperCase();
+  if (isObj(v) && "$color" in v && typeof v.hex === "string" && HEX.test(v.hex)) return { ...v, hex: v.hex.toUpperCase() };
+  if (isObj(v) && "$value" in v) return { ...v, $value: foldColor(v.$value as Json) };
+  return v;
+}
+
 export function foldValue(f: Facet, v: Json, dict: Dictionary): Json {
   if (Array.isArray(v)) return v.map((x) => foldValue(f, x, dict));
   if (f.type === "choice") return foldChoice(f, v);
   if (f.type === "number") return foldQuantity(f, v, dict.units);
+  if (f.type === "color") return foldColor(v);
   if (f.type === "compound" && isObj(v)) return foldFields(v, f.children ?? new Map(), dict);
   return v;
 }
@@ -398,6 +407,20 @@ export function resolveDefinition(dict: Dictionary, link: string, sort: Definiti
   return name;
 }
 
+const HEX = /^#[0-9A-Fa-f]{6}$/;
+/** The longest color name: a word or a short phrase (1.4.9a). */
+export const COLOR_NAME_LENGTH = 60;
+
+/** A color (1.4.9a): a hex code alone; or a name, with an optional hex code beside it, and nothing else. */
+export function colorOk(c: Json): boolean {
+  if (typeof c === "string") return HEX.test(c);
+  if (!isObj(c) || typeof c.$color !== "string") return false;
+  const name = c.$color.trim();
+  if (!name || name !== c.$color || [...name].length > COLOR_NAME_LENGTH || /[\u0000-\u001f]/.test(name)) return false;
+  if ("hex" in c && (typeof c.hex !== "string" || !HEX.test(c.hex))) return false;
+  return Object.keys(c).every((k) => k === "$color" || k === "hex");
+}
+
 /** Check one scalar against its facet: an outcome and an optional flag. */
 export function checkScalar(f: Facet, v: Json): { outcome: string; flag?: string; cites?: JsonObject } {
   const c = core(v);
@@ -440,6 +463,8 @@ export function checkScalar(f: Facet, v: Json): { outcome: string; flag?: string
     }
     case "image":
       return isObj(c) && "$image" in c ? { outcome: "absorbed" } : { outcome: "contradiction" };
+    case "color":
+      return colorOk(c) ? { outcome: "absorbed" } : { outcome: "contradiction" };
     case "choice": {
       if (typeof c !== "string") return { outcome: "contradiction" };
       if ((f.values ?? []).some((x) => x.value === c)) return { outcome: "absorbed" };
