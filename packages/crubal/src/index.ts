@@ -2,7 +2,7 @@
 
 export { CrubalError, readTree } from "./tree.ts";
 export { AGGREGATE, aggregateOf, facetOf, leafOf, levelStep, linkStep, partsStep, rowStep } from "./address.ts";
-export { readDefinitions, emptyDictionary, type ClassDef, type Dictionary, type Facet } from "./defs.ts";
+export { readDefinitions, emptyDictionary, DEFINITION_SORTS, definitionSortOf, type ClassDef, type DefinitionSort, type Dictionary, type Facet } from "./defs.ts";
 export { readText } from "./read-text.ts";
 export { printText, type PrintMode } from "./print-text.ts";
 export { canonical, serialize } from "./canonical.ts";
@@ -11,7 +11,7 @@ export { carriedBy, shedBy, wearBy } from "./carriers.ts";
 export { decide as decideReview, openItems, unitsExtensionText, type Decision } from "./review.ts";
 export { extendUnits, resetUnits, unitsTableWith, type UnitsTable } from "./units.ts";
 export { runCorpus, type CaseResult } from "./corpus.ts";
-export { checkPackage, checkRecord, facetJson, foldKey, foldRecord, resolve, resolvedJson, type Outcome, type Warning } from "./dictionary.ts";
+export { checkPackage, checkRecord, definitionName, facetJson, foldKey, foldRecord, resolve, resolveDefinition, resolvedJson, type Outcome, type Warning } from "./dictionary.ts";
 export { evaluate, parseCondition, type Truth } from "./conditions.ts";
 export { checkRules, Engine, readRules, shortcutRules, type Result, type Rule, type Strength } from "./rules.ts";
 export { entryHash, fieldPath, keyFor, land, matchParts, proposeSplit, readContracts, receive, sha256, validate, verifyChain, verifySig, writeHash, type Contract, type IntakeOutcome, type IntakeRecord, type Key, type Keys, type Observation } from "./store.ts";

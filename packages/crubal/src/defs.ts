@@ -315,7 +315,7 @@ function parseLine(text: string, line: number): Parsed {
   } else if (mark === "&") {
     facet.type = "link";
     const to = rest.slice(1).match(/^[^\s*]+/);
-    if (to) facet.to = to[0];
+    if (to) facet.to = checkLinkTo(to[0], line);
     rest = rest.slice(1 + (to?.[0].length ?? 0));
   } else if (mark === "^") {
     facet.type = "image";
@@ -417,11 +417,13 @@ function applySetting(f: Facet, name: string, value: string, line: number) {
       if (a && b) f.words = [unquote(a), unquote(b)];
       return;
     }
+    case "to":
+      f.to = checkLinkTo(unquote(v), line);
+      return;
     case "label":
     case "ask":
     case "describe":
     case "version":
-    case "to":
     case "combine":
     case "when":
       (f as unknown as { [k: string]: string })[name] = unquote(v);
@@ -602,6 +604,22 @@ function readClass(node: Node): ClassDef {
 const SKIP = new Set(["rule", "contract", "view", "shape", "display", "filter", "role", "migration", "package", "resolve", "permissions", "ownership", "emergency", "edge", "instructions", "utility", "lane", "flow", "subject"]); // "subject": the lane's first name (revision 9), carried unchanged in text already published
 
 /** Read definition text (facets, classes and kinds) into a dictionary. Other blocks are skipped. */
+/** The sorts of definition a link may name (4.2.2, revision 20): `&def:facet` holds a facet's key, never a record. */
+export const DEFINITION_SORTS = ["kind", "class", "facet", "utility", "event", "package", "lane", "form", "view"] as const;
+export type DefinitionSort = (typeof DEFINITION_SORTS)[number];
+
+/** A link's target as written, refused when it names a definition sort the language doesn't have. */
+function checkLinkTo(to: string, line?: number): string {
+  if (to.startsWith("def:") && !(DEFINITION_SORTS as readonly string[]).includes(to.slice(4)))
+    throw new CrubalError(`a definition link names one of ${DEFINITION_SORTS.join(", ")}, not ${to.slice(4) || "nothing"}`, line);
+  return to;
+}
+
+/** The sort a link facet's values name when it links to definitions, or nothing for a record link. */
+export function definitionSortOf(f: { type: string; to?: string }): DefinitionSort | undefined {
+  return f.type === "link" && f.to?.startsWith("def:") ? (f.to.slice(4) as DefinitionSort) : undefined;
+}
+
 export function readDefinitions(source: string, into: Dictionary = emptyDictionary()): Dictionary {
   for (const node of readTree(source)) {
     if (node.kind === "pair" && node.key) {
