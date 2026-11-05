@@ -261,7 +261,7 @@ function segment(name: string): string {
   return /^[A-Za-z_]\w*$/.test(name) ? name : JSON.stringify(name);
 }
 
-/** A value in one of chapter 3's object forms (`$link`, `$image`, `$qty`, `$money`, `$value`, `$empty`): a leaf, not a nesting. */
+/** A value in one of chapter 3's object forms (`$link`, `$image`, `$color`, `$qty`, `$money`, `$value`, `$empty`): a leaf, not a nesting. */
 const valueObject = (v: Json): boolean => isObj(v) && Object.keys(v).some((k) => k.startsWith("$"));
 
 function leaves(obj: Json, prefix = "", whole: (path: string) => boolean = () => false): [string, Json][] {

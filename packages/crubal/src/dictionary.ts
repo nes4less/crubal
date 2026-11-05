@@ -3,7 +3,8 @@
 // checking each value against its facet and the classes its record wears (4.9, 5.3, 5.5, 5.6).
 
 import { type Truth, evaluate, parseCondition } from "./conditions.ts";
-import type { ClassDef, ClassLine, Dictionary, Facet } from "./defs.ts";
+import type { ClassDef, ClassLine, DefinitionSort, Dictionary, Facet } from "./defs.ts";
+import { definitionSortOf } from "./defs.ts";
 import type { UnitsTable } from "./units.ts";
 import type { Json, JsonObject, Record } from "./model.ts";
 import { itemText } from "./print-text.ts";
@@ -304,10 +305,19 @@ function foldQuantity(f: Facet, v: Json, units?: UnitsTable): Json {
   return amount === null ? v : { $qty: amount, unit: f.unit };
 }
 
+/** A color's hex code in its canonical uppercase (1.4.9a): a value as given, its hex folded. */
+function foldColor(v: Json): Json {
+  if (typeof v === "string" && HEX.test(v)) return v.toUpperCase();
+  if (isObj(v) && "$color" in v && typeof v.hex === "string" && HEX.test(v.hex)) return { ...v, hex: v.hex.toUpperCase() };
+  if (isObj(v) && "$value" in v) return { ...v, $value: foldColor(v.$value as Json) };
+  return v;
+}
+
 export function foldValue(f: Facet, v: Json, dict: Dictionary): Json {
   if (Array.isArray(v)) return v.map((x) => foldValue(f, x, dict));
   if (f.type === "choice") return foldChoice(f, v);
   if (f.type === "number") return foldQuantity(f, v, dict.units);
+  if (f.type === "color") return foldColor(v);
   if (f.type === "compound" && isObj(v)) return foldFields(v, f.children ?? new Map(), dict);
   return v;
 }
@@ -372,6 +382,45 @@ function core(v: Json): Json {
 
 
 
+/** The name a definition link holds, when it is of the sort given: `def:facet:title` → `title`. Pure. */
+export function definitionName(link: string, sort: DefinitionSort): string | undefined {
+  const prefix = `def:${sort}:`;
+  const name = link.startsWith(prefix) ? link.slice(prefix.length) : "";
+  return name ? name : undefined;
+}
+
+/**
+ * The definition a link names, as the dictionary holds it now (4.2.2): a facet through its aliases, so a renamed
+ * facet keeps its links; a kind or a class by name. Other sorts (utility, event, package, lane, form, view) live
+ * outside the dictionary and are resolved by the host; for them this answers the name unchanged.
+ */
+export function resolveDefinition(dict: Dictionary, link: string, sort: DefinitionSort): string | undefined {
+  const name = definitionName(link, sort);
+  if (!name) return undefined;
+  if (sort === "facet") {
+    if (dict.facets.has(name)) return name;
+    for (const f of dict.facets.values()) if (f.aliases.includes(name)) return f.key;
+    return undefined;
+  }
+  if (sort === "kind") return dict.kinds.has(name) ? name : undefined;
+  if (sort === "class") return dict.classes.has(name) ? name : undefined;
+  return name;
+}
+
+const HEX = /^#[0-9A-Fa-f]{6}$/;
+/** The longest color name: a word or a short phrase (1.4.9a). */
+export const COLOR_NAME_LENGTH = 60;
+
+/** A color (1.4.9a): a hex code alone; or a name, with an optional hex code beside it, and nothing else. */
+export function colorOk(c: Json): boolean {
+  if (typeof c === "string") return HEX.test(c);
+  if (!isObj(c) || typeof c.$color !== "string") return false;
+  const name = c.$color.trim();
+  if (!name || name !== c.$color || [...name].length > COLOR_NAME_LENGTH || /[\u0000-\u001f]/.test(name)) return false;
+  if ("hex" in c && (typeof c.hex !== "string" || !HEX.test(c.hex))) return false;
+  return Object.keys(c).every((k) => k === "$color" || k === "hex");
+}
+
 /** Check one scalar against its facet: an outcome and an optional flag. */
 export function checkScalar(f: Facet, v: Json): { outcome: string; flag?: string; cites?: JsonObject } {
   const c = core(v);
@@ -405,10 +454,17 @@ export function checkScalar(f: Facet, v: Json): { outcome: string; flag?: string
     }
     case "yes-no":
       return typeof c === "boolean" ? { outcome: "absorbed" } : { outcome: "contradiction" };
-    case "link":
-      return isObj(c) && "$link" in c ? { outcome: "absorbed" } : { outcome: "contradiction" };
+    case "link": {
+      if (!isObj(c) || !("$link" in c)) return { outcome: "contradiction" };
+      // A definition link holds `def:<sort>:<name>`, its own sort's (4.2.2, revision 20); a record link any id.
+      const sort = definitionSortOf(f);
+      if (sort && !definitionName(String(c.$link), sort)) return { outcome: "contradiction" };
+      return { outcome: "absorbed" };
+    }
     case "image":
       return isObj(c) && "$image" in c ? { outcome: "absorbed" } : { outcome: "contradiction" };
+    case "color":
+      return colorOk(c) ? { outcome: "absorbed" } : { outcome: "contradiction" };
     case "choice": {
       if (typeof c !== "string") return { outcome: "contradiction" };
       if ((f.values ?? []).some((x) => x.value === c)) return { outcome: "absorbed" };
@@ -432,24 +488,29 @@ function outcome(record: string, address: string, r: { outcome: string; flag?: s
   return o;
 }
 
-function checkValue(record: string, f: Facet, key: string, v: Json, address: string, narrow: ResolvedLine | undefined): Outcome[] {
+function checkValue(record: string, f: Facet, key: string, v: Json, address: string, narrow: ResolvedLine | undefined, dict?: Dictionary): Outcome[] {
   const items = Array.isArray(v) ? v : null;
   const pickLimit = narrow?.pick ?? f.pick;
   if (items) {
     if (pickLimit !== "any" && items.length > Number(pickLimit)) {
       return [{ record, address, outcome: "contradiction", cites: { type: f.key } }];
     }
-    return items.map((item) => itemOutcome(record, f, key, item, `${address}[${JSON.stringify(itemText(f, item))}]`, narrow));
+    return items.map((item) => itemOutcome(record, f, key, item, `${address}[${JSON.stringify(itemText(f, item))}]`, narrow, dict));
   }
-  return [itemOutcome(record, f, key, v, address, narrow)];
+  return [itemOutcome(record, f, key, v, address, narrow, dict)];
 }
 
 function citeLine(cls: string, l: ClassLine): string {
   return `${cls}: ${l.text}`;
 }
 
-function itemOutcome(record: string, f: Facet, _key: string, v: Json, address: string, narrow: ResolvedLine | undefined): Outcome {
+function itemOutcome(record: string, f: Facet, _key: string, v: Json, address: string, narrow: ResolvedLine | undefined, dict?: Dictionary): Outcome {
   const base = checkScalar(f, v);
+  // A definition link naming nothing the dictionary holds is kept and flagged (4.2.2): a package may come later.
+  const sort = definitionSortOf(f);
+  const c0 = core(v);
+  if (dict && sort && base.outcome === "absorbed" && !base.flag && (sort === "facet" || sort === "kind" || sort === "class") && isObj(c0) && "$link" in c0 && !resolveDefinition(dict, String(c0.$link), sort))
+    return outcome(record, address, { outcome: "absorbed", flag: "unknown" });
   const c = core(v);
   if (narrow?.values && typeof c === "string" && !(isObj(c) && "$empty" in c) && !narrow.values.includes(c)) {
     const by = narrow.from.find((x) => x.line.values && !x.line.values.includes(c));
@@ -489,7 +550,7 @@ export function checkRecord(r: Record, dict: Dictionary): { outcomes: Outcome[];
       outcomes.push({ record: r.id, address: key, outcome: "unknown" });
       continue;
     }
-    outcomes.push(...checkValue(r.id, f, key, v, key, byFacet.get(key)));
+    outcomes.push(...checkValue(r.id, f, key, v, key, byFacet.get(key), dict));
   }
 
   const slots = worn.flatMap((w) => (dict.classes.get(w)?.parts ?? []).map((s) => ({ cls: w, s })));
@@ -517,7 +578,7 @@ export function checkRecord(r: Record, dict: Dictionary): { outcomes: Outcome[];
         outcomes.push({ record: r.id, address, outcome: "unknown" });
         continue;
       }
-      outcomes.push(...checkValue(r.id, f, key, v, address, undefined));
+      outcomes.push(...checkValue(r.id, f, key, v, address, undefined, dict));
     }
   }
 

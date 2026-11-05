@@ -1,7 +1,7 @@
 // read-text.ts: CRUBAL data text (spec chapter 2) into the JSON form (chapter 3). The facet decides each
 // value's shape (chapter 1.4); a key without a facet keeps its exact text as a raw value.
 
-import type { Dictionary, Facet } from "./defs.ts";
+import { type Dictionary, type Facet, definitionSortOf } from "./defs.ts";
 import { type Piece, readList, readPiece, writeText } from "./lex.ts";
 import { CrubalError, innerText, type Node, readTree } from "./tree.ts";
 import { type Json, type JsonObject, type Record, type Source, type Wrapper } from "./model.ts";
@@ -41,8 +41,12 @@ function isEmptyMark(p: Piece): "unknown" | "n/a" | null {
 function scalar(f: Facet, p: Piece): Json {
   const t = p.text;
   switch (f.type) {
-    case "link":
-      return !p.quoted && t.startsWith("&") ? { $link: t.slice(1) } : t;
+    case "link": {
+      if (!p.quoted && t.startsWith("&")) return { $link: t.slice(1) };
+      // Under a definition link, a bare name is that sort's key (4.2.2): `works: Item` is `&def:class:Item`.
+      const sort = definitionSortOf(f);
+      return sort && !p.quoted && t && !t.startsWith("def:") ? { $link: `def:${sort}:${t}` } : t;
+    }
     case "number": {
       const unit = f.unit;
       if (!unit) return t;
@@ -67,6 +71,10 @@ function scalar(f: Facet, p: Piece): Json {
     }
     case "image":
       return { $image: t };
+    case "color":
+      // A hex code alone is the plain string, in uppercase; anything else is a color's name (1.4.9a).
+      if (/^#[0-9A-Fa-f]{6}$/.test(t)) return t.toUpperCase();
+      return t.startsWith("#") && !p.quoted ? t : { $color: t };
     case "date":
       // Canonical form writes a zero offset as Z (1.4.5).
       return /T\d{2}(:\d{2}){0,2}[+-]00:00$/.test(t) ? t.replace(/[+-]00:00$/, "Z") : t;
@@ -84,6 +92,10 @@ function value(f: Facet, p: Piece, ctx: Ctx, address: string | null, line: numbe
     if (RESERVED_DETAIL.has(name)) continue;
     if (f.type === "image" && IMAGE_FIELDS.has(name) && typeof v === "object" && v && "$image" in v) {
       (v as JsonObject)[name] = name === "w" || name === "h" ? Number(d.text) : d.text;
+      continue;
+    }
+    if (f.type === "color" && name === "hex" && typeof v === "object" && v && "$color" in v) {
+      (v as JsonObject).hex = /^#[0-9A-Fa-f]{6}$/.test(d.text) ? d.text.toUpperCase() : d.text;
       continue;
     }
     const qf = ctx.dict.facets.get(name);

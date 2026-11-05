@@ -45,6 +45,11 @@ function scalarText(f: Facet, v: Json): string {
     if ("$qty" in v) return `${v.$qty}${v.unit}`;
     if ("$money" in v) return `${v.$money}${v.currency}`;
     if ("$image" in v) return writeText(String(v.$image));
+    if ("$color" in v) {
+      // A name starting with # would read back as a hex code, so it is quoted (1.4.9a).
+      const name = String(v.$color);
+      return name.startsWith("#") ? JSON.stringify(name) : writeText(name, false, ["_", "-", "n/a", "N/A"]);
+    }
   }
   return JSON.stringify(v);
 }
@@ -62,6 +67,7 @@ function ownDetail(v: Json): [string, string][] {
       .filter(([k]) => k !== "$image")
       .map(([k, x]) => [k, typeof x === "string" ? writeText(x, true) : String(x)]);
   }
+  if ("$color" in v && typeof v.hex === "string") return [["hex", v.hex]];
   return [];
 }
 

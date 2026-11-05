@@ -45,7 +45,7 @@ A definition is a block under `facet: key`. Its settings:
 
 | Setting | Holds | Default |
 |---|---|---|
-| `type` | `text`, `number`, `date`, `time`, `yes-no`, `choice`, `link`, `image` or `compound` | required |
+| `type` | `text`, `number`, `date`, `time`, `yes-no`, `choice`, `link`, `image`, `color` or `compound` | required |
 | `label` | the name people see | the key, split at capitals |
 | `ask` | the short question beside the control | none |
 | `describe` | what the facet means: where it comes from, what it drives | none |
@@ -76,7 +76,7 @@ A definition is a block under `facet: key`. Its settings:
 | choice | `fixed` | `yes` when the list is fixed by definition (4.2.1) |
 | choice | `ranked` | `yes` when the list's order is a ranking (`NM` > `VG` > … > `P`), so `best`, `worst`, `over` and `under` mean something |
 | choice | `scored` | `yes` when each pick also takes a grade from 0 to 10, stored as the qualifier `grade` |
-| link | `to` | what it points at: a kind, a class, `url`, or a shared vocabulary's prefix (`wd`) |
+| link | `to` | what it points at: a kind, a class, `url`, a shared vocabulary's prefix (`wd`), or a sort of definition (`def:facet`, 4.2.2) |
 | compound | `facets` | the child facets: blocks or shorthand lines (4.5) |
 | compound | `identity` | the child that identifies a row; it MUST be a link child (chapter 1.6) |
 
@@ -100,6 +100,42 @@ how a scanner ranks it) lives here, never in the core settings.
 
 A list is fixed only when the world fixes it (Blu-ray regions A, B, C). A closed list is just the list we
 have so far. `...` and `fixed: yes` MUST NOT both be set.
+
+### 4.2.2 Links to definitions
+
+Some values name a definition, not a record: the classes a station works, the facet a page title is built from,
+the kinds a place lists, the event an email rides. Such a facet is a link whose `to` is `def:` and a sort of
+definition (revision 20):
+
+| `to` | Names |
+|---|---|
+| `def:kind` | a kind (11.2) |
+| `def:class` | a class (chapter 5) |
+| `def:facet` | a facet, by its key |
+| `def:utility` | a utility (11.1) |
+| `def:event` | an event a package declares |
+| `def:package` | a package, `owner/name` |
+| `def:lane` | a lane (12.10) |
+| `def:form` | a form (7.7) |
+| `def:view` | a view (chapter 12) |
+
+```
+works&def:class*            // the classes a station works
+titleFrom&def:facet         // the facet a page title is built from
+```
+
+1. A value is `{"$link": "def:<sort>:<name>"}` (3.3), its own sort's: `def:facet:title`. A value of another sort,
+   or with no name, is a **contradiction**.
+2. A `def:kind`, `def:class` or `def:facet` value is resolved against the dictionary in force, a facet through its
+   key aliases (4.3), so a facet renamed with its old key kept as an alias keeps its links. A name the dictionary
+   doesn't hold is **absorbed** with the flag `unknown`: a package that declares it may be installed later.
+3. The other sorts are resolved by the host against what it holds (its utilities, packages, lanes, forms, views
+   and events); a reader without them keeps the value as it is.
+4. Any other `def:` sort MUST be refused when the definition is read.
+5. A form draws a definition link as a pick over the definitions of its sort the deployment holds, never as text.
+6. In the text form, a bare name under a definition link is that sort's key: `works: Item, Release` reads as
+   `&def:class:Item, &def:class:Release`. A quoted name stays text and contradicts. So a facet that held names as
+   text moves to a definition link with `retype: text -> link` (10.3), each name landing as its sort's key.
 
 ## 4.3 Aliases
 
@@ -163,6 +199,7 @@ sealed?
 condition{NM|VG|G|F|P} ranked
 cast(person&Person character$)* identity: person
 genres{Comedy|Holiday|Drama|...}*
+colors%*
 ```
 
 Read left to right:
@@ -177,6 +214,7 @@ type     = "$" [ digits ]                      ; text, optional length
          / "{" choice *( "|" choice ) [ "|..." ] "}"   ; choice, optionally open
          / "&" target                          ; link
          / "^"                                 ; image
+         / "%"                                 ; color (1.4.9a)
          / "(" line *( " " line ) ")"          ; compound
 choice   = value *( "~" value )                ; a value and its spellings
 count    = "*" [ digits ]                      ; any, or up to N
@@ -275,6 +313,7 @@ chapter 9's intake outcomes, and the checks are:
 |---|---|
 | the value has the facet's shape (a date where a date is wanted) | contradiction, citing `type` |
 | a date has a precision the facet accepts; a more precise date is cut to what the facet keeps, and the intake record keeps the rest | flagged when less precise than every accepted precision (it still lands) |
+| a color is a hex code `#RRGGBB`, a name of at most 60 characters, or a name with a hex code (1.4.9a) | contradiction, citing `type` |
 | a quantity's unit is `unit` or in `accepts` | contradiction, citing `type`; a spelling the units table lacks is instead **new**, citing the unit: a unit question (chapter 11.9) |
 | a choice value is in the list | **new** for an open or closed list; contradiction, citing `type`, for a fixed list |
 | no more values than `pick` allows | contradiction, citing `type`; review offers both fixes |

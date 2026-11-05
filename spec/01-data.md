@@ -151,6 +151,19 @@ A picture, by its location (an absolute URL or a package-defined content address
 `sha256` (lowercase hex of the bytes), `w` and `h` (pixels) and `type` (a media type). Two images are the
 same image when their `sha256` match.
 
+### 1.4.9a Color
+
+A color (revision 20), in one of three forms:
+
+- **a hex code alone**, `#RRGGBB`: sRGB, six hexadecimal digits, kept in uppercase (`#1F2A5C`); a reader folds
+  lowercase to uppercase;
+- **a name alone**: a word or a short phrase as people say it (`Navy`, `Midnight blue`), at most 60 characters,
+  with no line break and no space at either end;
+- **a name with its hex code beside it**: `Navy` that is exactly `#1F2A5C`.
+
+Anything else is a contradiction: a hex code of another length, a name too long, any other member. Two colors
+are equal when their forms are equal; a name alone and the same name with a hex code are different values.
+
 ### 1.4.10 Raw
 
 The value of an unknown key: the exact text as written (text form) or the exact JSON value (JSON form). A
