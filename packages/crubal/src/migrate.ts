@@ -275,9 +275,14 @@ export function restamp(records: Record[], recipe: Recipe, dict: Dictionary, sta
           // Each value is read again under the facet's new type (10.3): what fits lands, the rest goes to review.
           const f = dict.facets.get(s.facet);
           if (!f) break;
-          const again = readUnder(f, textOf(v as Json), dict);
-          const ok = again !== undefined && checkScalar(f, again).outcome === "absorbed";
-          if (ok) values[s.facet] = again as Json;
+          // A list is read again item by item, each as it was written, so a list never reads as one text.
+          const items = Array.isArray(v) ? v : [v as Json];
+          const again = items.map((x) => {
+            const r = readUnder(f, textOf(x), dict);
+            return Array.isArray(r) && r.length === 1 ? (r[0] as Json) : r;
+          });
+          const ok = again.every((x) => x !== undefined && checkScalar(f, x).outcome === "absorbed");
+          if (ok) values[s.facet] = Array.isArray(v) ? (again as Json[]) : (again[0] as Json);
           else review.push({ record: rec.id, address: s.facet, step: s.text, held: true });
           break;
         }

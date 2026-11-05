@@ -8,6 +8,8 @@ import { bundleOf, parsePackage, printBundle, readBundle } from "../src/bundle.t
 import { serialize } from "../src/canonical.ts";
 import { definitionSortOf, readDefinitions } from "../src/defs.ts";
 import { checkRecord, checkScalar, resolveDefinition } from "../src/dictionary.ts";
+import { readRecipes, restamp } from "../src/migrate.ts";
+import { readUnder } from "../src/read-text.ts";
 
 const pkg = (extra = "") => `package: stations /2026-11-04
   owner: lab.example
@@ -73,4 +75,26 @@ test("the target rides the bundle and back", () => {
   const b = bundleOf(parsePackage(pkg()));
   assert.match(printBundle(b), /def:class/);
   assert.equal(serialize(bundleOf(readBundle(b))), serialize(b));
+});
+
+test("a bare name under a definition link is that sort's key; quoted, it stays text", () => {
+  const d = readDefinitions(pkg());
+  const works = d.facets.get("works") as never;
+  assert.deepEqual(readUnder(works, "Thing, &def:class:Other", d), [{ $link: "def:class:Thing" }, { $link: "def:class:Other" }]);
+  assert.deepEqual(readUnder(d.facets.get("titleFrom") as never, '"title"', d), "title");
+});
+
+test("retype: text -> link turns stored names into definition links, a list item by item", () => {
+  const d = readDefinitions(pkg());
+  const [r] = readRecipes(`migration: lab.example/stations /2026-11-04 -> lab.example/stations /2026-11-05
+  facet: works
+    retype: text -> link
+  facet: titleFrom
+    retype: text -> link
+`);
+  const rec = { id: "T-1", kind: "thing", level: "thing", owner: "lab.example", wears: ["Thing"], values: { works: ["Thing", "Gone"], titleFrom: "heading" } };
+  const out = restamp([rec as never], r as never, d);
+  assert.deepEqual(out.records[0]?.values.works, [{ $link: "def:class:Thing" }, { $link: "def:class:Gone" }]);
+  assert.deepEqual(out.records[0]?.values.titleFrom, { $link: "def:facet:heading" });
+  assert.equal(out.review.length, 0);
 });

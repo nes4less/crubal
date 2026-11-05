@@ -133,6 +133,9 @@ titleFrom&def:facet         // the facet a page title is built from
    and events); a reader without them keeps the value as it is.
 4. Any other `def:` sort MUST be refused when the definition is read.
 5. A form draws a definition link as a pick over the definitions of its sort the deployment holds, never as text.
+6. In the text form, a bare name under a definition link is that sort's key: `works: Item, Release` reads as
+   `&def:class:Item, &def:class:Release`. A quoted name stays text and contradicts. So a facet that held names as
+   text moves to a definition link with `retype: text -> link` (10.3), each name landing as its sort's key.
 
 ## 4.3 Aliases
 

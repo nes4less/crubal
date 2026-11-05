@@ -1,7 +1,7 @@
 // read-text.ts: CRUBAL data text (spec chapter 2) into the JSON form (chapter 3). The facet decides each
 // value's shape (chapter 1.4); a key without a facet keeps its exact text as a raw value.
 
-import type { Dictionary, Facet } from "./defs.ts";
+import { type Dictionary, type Facet, definitionSortOf } from "./defs.ts";
 import { type Piece, readList, readPiece, writeText } from "./lex.ts";
 import { CrubalError, innerText, type Node, readTree } from "./tree.ts";
 import { type Json, type JsonObject, type Record, type Source, type Wrapper } from "./model.ts";
@@ -41,8 +41,12 @@ function isEmptyMark(p: Piece): "unknown" | "n/a" | null {
 function scalar(f: Facet, p: Piece): Json {
   const t = p.text;
   switch (f.type) {
-    case "link":
-      return !p.quoted && t.startsWith("&") ? { $link: t.slice(1) } : t;
+    case "link": {
+      if (!p.quoted && t.startsWith("&")) return { $link: t.slice(1) };
+      // Under a definition link, a bare name is that sort's key (4.2.2): `works: Item` is `&def:class:Item`.
+      const sort = definitionSortOf(f);
+      return sort && !p.quoted && t && !t.startsWith("def:") ? { $link: `def:${sort}:${t}` } : t;
+    }
     case "number": {
       const unit = f.unit;
       if (!unit) return t;
