@@ -4,11 +4,11 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { bundleOf, parsePackage, printBundle, readBundle } from "../src/bundle.ts";
+import { bundleOf, emptyParsed, parsePackage, printBundle, readBundle, readBundleOnto } from "../src/bundle.ts";
 import { serialize } from "../src/canonical.ts";
 import { checkPermissions, readAccess } from "../src/access.ts";
 import { emptyDictionary } from "../src/defs.ts";
-import { checkPackages, flowStamps, readPackages } from "../src/packages.ts";
+import { checkFlowsInForce, checkPackages, flowStamps, readPackages } from "../src/packages.ts";
 import { publish } from "../src/publish.ts";
 import { CrubalError } from "../src/tree.ts";
 
@@ -232,4 +232,41 @@ test("edit flows is a menu item's target (revision 23): the designer's gate", ()
   const { perms } = readAccess("permissions: shop\n  menu:\n    design: edit flows\n  presets:\n    designer: design    audience: staff\n");
   checkPermissions(perms, emptyDictionary());
   assert.deepEqual(perms.menu.get("design")?.verbs, { edit: ["flows"] });
+});
+
+// Revision 23: a package that extends another walks its lanes and forms; the check in force sees the whole.
+const own = (stops: string, done = "orderState = packed") => `package: own /2026-11-06
+  owner: shop.example
+  crubal: 2
+  extends: shop.example/shop /2026-11-05
+
+flow: myPickPack /2026-11-06
+  label: My pick and pack
+  utility: orders
+  follow: queue
+  serves: owner, fulfiller(pick)
+  replaces: pickPackShip
+  stops:
+${stops}
+  done: ${done}
+`;
+
+test("a flow in an extending package may name the lanes, forms, utility and presets it extends; the check in force refuses a gap", () => {
+  const good = own("    order of order\n    ordersToPick -> pick\n    ordersToPack -> pack");
+  // File-local: the extending package alone checks (what it cannot see is deferred).
+  checkPackages(good);
+  const inForce = (ownText: string) => {
+    const base = emptyParsed();
+    readBundleOnto(bundleOf(parsePackage(shop(flow))), base);
+    readBundleOnto(bundleOf(parsePackage(ownText)), base);
+    return base;
+  };
+  checkFlowsInForce(inForce(good));
+  assert.equal(inForce(good).info.flows.map((f) => f.name).join(","), "pickPackShip,myPickPack");
+  // A lane nobody declares, a gap, a utility not in force: refused in force, as a publish would have.
+  assert.throws(() => checkFlowsInForce(inForce(own("    ordersToPick -> pick\n    ordersToShip -> ship"))), /ordersToShip isn't a lane in force here/);
+  assert.throws(() => checkFlowsInForce(inForce(own("    ordersToPack -> pack\n    ordersToPick -> pick"))), /has a gap: ordersToPack is done at orderState = packed, but ordersToPick picks orderState = paid/);
+  assert.throws(() => checkFlowsInForce(inForce(own("    ordersToPick -> pick", "orderState = packed"))), /done is orderState = packed, but its last lane ordersToPick leaves a record at orderState = picking/);
+  // A package that extends nothing is still checked whole at publish.
+  refused(flow.replace("ordersToPack -> pack", "ordersToShip -> ship"), /ordersToShip isn't a lane/);
 });

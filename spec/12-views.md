@@ -558,7 +558,10 @@ A package MUST be refused at publish when a flow names a utility it doesn't decl
 neither a lane nor a form of the package, an act its utility lacks, a level its kinds lack, a done that
 is not a declared filter with a real value, a context that is not a kind or level of the package, or itself
 as what it replaces (12.8); a `replaces` naming a flow not in force at a place is carried and stands in for
-nothing there. A flow adds nothing to what its lanes show: a
+nothing there. A package that extends others may walk the lanes and forms of the packages it extends and name
+their utility, presets and filters (revision 23: a place's own package carries the flow it drew from a
+preset); what the file-local check cannot see, it leaves to the check of the packages in force together (11.4,
+at install), which refuses as the publish would have. A flow adds nothing to what its lanes show: a
 person sees the stops whose lanes they are served, and a block only where the form's `who` admits them.
 Where a block's form is pressed is the app's (a generic make screen, a path of its own); what a flow
 looks like is the app's; the order of the stops is the package's. A reader that doesn't know the block

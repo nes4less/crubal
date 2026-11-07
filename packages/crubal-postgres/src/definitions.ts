@@ -6,7 +6,7 @@ import { deserialize, serialize as v8serialize } from "node:v8";
 // owner's working package, every `define` write as the member now stands. The publish checks run on the
 // result, so a definition that breaks the set is refused before it is written.
 
-import { checkPermissions } from "@cruba/crubal";
+import { checkFlowsInForce, checkPermissions } from "@cruba/crubal";
 import { emptyParsed, type Parsed, readBundleOnto } from "@cruba/crubal";
 import { checkPackage } from "@cruba/crubal";
 import { checkContracts } from "@cruba/crubal";
@@ -227,4 +227,5 @@ export function checkAll(p: Parsed): void {
   checkContracts(p.contracts, p.dict, "", new Set(p.views.views.keys()));
   checkViews(p.views, p.dict);
   checkPermissions(p.perms, p.dict, new Set(p.contracts.map((c) => c.name)), new Set(p.views.views.keys()));
+  checkFlowsInForce(p);
 }
