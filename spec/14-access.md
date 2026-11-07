@@ -177,7 +177,8 @@ permissions: facility
   `review` (queue items may be decided: vocabulary, arrivals, migrations, gated writes), `archive` and
   `merge` (chapter 1.12), `apply` (instructions, chapter 10.7), `install` (a package version, and the
   restamp that follows) and `grant` (making edges for the listed items). Targets are facets, classes, views,
-  contracts and queues; `*` means all. The owner's powers (14.1) are not verbs and can't be granted.
+  contracts and queues, and for `edit` also `flows`, the place's workflows as a whole (revision 23: the
+  flow designer's gate; the place's own package is still edited under the owner's powers); `*` means all. The owner's powers (14.1) are not verbs and can't be granted.
 - **Scopes.** `on: owned` means records the caller owns (14.1); `on: administered` means records the caller
   has `admin` on; `on: relation player` means records the caller holds that relation to; any other `on` is a
   condition over the record and `caller`. With no `on`, an item covers what the edge it is granted on

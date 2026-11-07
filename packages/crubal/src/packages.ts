@@ -124,6 +124,10 @@ export type Flow = {
   utility?: string;
   follow: "queue" | "card";
   serves: { as: string; items?: string[]; line: number }[];
+  /** What the flow holds through its run (revision 23): kinds asked once when it is walked (a station). */
+  context: string[];
+  /** The flow this one stands in for (revision 23): served where the named flow would have been. */
+  replaces?: string;
   stops: FlowStop[];
   done?: { filter: string; value: string; line: number };
   line: number;
@@ -321,7 +325,7 @@ function readLane(node: Node): Lane {
 function readFlow(node: Node): Flow {
   const [name = "", version = ""] = node.value.split(/\s+\//).map((s) => s.trim());
   if (!/^[a-z][\w-]*$/.test(name)) throw new CrubalError(`a flow is "flow: <name> /<version>", the name a lower-case word: ${node.value}`, node.line);
-  const f: Flow = { name, version, follow: "queue", serves: [], stops: [], line: node.line };
+  const f: Flow = { name, version, follow: "queue", serves: [], context: [], stops: [], line: node.line };
   for (const c of node.children) {
     if (!c.key) continue;
     const v = c.value.trim();
@@ -336,6 +340,12 @@ function readFlow(node: Node): Flow {
         if (!m) throw new CrubalError(`serves: ${part} is not a name, or a name with items in parentheses`, c.line);
         f.serves.push({ as: m[1] as string, ...(m[2] !== undefined ? { items: splitList(m[2]) } : {}), line: c.line });
       }
+    } else if (c.key === "context") {
+      f.context = splitList(v);
+      for (const k of f.context) if (!/^[a-z][\w-]*$/.test(k)) throw new CrubalError(`context names kinds, lower-case words: ${k}`, c.line);
+    } else if (c.key === "replaces") {
+      if (!/^[a-z][\w-]*$/.test(v)) throw new CrubalError(`replaces names a flow, a lower-case word: ${v}`, c.line);
+      f.replaces = v;
     } else if (c.key === "done") f.done = readPick(v, c.line, "done");
     else if (c.key === "stops") {
       for (const st of c.children) {
@@ -345,7 +355,7 @@ function readFlow(node: Node): Flow {
         if (!m) throw new CrubalError(`a stop is "<lane> -> <act>", "<lane>", or "<form> of <level>", not ${text}`, st.line);
         f.stops.push({ name: m[1] as string, ...(m[2] ? { act: m[2] } : {}), ...(m[3] ? { of: m[3] } : {}), line: st.line });
       }
-    } else throw new CrubalError(`a flow has label, utility, follow, serves, stops and done, not ${c.key}`, c.line);
+    } else throw new CrubalError(`a flow has label, utility, follow, serves, context, replaces, stops and done, not ${c.key}`, c.line);
   }
   if (!f.stops.length) throw new CrubalError(`the flow ${name} has no stops`, node.line);
   return f;
@@ -584,6 +594,9 @@ function checkFlows(source: string, pkgs: PackageInfo[]): void {
         if (!known(sv.as)) throw new CrubalError(`${where} serves ${sv.as}, which isn't a preset, relation or audience here`, sv.line);
         for (const i of sv.items ?? []) if (!item(i)) throw new CrubalError(`${where} serves ${sv.as}(${i}): ${i} isn't a preset, menu item or relation`, sv.line);
       }
+      // Revision 23: the context is kinds (or levels) of this package; a flow never replaces itself.
+      for (const k of f.context) if (!dict.kinds.has(k) && !dict.levels.has(k)) throw new CrubalError(`${where}'s context names ${k}, which isn't a kind or level of this package`, f.line);
+      if (f.replaces === f.name) throw new CrubalError(`${where} replaces itself`, f.line);
       for (const st of f.stops) {
         const isLane = lanes.has(st.name);
         const isForm = forms.has(st.name);

@@ -6,6 +6,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { bundleOf, parsePackage, printBundle, readBundle } from "../src/bundle.ts";
 import { serialize } from "../src/canonical.ts";
+import { checkPermissions, readAccess } from "../src/access.ts";
+import { emptyDictionary } from "../src/defs.ts";
 import { checkPackages, flowStamps, readPackages } from "../src/packages.ts";
 import { publish } from "../src/publish.ts";
 import { CrubalError } from "../src/tree.ts";
@@ -201,4 +203,33 @@ test("a flow is refused when its lane stops do not chain, or its done is not its
   // A block between two lanes leaves the chain as it is; a block after the last lane is fine.
   checkPackages(shop(flow.replace("    ordersToPack -> pack", "    order of order\n    ordersToPack -> pack")));
   checkPackages(shop(flow.replace("    ordersToPack -> pack", "    ordersToPack -> pack\n    order of order")));
+});
+
+// Revision 23: what a flow holds through its run, and the flow it stands in for.
+test("a flow's context and replaces are read, carried, printed back, and checked", () => {
+  const withContext = flow.replace("  follow: queue\n", "  follow: queue\n  context: order\n  replaces: pickPackShipOld\n");
+  const [info] = readPackages(shop(withContext));
+  const f = info?.flows[0];
+  assert.deepEqual(f?.context, ["order"]);
+  assert.equal(f?.replaces, "pickPackShipOld");
+  checkPackages(shop(withContext));
+  const b = bundleOf(parsePackage(shop(withContext)));
+  const j = (b.flows as { context?: unknown; replaces?: unknown }[])[0];
+  assert.deepEqual(j?.context, ["order"]);
+  assert.equal(j?.replaces, "pickPackShipOld");
+  const text = printBundle(b);
+  assert.match(text, /^  context: order$/m);
+  assert.match(text, /^  replaces: pickPackShipOld$/m);
+  assert.equal(serialize(bundleOf(readBundle(b))), serialize(b));
+  // A flow with neither prints neither.
+  assert.doesNotMatch(printBundle(bundleOf(parsePackage(shop(flow)))), /context:|replaces:/);
+  refused(flow.replace("  follow: queue\n", "  follow: queue\n  context: parcel\n"), /context names parcel, which isn't a kind or level/);
+  refused(flow.replace("  follow: queue\n", "  follow: queue\n  replaces: pickPackShip\n"), /replaces itself/);
+  assert.throws(() => readPackages(shop(flow.replace("  follow: queue\n", "  follow: queue\n  replaces: Two Words\n"))), /replaces names a flow/);
+});
+
+test("edit flows is a menu item's target (revision 23): the designer's gate", () => {
+  const { perms } = readAccess("permissions: shop\n  menu:\n    design: edit flows\n  presets:\n    designer: design    audience: staff\n");
+  checkPermissions(perms, emptyDictionary());
+  assert.deepEqual(perms.menu.get("design")?.verbs, { edit: ["flows"] });
 });

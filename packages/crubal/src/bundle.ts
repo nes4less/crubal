@@ -301,6 +301,8 @@ export function flowJson(f: Flow): JsonObject {
   if (f.utility) o.utility = f.utility;
   o.follow = f.follow;
   if (f.serves.length) o.serves = f.serves.map((x) => ({ as: x.as, ...(x.items ? { items: [...x.items] } : {}) }));
+  if (f.context.length) o.context = [...f.context];
+  if (f.replaces) o.replaces = f.replaces;
   o.stops = f.stops.map((st) => ({ name: st.name, ...(st.act ? { act: st.act } : {}), ...(st.of ? { of: st.of } : {}) }));
   if (f.done) o.done = { filter: f.done.filter, value: f.done.value };
   return o;
@@ -645,6 +647,8 @@ const pickText = (p: Json | undefined): string | undefined => (isObj(p) ? `${p.f
 function flowText(f: JsonObject): string[] {
   const out = [`flow: ${f.flow} /${f.version}`, ...kv("  ", "label", f.label), ...kv("  ", "utility", f.utility), ...kv("  ", "follow", f.follow)];
   if (Array.isArray(f.serves)) out.push(`  serves: ${(f.serves as JsonObject[]).map((x) => `${x.as}${Array.isArray(x.items) ? `(${(x.items as string[]).join(", ")})` : ""}`).join(", ")}`);
+  if (Array.isArray(f.context) && f.context.length) out.push(`  context: ${(f.context as string[]).join(", ")}`);
+  out.push(...kv("  ", "replaces", f.replaces));
   if (Array.isArray(f.stops)) {
     out.push("  stops:");
     for (const st of f.stops as JsonObject[]) out.push(`    ${st.name}${typeof st.act === "string" ? ` -> ${st.act}` : ""}${typeof st.of === "string" ? ` of ${st.of}` : ""}`);
