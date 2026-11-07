@@ -399,8 +399,8 @@ A package MUST be refused at publish when:
 8. a lane names a view, filter, value, slot, utility or act the package doesn't declare, serves an
    audience wider than its view shows, opens anything but a page, or names both a view and a serve;
 9. a flow names a utility it doesn't declare, a stop that is neither a lane nor a form of the package, an
-   act its utility lacks, a level its kinds lack, or a done that is not a declared filter with a real value
-   (12.11);
+   act its utility lacks, a level its kinds lack, or a done that is not a declared filter with a real value;
+   or whose lane stops do not chain, done to pick, or whose done is not its last lane's (12.11, revision 22);
 7. a display names no layout, has a slot line that isn't `shapeSlot -> displaySlot`, or fills one of its
    slots twice.
 
@@ -549,7 +549,7 @@ flow: unitizer /2026-12-20
 | `follow` | `queue` or `card`: how a new person walks it; a person's own choice stands over it; `queue` unless said |
 | `serves` | whom the line is for, as a lane's `serves` |
 | `stops` | one line per stop, in walking order: `<lane> -> <act>` is a lane of this package with the act of the utility that moves a card on; `<lane>` alone is a lane whose cards move by their own presses; `<form> of <level>` is a block, a form of this package making or acting on a record of that level (the record of the stop before, when it has one) |
-| `done` | `filter = value`: the state a record leaves the line in |
+| `done` | `filter = value`: the state a record leaves the line in: the last lane stop's done, or its pick when that lane holds what is finished (revision 22) |
 
 A package MUST be refused at publish when a flow names a utility it doesn't declare, a stop that is
 neither a lane nor a form of the package, an act its utility lacks, a level its kinds lack, or a done
@@ -558,6 +558,23 @@ person sees the stops whose lanes they are served, and a block only where the fo
 Where a block's form is pressed is the app's (a generic make screen, a path of its own); what a flow
 looks like is the app's; the order of the stops is the package's. A reader that doesn't know the block
 carries it unchanged (13.5).
+
+**The stamps (revision 22).** A flow declares no transitions: its lanes already say what moves. A lane
+stop's `done` is the stamp its act leaves: when the act named on the stop (or, on a stop with no act, the
+card's own press) lands on a record the lane holds, the record takes the done's value on its filter's
+facet, written as the act's last write under the act's own source. A block stop's stamp is the next lane
+stop's `pick`: the form's record is made, or moved, into the state that lane holds. When an act lands is
+the utility's: a filing lands when its form is kept, a printing when the printer reports. Nothing watches
+a record for the state to change; a stop stamps when it is told the act landed. A reader derives the
+stamps from the stops; they are never written in the text and never published.
+
+**The chain (revision 22).** Two lane stops that follow one another chain: the first's `done` is a state
+(not `viewed`) and it is the second's `pick`, filter and value. A lane with no `pick` (a list, 12.10) is no
+stop: it holds no state. A block stop between two lanes leaves the chain as it is: the lanes chain across
+it, and the block stamps the second's pick. The flow's `done` is the last lane stop's `done` when that is a
+state, else its `pick` (an end stop holding what is finished). A package MUST be refused at publish when a
+flow's lane stops do not chain, or its done is not its last lane's; the refusal names the gap. A flow
+arranged from lanes a package already walks between needs nothing more to move its records on.
 
 ## 12.12 Prints
 
