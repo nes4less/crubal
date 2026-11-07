@@ -33,6 +33,27 @@ export type Shape = { name: string; slots: Slot[]; line: number };
  * words a screen shows for it.
  */
 export type Display = { name: string; label?: string; describe?: string; layout: string; slots: { from: string; to: string; line: number }[]; tokens: Map<string, string>; line: number };
+/** A box on a print's art, as fractions of its width (x, w) and height (y, h): 0 to 1 (12.12). */
+export type PrintBox = { x: number; y: number; w: number; h: number };
+/** What a print's text draws: a field of the print, or a literal with `{field}` places in it. */
+export type PrintSource = { field: string } | { literal: string };
+/** One element of a print (12.12): a rect, a barcode, a QR or a line of text, on the art's normalized boxes. */
+export type PrintElement =
+  | { type: "rect"; box: PrintBox; fill: "white" | "black" | "none"; stroke?: number; line: number }
+  | { type: "barcode"; box: PrintBox; field: string; rotate?: "cw" | "ccw"; text?: boolean; line: number }
+  | { type: "qr"; box: PrintBox; field: string; gravity?: "bottom-right" | "top-left"; line: number }
+  | { type: "text"; x: number; y: number; size: number; source: PrintSource; anchor?: "start" | "middle" | "end"; weight?: "bold"; clip?: PrintBox; rotate?: "cw" | "ccw" | "180"; line: number };
+/** A print's field: the slot its elements name, and what fills it: a facet, `id`, or a brand slot `place:…`. */
+export type PrintField = { slot: string; from: string; line: number };
+/**
+ * A print (12.12): a label design, a member carried by a package. What class or kind it prints, its intrinsic
+ * inches, whether it stretches to a stock of another aspect or keeps its own, its fields and its elements.
+ * The engine reads, checks and carries it; the app resolves it to a stock and renders it.
+ */
+export type Print = { name: string; label?: string; describe?: string; for: string; inches: { w: number; h: number }; stretch: boolean; fields: PrintField[]; elements: PrintElement[]; line: number };
+/** The brand slots a print's field may draw from the place that prints it (12.12). */
+export const PRINT_PLACE_SLOTS = ["name", "mark", "primary", "accent", "words"] as const;
+
 export type Period = "day" | "week" | "month" | "quarter" | "year";
 export const PERIODS: readonly Period[] = ["day", "week", "month", "quarter", "year"];
 export type Bucket = { name: string; values?: string[]; range?: [number, number]; period?: Period };
@@ -99,12 +120,77 @@ export type View = {
 export type RoleDef = { name: string; audience: string; see: string[]; seeLine: number; line: number };
 /** A show rule with a `for`: it decides for the records its class, kind or level covers (12.4). */
 export type ShownFor = { for: string; audience: string };
-export type ViewSet = { shapes: Map<string, Shape>; displays: Map<string, Display>; filters: Map<string, Filter>; views: Map<string, View>; roles: Map<string, RoleDef>; shown: Map<string, string>; shownFor: Map<string, ShownFor[]> };
+export type ViewSet = { shapes: Map<string, Shape>; displays: Map<string, Display>; prints: Map<string, Print>; filters: Map<string, Filter>; views: Map<string, View>; roles: Map<string, RoleDef>; shown: Map<string, string>; shownFor: Map<string, ShownFor[]> };
 /** The member maps of a view set, for merging one set onto another. */
-export const VIEW_SET_KEYS = ["shapes", "displays", "filters", "views", "roles", "shown", "shownFor"] as const;
+export const VIEW_SET_KEYS = ["shapes", "displays", "prints", "filters", "views", "roles", "shown", "shownFor"] as const;
 
 /** An empty view set. */
-export const emptyViewSet = (): ViewSet => ({ shapes: new Map(), displays: new Map(), filters: new Map(), views: new Map(), roles: new Map(), shown: new Map(), shownFor: new Map() });
+export const emptyViewSet = (): ViewSet => ({ shapes: new Map(), displays: new Map(), prints: new Map(), filters: new Map(), views: new Map(), roles: new Map(), shown: new Map(), shownFor: new Map() });
+
+/** The words of an element line, a quoted literal kept whole. */
+const printTokens = (text: string): string[] => text.match(/"(?:[^"\\]|\\.)*"|\S+/g) ?? [];
+/** A fraction of the art, 0 to 1, as an element writes it. */
+const fraction = (tok: string | undefined, what: string, line: number): number => {
+  const n = Number(tok);
+  if (tok === undefined || !Number.isFinite(n) || n < 0 || n > 1) throw new CrubalError(`${what} is a fraction of the art, 0 to 1, not ${tok ?? "nothing"}`, line);
+  return n;
+};
+const printBox = (t: string[], at: number, what: string, line: number): PrintBox => ({ x: fraction(t[at], `${what}'s x`, line), y: fraction(t[at + 1], `${what}'s y`, line), w: fraction(t[at + 2], `${what}'s width`, line), h: fraction(t[at + 3], `${what}'s height`, line) });
+/** One element line of a print (12.12). */
+function readPrintElement(text: string, line: number): PrintElement {
+  const t = printTokens(text);
+  const type = t[0];
+  const rest = (from: number): Map<string, string[]> => {
+    // The options after the positional words: `anchor middle`, `clip x y w h`, `text`, `rotate cw`.
+    const out = new Map<string, string[]>();
+    let i = from;
+    while (i < t.length) {
+      const k = t[i] as string;
+      const n = k === "clip" ? 4 : k === "text" ? 0 : 1;
+      out.set(k, t.slice(i + 1, i + 1 + n));
+      i += 1 + n;
+    }
+    return out;
+  };
+  const one = (o: Map<string, string[]>, k: string, allowed: readonly string[]): string | undefined => {
+    const v = o.get(k)?.[0];
+    if (v !== undefined && !allowed.includes(v)) throw new CrubalError(`${k} is one of ${allowed.join(", ")}, not ${v}`, line);
+    return v;
+  };
+  if (type === "rect") {
+    const o = rest(5);
+    const fill = one(o, "fill", ["white", "black", "none"]) ?? "white";
+    const stroke = o.has("stroke") ? Number(o.get("stroke")?.[0]) : undefined;
+    if (stroke !== undefined && !(Number.isFinite(stroke) && stroke > 0)) throw new CrubalError(`a rect's stroke is a width in dots, not ${o.get("stroke")?.[0]}`, line);
+    return { type, box: printBox(t, 1, "the rect", line), fill: fill as "white" | "black" | "none", ...(stroke !== undefined ? { stroke } : {}), line };
+  }
+  if (type === "barcode" || type === "qr") {
+    const field = t[5];
+    if (!field || field.startsWith('"')) throw new CrubalError(`a ${type} is "${type} x y w h <field>"`, line);
+    const o = rest(6);
+    if (type === "barcode") {
+      const rotate = one(o, "rotate", ["cw", "ccw"]);
+      return { type, box: printBox(t, 1, "the barcode", line), field, ...(rotate ? { rotate: rotate as "cw" | "ccw" } : {}), ...(o.has("text") ? { text: true } : {}), line };
+    }
+    const gravity = one(o, "gravity", ["bottom-right", "top-left"]);
+    return { type, box: printBox(t, 1, "the qr", line), field, ...(gravity ? { gravity: gravity as "bottom-right" | "top-left" } : {}), line };
+  }
+  if (type === "text") {
+    const src = t[4];
+    if (!src) throw new CrubalError(`a text is "text x y size <field or \"words\">"`, line);
+    const source: PrintSource = src.startsWith('"') ? { literal: JSON.parse(src) as string } : { field: src };
+    const o = rest(5);
+    const anchor = one(o, "anchor", ["start", "middle", "end"]);
+    const weight = one(o, "weight", ["bold"]);
+    const rotate = one(o, "rotate", ["cw", "ccw", "180"]);
+    const clipT = o.get("clip");
+    const clip = clipT ? printBox(clipT, 0, "the text's clip", line) : undefined;
+    return { type, x: fraction(t[1], "the text's x", line), y: fraction(t[2], "the text's y", line), size: fraction(t[3], "the text's size", line), source, ...(anchor ? { anchor: anchor as "start" | "middle" | "end" } : {}), ...(weight ? { weight: "bold" as const } : {}), ...(clip ? { clip } : {}), ...(rotate ? { rotate: rotate as "cw" | "ccw" | "180" } : {}), line };
+  }
+  throw new CrubalError(`an element is a rect, a barcode, a qr or a text, not ${type ?? "nothing"}`, line);
+}
+/** The field names a print's text draws: its field, or the `{field}` places of its literal. */
+export const printSourceFields = (s: PrintSource): string[] => ("field" in s ? [s.field] : [...s.literal.matchAll(/\{(\w+)\}/g)].map((m) => m[1] as string));
 
 /** Read shapes, displays, filters, views (with a body), roles and `shown to` rules. */
 export function readViews(source: string): ViewSet {
@@ -142,6 +228,28 @@ export function readViews(source: string): ViewSet {
         tokens.set(t.key, t.value.trim());
       }
       set.displays.set(name, { name, ...(get("label") ? { label: get("label")?.value.trim() as string } : {}), ...(get("describe") ? { describe: get("describe")?.value.trim() as string } : {}), layout, slots, tokens, line: n.line });
+    } else if (n.key === "print") {
+      // A print (12.12): `for:` the class or kind it prints; `inches:` its intrinsic stock; `fields:` lines read
+      // `slot -> facet` (or `id`, or a brand slot `place:name`); `elements:` lines are its art; `label:` and
+      // `describe:` its words.
+      const forWhat = get("for")?.value.trim();
+      if (!forWhat) throw new CrubalError(`the print ${name} says no for: the class or kind it prints`, n.line);
+      const inchesT = (get("inches")?.value ?? "").trim().split(/\s+/).filter(Boolean);
+      const [w, h] = inchesT.map(Number);
+      if (inchesT.length !== 2 || !(Number.isFinite(w) && Number.isFinite(h) && (w as number) > 0 && (h as number) > 0)) throw new CrubalError(`the print ${name} names its inches as "width height", two numbers above zero`, get("inches")?.line ?? n.line);
+      const stretchT = get("stretch")?.value.trim();
+      if (stretchT && stretchT !== "yes" && stretchT !== "no") throw new CrubalError(`stretch is yes or no, not ${stretchT}`, get("stretch")?.line ?? n.line);
+      const fields = (get("fields")?.children ?? []).map((l) => {
+        const at = l.text.lastIndexOf(" -> ");
+        if (at < 0) throw new CrubalError(`a print field is "slot -> facet": ${l.text}`, l.line);
+        const slot = l.text.slice(0, at).trim();
+        const from = l.text.slice(at + 4).trim();
+        if (!slot || !from || !/^\w+$/.test(slot)) throw new CrubalError(`a print field is "slot -> facet": ${l.text}`, l.line);
+        return { slot, from, line: l.line };
+      });
+      const elements = (get("elements")?.children ?? []).map((l) => readPrintElement(l.text, l.line));
+      if (!elements.length) throw new CrubalError(`the print ${name} draws nothing: it needs elements`, n.line);
+      set.prints.set(name, { name, ...(get("label") ? { label: get("label")?.value.trim() as string } : {}), ...(get("describe") ? { describe: get("describe")?.value.trim() as string } : {}), for: forWhat, inches: { w: w as number, h: h as number }, stretch: stretchT === "yes", fields, elements, line: n.line });
     } else if (n.key === "filter") {
       const b = get("buckets");
       // `buckets: by month`: the buckets are the periods the facet's dates fall in (12.3).
@@ -276,6 +384,24 @@ export function checkViews(set: ViewSet, dict: Dictionary): void {
     }
   }
   for (const f of set.filters.values()) for (const d of f.dependent) if (!defined(d)) throw new CrubalError(`the filter ${f.name} depends on ${d}, which isn't a facet`, f.line);
+  // A print (12.12) prints a class or kind the dictionary has; its fields read facets, `id` or the brand's
+  // slots; every field an element names is declared.
+  for (const p of set.prints.values()) {
+    if (!dict.classes.has(p.for) && !dict.kinds.has(p.for)) throw new CrubalError(`the print ${p.name} is for ${p.for}, which is neither a class nor a kind`, p.line);
+    const slots = new Set<string>(["id"]);
+    for (const f of p.fields) {
+      if (slots.has(f.slot) && f.slot !== "id") throw new CrubalError(`the print ${p.name} names the field ${f.slot} twice`, f.line);
+      const place = f.from.match(/^place:(\w+)$/);
+      if (place) {
+        if (!(PRINT_PLACE_SLOTS as readonly string[]).includes(place[1] as string)) throw new CrubalError(`a brand slot is one of ${PRINT_PLACE_SLOTS.map((x) => `place:${x}`).join(", ")}, not ${f.from}`, f.line);
+      } else if (f.from !== "id" && !defined(f.from)) throw new CrubalError(`the field ${f.slot} reads ${f.from}, which isn't a facet`, f.line);
+      slots.add(f.slot);
+    }
+    for (const e of p.elements) {
+      const wanted = e.type === "text" ? printSourceFields(e.source) : e.type === "rect" ? [] : [e.field];
+      for (const k of wanted) if (!slots.has(k)) throw new CrubalError(`the print ${p.name} draws ${k}, which is none of its fields`, e.line);
+    }
+  }
   // A display (12.9) fills its slots from a shape's slots; two of its lines may not fill one display slot.
   for (const d of set.displays.values()) {
     const filled = new Set<string>();
