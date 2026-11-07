@@ -236,3 +236,23 @@ migration: shop /2026-10-01 -> shop /2026-11-01
 `;
   assert.throws(() => publish(idle, { previous: v1, date: "2026-11-01" }), /present but nothing broke/);
 });
+
+test("a member that holds no value retires without a recipe (10.5, revision 24): a print removed is a safe change; a facet removed stays breaking", () => {
+  const withPrint = `${base}
+print: tag
+  label: Tag
+  for: Item
+  inches: 2 1
+  fields:
+    name -> title
+  elements:
+    text 0.5 0.5 0.2 name anchor middle
+`;
+  const { bundle: v1 } = publish(withPrint, { date: "2026-10-01" });
+  assert.equal((v1.members as { [k: string]: string })["print:tag"], "2026-10-01");
+  const { bundle: v2, changes } = publish(base, { previous: v1, date: "2026-11-01" });
+  assert.equal(v2.version, "2026-11-01");
+  assert.deepEqual(changes.find((c) => c.member === "print:tag"), { member: "print:tag", kind: "safe", why: ["removed"] });
+  assert.equal((v2.members as { [k: string]: string })["print:tag"], undefined);
+  assert.throws(() => publish(base.replace("runtime#min 1..600\n", ""), { previous: v1, date: "2026-11-01" }), /facet:runtime is a breaking change \(removed\)/);
+});
