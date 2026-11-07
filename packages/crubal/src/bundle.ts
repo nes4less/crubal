@@ -15,7 +15,7 @@ import type { Json, JsonObject } from "./model.ts";
 import { type PackageInfo, readPackages, type Utility, type Lane, type LanePress, type Flow } from "./packages.ts";
 import { readRules, type Rule } from "./rules.ts";
 import { type Contract, type Keys, readContracts, sha256, keyFor } from "./store.ts";
-import { type Display, emptyViewSet, type Filter, readViews, type Shape, VIEW_SET_KEYS, type View, type ViewSet } from "./views.ts";
+import { type Display, emptyViewSet, type Filter, type Print, readViews, type Shape, VIEW_SET_KEYS, type View, type ViewSet } from "./views.ts";
 
 const isObj = (v: Json | undefined): v is JsonObject => typeof v === "object" && v !== null && !Array.isArray(v);
 
@@ -199,6 +199,26 @@ export function displayJson(d: Display): JsonObject {
   return { display: d.name, ...(d.label ? { label: d.label } : {}), ...(d.describe ? { describe: d.describe } : {}), layout: d.layout, slots: d.slots.map((sl) => ({ from: sl.from, to: sl.to })), ...(d.tokens.size ? { tokens: Object.fromEntries(d.tokens) } : {}) };
 }
 
+/** A print's JSON form (12.12): what it prints, its inches, its fields and its elements as written. */
+export function printJson(p: Print): JsonObject {
+  const box = (b: { x: number; y: number; w: number; h: number }): JsonObject => ({ x: b.x, y: b.y, w: b.w, h: b.h });
+  return {
+    print: p.name,
+    ...(p.label ? { label: p.label } : {}),
+    ...(p.describe ? { describe: p.describe } : {}),
+    for: p.for,
+    inches: { w: p.inches.w, h: p.inches.h },
+    ...(p.stretch ? { stretch: true } : {}),
+    fields: p.fields.map((f) => ({ slot: f.slot, from: f.from })),
+    elements: p.elements.map((e): JsonObject => {
+      if (e.type === "rect") return { type: "rect", box: box(e.box), fill: e.fill, ...(e.stroke !== undefined ? { stroke: e.stroke } : {}) };
+      if (e.type === "barcode") return { type: "barcode", box: box(e.box), field: e.field, ...(e.rotate ? { rotate: e.rotate } : {}), ...(e.text ? { text: true } : {}) };
+      if (e.type === "qr") return { type: "qr", box: box(e.box), field: e.field, ...(e.gravity ? { gravity: e.gravity } : {}) };
+      return { type: "text", x: e.x, y: e.y, size: e.size, ...("field" in e.source ? { field: e.source.field } : { literal: e.source.literal }), ...(e.anchor ? { anchor: e.anchor } : {}), ...(e.weight ? { weight: e.weight } : {}), ...(e.clip ? { clip: box(e.clip) } : {}), ...(e.rotate ? { rotate: e.rotate } : {}) };
+    }),
+  };
+}
+
 export function filterJson(f: Filter): JsonObject {
   const o: JsonObject = { filter: f.name, facet: f.facet };
   if (f.buckets) o.buckets = f.buckets.map((b): JsonObject => (b.range ? { name: b.name, range: { min: String(b.range[0]), max: String(b.range[1]) } } : { name: b.name, values: [...(b.values ?? [])] }));
@@ -353,6 +373,7 @@ export function bundleOf(p: Parsed): JsonObject {
   if (p.contracts.length) o.contracts = p.contracts.map(contractJson);
   if (p.views.shapes.size) o.shapes = [...p.views.shapes.values()].map(shapeJson);
   if (p.views.displays.size) o.displays = [...p.views.displays.values()].map(displayJson);
+  if (p.views.prints.size) o.prints = [...p.views.prints.values()].map(printJson);
   if (p.views.filters.size) o.filters = [...p.views.filters.values()].map(filterJson);
   if (p.views.views.size) o.views = [...p.views.views.values()].map(viewJson);
   const roles = rolesJson(p.perms);
@@ -519,6 +540,27 @@ function recipeText(r: JsonObject): string[] {
 
 const shapeText = (s: JsonObject): string[] => [`shape: ${s.shape}`, "  slots:", ...((s.slots as JsonObject[]) ?? []).map((sl) => `    ${sl.required === true ? "!" : ""}${typeof sl.template === "string" ? JSON.stringify(sl.template) : sl.from} -> ${sl.to}`)];
 
+const printText = (p: JsonObject): string[] => {
+  const b = (v: JsonObject[string] | undefined): string => (isObj(v) ? `${v.x} ${v.y} ${v.w} ${v.h}` : "0 0 1 1");
+  const el = (e: JsonObject): string => {
+    if (e.type === "rect") return `rect ${b(e.box)} fill ${String(e.fill ?? "white")}${e.stroke !== undefined ? ` stroke ${String(e.stroke)}` : ""}`;
+    if (e.type === "barcode") return `barcode ${b(e.box)} ${String(e.field)}${e.rotate ? ` rotate ${String(e.rotate)}` : ""}${e.text === true ? " text" : ""}`;
+    if (e.type === "qr") return `qr ${b(e.box)} ${String(e.field)}${e.gravity ? ` gravity ${String(e.gravity)}` : ""}`;
+    return `text ${String(e.x)} ${String(e.y)} ${String(e.size)} ${typeof e.literal === "string" ? JSON.stringify(e.literal) : String(e.field)}${e.anchor ? ` anchor ${String(e.anchor)}` : ""}${e.weight ? ` weight ${String(e.weight)}` : ""}${isObj(e.clip) ? ` clip ${b(e.clip)}` : ""}${e.rotate ? ` rotate ${String(e.rotate)}` : ""}`;
+  };
+  const inches = isObj(p.inches) ? p.inches : {};
+  return [
+    `print: ${p.print}`,
+    ...(typeof p.label === "string" ? [`  label: ${p.label}`] : []),
+    ...(typeof p.describe === "string" ? [`  describe: ${p.describe}`] : []),
+    `  for: ${p.for}`,
+    `  inches: ${String(inches.w)} ${String(inches.h)}`,
+    ...(p.stretch === true ? ["  stretch: yes"] : []),
+    ...((p.fields as JsonObject[] | undefined)?.length ? ["  fields:", ...(p.fields as JsonObject[]).map((f) => `    ${f.slot} -> ${f.from}`)] : []),
+    ...((p.elements as JsonObject[] | undefined)?.length ? ["  elements:", ...(p.elements as JsonObject[]).map((e) => `    ${el(e)}`)] : []),
+  ];
+};
+
 const displayText = (d: JsonObject): string[] => [
   `display: ${d.display}`,
   ...(typeof d.label === "string" ? [`  label: ${d.label}`] : []),
@@ -582,6 +624,7 @@ export function printBundle(b: JsonObject): string {
   blocks("instructions", instructionsText);
   blocks("shapes", shapeText);
   blocks("displays", displayText);
+  blocks("prints", printText);
   blocks("filters", filterText);
   blocks("views", viewText);
   blocks("roles", roleText);

@@ -234,6 +234,93 @@ test("a display without a layout, with a malformed slot, or filling one slot twi
   assert.throws(() => checkViews(twice, readDefinitions("kind: item\n  levels: product\n")), (e: unknown) => e instanceof CrubalError && /fills the slot n twice/.test(e.message));
 });
 
+// ─── A print, a label design (12.12; revision 21) ──────────────────────────────────────────────────────
+const printSrc = `
+kind: item
+  levels: product
+title$
+cashierfuId$
+condition{good|fair}
+class: Filed
+  label: Filed
+  for: item
+  facets:
+    title
+    cashierfuId
+    condition
+print: tag
+  label: Unit tag
+  describe: A 2.5 by 1 thermal tag: the id as bars, the title under them.
+  for: Filed
+  inches: 2.5 1
+  fields:
+    code -> cashierfuId
+    title -> title
+    shop -> place:name
+  elements:
+    rect 0 0 1 1 fill white
+    barcode 0.06 0.02 0.88 0.68 code text
+    text 0.5 0.95 0.067 "{code} | {title}" anchor middle weight bold clip 0.04 0.86 0.92 0.12
+    text 0.98 0.08 0.05 shop anchor end rotate cw
+print: square
+  for: item
+  inches: 2 2
+  stretch: yes
+  elements:
+    qr 0.1 0.1 0.8 0.8 id gravity top-left
+`;
+
+test("a print is read: what it prints, its inches, its fields and its elements, each as written", () => {
+  const set = readViews(printSrc);
+  const p = set.prints.get("tag");
+  assert.ok(p);
+  assert.equal(p.label, "Unit tag");
+  assert.equal(p.for, "Filed");
+  assert.deepEqual(p.inches, { w: 2.5, h: 1 });
+  assert.equal(p.stretch, false);
+  assert.deepEqual(p.fields.map((f) => [f.slot, f.from]), [["code", "cashierfuId"], ["title", "title"], ["shop", "place:name"]]);
+  assert.equal(p.elements.length, 4);
+  const [rect, bars, line, side] = p.elements;
+  assert.deepEqual(rect, { type: "rect", box: { x: 0, y: 0, w: 1, h: 1 }, fill: "white", line: rect?.line });
+  assert.equal(bars?.type, "barcode");
+  if (bars?.type === "barcode") {
+    assert.equal(bars.field, "code");
+    assert.equal(bars.text, true);
+    assert.deepEqual(bars.box, { x: 0.06, y: 0.02, w: 0.88, h: 0.68 });
+  }
+  assert.equal(line?.type, "text");
+  if (line?.type === "text") {
+    assert.deepEqual(line.source, { literal: "{code} | {title}" });
+    assert.equal(line.anchor, "middle");
+    assert.equal(line.weight, "bold");
+    assert.deepEqual(line.clip, { x: 0.04, y: 0.86, w: 0.92, h: 0.12 });
+  }
+  if (side?.type === "text") {
+    assert.deepEqual(side.source, { field: "shop" });
+    assert.equal(side.rotate, "cw");
+  }
+  const square = set.prints.get("square");
+  assert.ok(square);
+  assert.equal(square.stretch, true);
+  assert.equal(square.elements[0]?.type, "qr");
+  checkViews(set, readDefinitions(printSrc));
+});
+
+test("a print without a for or inches, a malformed element, an unknown class, a field that isn't a facet, or an element naming no field is refused", () => {
+  const dict = readDefinitions(printSrc);
+  assert.throws(() => readViews("print: x\n  inches: 2 1\n  elements:\n    rect 0 0 1 1\n"), (e: unknown) => e instanceof CrubalError && /says no for/.test(e.message));
+  assert.throws(() => readViews("print: x\n  for: Filed\n  inches: 2\n  elements:\n    rect 0 0 1 1\n"), (e: unknown) => e instanceof CrubalError && /width height/.test(e.message));
+  assert.throws(() => readViews("print: x\n  for: Filed\n  inches: 2 1\n  elements:\n    circle 0 0 1 1\n"), (e: unknown) => e instanceof CrubalError && /a rect, a barcode, a qr or a text/.test(e.message));
+  assert.throws(() => readViews("print: x\n  for: Filed\n  inches: 2 1\n  elements:\n    rect 0 0 1 2\n"), (e: unknown) => e instanceof CrubalError && /fraction of the art/.test(e.message));
+  assert.throws(() => readViews("print: x\n  for: Filed\n  inches: 2 1\n"), (e: unknown) => e instanceof CrubalError && /draws nothing/.test(e.message));
+  assert.throws(() => checkViews(readViews("print: x\n  for: Nothing\n  inches: 2 1\n  elements:\n    rect 0 0 1 1\n"), dict), (e: unknown) => e instanceof CrubalError && /neither a class nor a kind/.test(e.message));
+  assert.throws(() => checkViews(readViews("print: x\n  for: Filed\n  inches: 2 1\n  fields:\n    a -> nothingHere\n  elements:\n    rect 0 0 1 1\n"), dict), (e: unknown) => e instanceof CrubalError && /isn't a facet/.test(e.message));
+  assert.throws(() => checkViews(readViews("print: x\n  for: Filed\n  inches: 2 1\n  fields:\n    a -> place:logo\n  elements:\n    rect 0 0 1 1\n"), dict), (e: unknown) => e instanceof CrubalError && /brand slot/.test(e.message));
+  assert.throws(() => checkViews(readViews("print: x\n  for: Filed\n  inches: 2 1\n  elements:\n    barcode 0 0 1 1 code\n"), dict), (e: unknown) => e instanceof CrubalError && /draws code, which is none of its fields/.test(e.message));
+  // `id` is every print's, declared or not.
+  checkViews(readViews("print: x\n  for: Filed\n  inches: 2 1\n  elements:\n    qr 0 0 1 1 id\n"), dict);
+});
+
 // ─── A view partitioned by a link facet (12.2, 14.10; revision 11) ─────────────────────────────────────
 const linkedSrc = `
 kind: notice

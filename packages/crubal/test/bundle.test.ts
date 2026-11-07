@@ -244,3 +244,50 @@ migration: test /2026-10-14 -> test /2026-11-01
   const third = restamp([more as never], recipe as never, again.dict).records[0] as { parts?: { $row: string }[] };
   assert.deepEqual(third.parts?.map((p) => p.$row), ["disc1", "disc2", "disc3", "disc4"]);
 });
+
+test("a print (12.12) round-trips through the bundle with its for, inches, fields and elements as written", () => {
+  const src = `package: a.test/p /2026-11-06
+  owner: a.test
+  crubal: 2
+
+kind: item
+  levels: product
+title$
+cashierfuId$
+print: tag
+  label: Unit tag
+  for: item
+  inches: 2.5 1
+  fields:
+    code -> cashierfuId
+    title -> title
+    shop -> place:name
+  elements:
+    rect 0 0 1 1 fill white
+    barcode 0.06 0.02 0.88 0.68 code text
+    text 0.5 0.95 0.067 "{code} | {title}" anchor middle weight bold clip 0.04 0.86 0.92 0.12
+    qr 0.8 0.1 0.15 0.15 id gravity bottom-right
+print: square
+  for: item
+  inches: 2 2
+  stretch: yes
+  elements:
+    rect 0 0 1 1 fill none stroke 2
+`;
+  const b = roundTrip(src, "print");
+  const prints = b.prints as { print: string; for: string; inches: { w: number; h: number }; stretch?: boolean; fields: unknown[]; elements: { type: string; [k: string]: unknown }[]; label?: string }[];
+  assert.equal(prints.length, 2);
+  assert.equal(prints[0]?.print, "tag");
+  assert.equal(prints[0]?.label, "Unit tag");
+  assert.deepEqual(prints[0]?.inches, { w: 2.5, h: 1 });
+  assert.deepEqual(prints[0]?.fields, [{ slot: "code", from: "cashierfuId" }, { slot: "title", from: "title" }, { slot: "shop", from: "place:name" }]);
+  assert.deepEqual(prints[0]?.elements[1], { type: "barcode", box: { x: 0.06, y: 0.02, w: 0.88, h: 0.68 }, field: "code", text: true });
+  assert.deepEqual(prints[0]?.elements[2], { type: "text", x: 0.5, y: 0.95, size: 0.067, literal: "{code} | {title}", anchor: "middle", weight: "bold", clip: { x: 0.04, y: 0.86, w: 0.92, h: 0.12 } });
+  assert.deepEqual(prints[0]?.elements[3], { type: "qr", box: { x: 0.8, y: 0.1, w: 0.15, h: 0.15 }, field: "id", gravity: "bottom-right" });
+  assert.equal(prints[1]?.stretch, true);
+  assert.deepEqual(prints[1]?.elements[0], { type: "rect", box: { x: 0, y: 0, w: 1, h: 1 }, fill: "none", stroke: 2 });
+  // Installed onto a base, the print is a member like a display.
+  const onto = readBundleOnto(b, emptyParsed());
+  assert.equal(onto.views.prints.get("tag")?.for, "item");
+  assert.equal(onto.views.prints.get("square")?.stretch, true);
+});

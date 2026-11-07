@@ -558,3 +558,57 @@ person sees the stops whose lanes they are served, and a block only where the fo
 Where a block's form is pressed is the app's (a generic make screen, a path of its own); what a flow
 looks like is the app's; the order of the stops is the package's. A reader that doesn't know the block
 carries it unchanged (13.5).
+
+## 12.12 Prints
+
+A **print** is a label design: how a record of a class or kind prints on a piece of stock. It is a member a
+package carries, like a display: named, versioned and signed with the package, installed with it, replaced
+by a later package's member of the same name (11.4). A place's own package may declare its own; the prints
+available at a place are its installed packages' prints whose `for:` the place holds.
+
+```crubal
+print: tag
+  label: Unit tag
+  describe: A 2.5 by 1 thermal tag: the id as bars, the SKU and title under them, the price at the right.
+  for: Filed
+  inches: 2.5 1
+  fields:
+    code -> cashierfuId
+    title -> title
+    price -> price
+    shop -> place:name
+  elements:
+    rect 0 0 1 1 fill white
+    barcode 0.06 0.02 0.88 0.68 code
+    text 0.04 0.95 0.067 "{code} | {title}" anchor start weight bold clip 0.04 0.86 0.6 0.12
+    text 0.96 0.95 0.067 price anchor end weight bold
+```
+
+| Setting | Holds |
+|---|---|
+| `print` | its name (a lower-case word); a member, published under `prints` |
+| `label` · `describe` | its words on the screen that offers it |
+| `for` | the class or kind it prints; a record of that class (or of the kind's levels) fills its fields |
+| `inches` | its intrinsic stock, `width height` in inches, both above zero; the art is designed at this aspect |
+| `stretch` | `yes`: on a stock of another aspect the art stretches to fill it; `no` (the default): it keeps its aspect, centred |
+| `fields` | one line per field, `slot -> source`: the source a facet of the dictionary (checked as a shape's slot is, 12.1), `id` (the record's id), or a brand slot of the place that prints: `place:name`, `place:mark`, `place:primary`, `place:accent`, `place:words`; `id` is every print's, declared or not |
+| `elements` | one line per element, drawn in order on the art's normalized boxes |
+
+The elements, each a line of words; a number is a fraction of the art, 0 to 1, horizontal ones of its
+width and vertical ones (and a text's size) of its height:
+
+| Element | Line |
+|---|---|
+| a rectangle | `rect x y w h [fill white\|black\|none] [stroke dots]` |
+| a Code 128 barcode | `barcode x y w h <field> [rotate cw\|ccw] [text]`: the field's value in the bars; `text` prints it under them |
+| a QR code | `qr x y w h <field> [gravity bottom-right\|top-left]`: the field's value encoded; centred unless a gravity is said |
+| a line of text | `text x y size <field \| "words">` then any of `anchor start\|middle\|end`, `weight bold`, `clip x y w h`, `rotate cw\|ccw\|180`: `x y` the anchor's point, `size` the font's height; a quoted literal may hold `{field}` places |
+
+A package MUST be refused at publish when a print says no `for:`, names a `for:` that is neither a class nor a
+kind, names no inches or inches that are not two numbers above zero, declares a field whose source is not a
+facet, `id` or a brand slot, names a field twice, draws nothing, draws an element of another type or with a
+number outside 0 to 1, or draws a field it did not declare. The engine carries a print and checks nothing
+of how it prints: resolving the art to a stock (letterboxed or stretched, rotated when the stock is
+portrait), the renders (a page for a driver, ZPL for a thermal printer, a bitmap) and the printers are the
+app's, and so is what `place:mark` draws. A reader that doesn't know the print carries it unchanged (13.5).
+
