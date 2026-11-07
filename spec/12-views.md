@@ -400,7 +400,8 @@ A package MUST be refused at publish when:
    audience wider than its view shows, opens anything but a page, or names both a view and a serve;
 9. a flow names a utility it doesn't declare, a stop that is neither a lane nor a form of the package, an
    act its utility lacks, a level its kinds lack, or a done that is not a declared filter with a real value;
-   or whose lane stops do not chain, done to pick, or whose done is not its last lane's (12.11, revision 22);
+   or whose lane stops do not chain, done to pick, or whose done is not its last lane's (12.11, revision 22),
+   or whose context is not a kind or level of the package, or that replaces itself (revision 23);
 7. a display names no layout, has a slot line that isn't `shapeSlot -> displaySlot`, or fills one of its
    slots twice.
 
@@ -548,12 +549,19 @@ flow: unitizer /2026-12-20
 | `utility` | the utility of this package whose acts its stops may name |
 | `follow` | `queue` or `card`: how a new person walks it; a person's own choice stands over it; `queue` unless said |
 | `serves` | whom the line is for, as a lane's `serves` |
+| `context` | kinds of this package the flow holds through its run, asked once when it is walked and kept per person (a station, a location); the app draws them at the head and hands them to every stop's act (revision 23) |
+| `replaces` | a flow this one stands in for (revision 23): where the named flow would have been served, this one is; the named flow returns when this one goes; a flow a place draws from a preset names the preset |
 | `stops` | one line per stop, in walking order: `<lane> -> <act>` is a lane of this package with the act of the utility that moves a card on; `<lane>` alone is a lane whose cards move by their own presses; `<form> of <level>` is a block, a form of this package making or acting on a record of that level (the record of the stop before, when it has one) |
 | `done` | `filter = value`: the state a record leaves the line in: the last lane stop's done, or its pick when that lane holds what is finished (revision 22) |
 
 A package MUST be refused at publish when a flow names a utility it doesn't declare, a stop that is
-neither a lane nor a form of the package, an act its utility lacks, a level its kinds lack, or a done
-that is not a declared filter with a real value (12.8). A flow adds nothing to what its lanes show: a
+neither a lane nor a form of the package, an act its utility lacks, a level its kinds lack, a done that
+is not a declared filter with a real value, a context that is not a kind or level of the package, or itself
+as what it replaces (12.8); a `replaces` naming a flow not in force at a place is carried and stands in for
+nothing there. A package that extends others may walk the lanes and forms of the packages it extends and name
+their utility, presets and filters (revision 23: a place's own package carries the flow it drew from a
+preset); what the file-local check cannot see, it leaves to the check of the packages in force together (11.4,
+at install), which refuses as the publish would have. A flow adds nothing to what its lanes show: a
 person sees the stops whose lanes they are served, and a block only where the form's `who` admits them.
 Where a block's form is pressed is the app's (a generic make screen, a path of its own); what a flow
 looks like is the app's; the order of the stops is the package's. A reader that doesn't know the block

@@ -5,7 +5,7 @@
 import { type Dictionary, emptyDictionary, type Facet, readDefinitions, unquote } from "./defs.ts";
 import { LANGUAGE } from "./read-text.ts";
 import { readContracts } from "./store.ts";
-import { readAccess } from "./access.ts";
+import { type Permissions, readAccess } from "./access.ts";
 import { readViews } from "./views.ts";
 import { CrubalError, type Node, readTree } from "./tree.ts";
 
@@ -124,6 +124,10 @@ export type Flow = {
   utility?: string;
   follow: "queue" | "card";
   serves: { as: string; items?: string[]; line: number }[];
+  /** What the flow holds through its run (revision 23): kinds asked once when it is walked (a station). */
+  context: string[];
+  /** The flow this one stands in for (revision 23): served where the named flow would have been. */
+  replaces?: string;
   stops: FlowStop[];
   done?: { filter: string; value: string; line: number };
   line: number;
@@ -321,7 +325,7 @@ function readLane(node: Node): Lane {
 function readFlow(node: Node): Flow {
   const [name = "", version = ""] = node.value.split(/\s+\//).map((s) => s.trim());
   if (!/^[a-z][\w-]*$/.test(name)) throw new CrubalError(`a flow is "flow: <name> /<version>", the name a lower-case word: ${node.value}`, node.line);
-  const f: Flow = { name, version, follow: "queue", serves: [], stops: [], line: node.line };
+  const f: Flow = { name, version, follow: "queue", serves: [], context: [], stops: [], line: node.line };
   for (const c of node.children) {
     if (!c.key) continue;
     const v = c.value.trim();
@@ -336,6 +340,12 @@ function readFlow(node: Node): Flow {
         if (!m) throw new CrubalError(`serves: ${part} is not a name, or a name with items in parentheses`, c.line);
         f.serves.push({ as: m[1] as string, ...(m[2] !== undefined ? { items: splitList(m[2]) } : {}), line: c.line });
       }
+    } else if (c.key === "context") {
+      f.context = splitList(v);
+      for (const k of f.context) if (!/^[a-z][\w-]*$/.test(k)) throw new CrubalError(`context names kinds, lower-case words: ${k}`, c.line);
+    } else if (c.key === "replaces") {
+      if (!/^[a-z][\w-]*$/.test(v)) throw new CrubalError(`replaces names a flow, a lower-case word: ${v}`, c.line);
+      f.replaces = v;
     } else if (c.key === "done") f.done = readPick(v, c.line, "done");
     else if (c.key === "stops") {
       for (const st of c.children) {
@@ -345,7 +355,7 @@ function readFlow(node: Node): Flow {
         if (!m) throw new CrubalError(`a stop is "<lane> -> <act>", "<lane>", or "<form> of <level>", not ${text}`, st.line);
         f.stops.push({ name: m[1] as string, ...(m[2] ? { act: m[2] } : {}), ...(m[3] ? { of: m[3] } : {}), line: st.line });
       }
-    } else throw new CrubalError(`a flow has label, utility, follow, serves, stops and done, not ${c.key}`, c.line);
+    } else throw new CrubalError(`a flow has label, utility, follow, serves, context, replaces, stops and done, not ${c.key}`, c.line);
   }
   if (!f.stops.length) throw new CrubalError(`the flow ${name} has no stops`, node.line);
   return f;
@@ -559,68 +569,99 @@ function checkUtilities(source: string, pkgs: PackageInfo[]): void {
   }
 }
 
+/** What a flow's checks read: the lanes, forms, utilities, filters, dictionary and permissions it may name. */
+type FlowEnv = { lanes: Lane[]; forms: Set<string>; utilities: Utility[]; filters: Map<string, { facet: string }>; dict: Dictionary; perms: Permissions; strict: boolean; /** "of this package" at publish, "in force here" at install. */ here: string };
+
 /**
  * Flow blocks (12.11): a flow names its own package's utility and serves what that package knows; each
  * stop is a lane of the package (with an act of the utility when one is named) or a form contract of the
  * package (with a level of the package's kinds when `of` is named); its done pick is a declared filter
- * with a real value. File-local, as the lane checks are.
+ * with a real value. Revision 23: a package that extends others may walk their lanes and forms and name
+ * their utility, presets and filters (a place's own package carrying the flow it drew from a preset): what
+ * the file-local check cannot see it leaves to `checkFlowsInForce`, over the packages in force together.
  */
+function checkFlowList(flows: Flow[], env: FlowEnv): void {
+  const { perms, dict, strict } = env;
+  const known = (n: string) => perms.presets.has(n) || perms.relations.has(n) || AUDIENCES.has(n);
+  const item = (n: string) => perms.presets.has(n) || perms.menu.has(n) || perms.relations.has(n);
+  const laneNames = new Set(env.lanes.map((l) => l.name));
+  const { here } = env;
+  const lacks = here === "in force here" ? "isn't in force here" : "this package doesn't declare";
+  for (const f of flows) {
+    const where = `the flow ${f.name}`;
+    const utility = f.utility ? env.utilities.find((u) => u.name === f.utility) : undefined;
+    if (f.utility && !utility && strict) throw new CrubalError(`${where} names the utility ${f.utility}, which ${lacks}`, f.line);
+    const acts = utility ? new Set(utility.acts.map((a) => a.name)) : f.utility ? undefined : new Set<string>();
+    for (const sv of f.serves) {
+      if (!known(sv.as) && strict) throw new CrubalError(`${where} serves ${sv.as}, which isn't a preset, relation or audience here`, sv.line);
+      for (const i of sv.items ?? []) if (!item(i) && strict) throw new CrubalError(`${where} serves ${sv.as}(${i}): ${i} isn't a preset, menu item or relation`, sv.line);
+    }
+    // Revision 23: the context is kinds (or levels) in force; a flow never replaces itself.
+    for (const k of f.context) if (!dict.kinds.has(k) && !dict.levels.has(k) && strict) throw new CrubalError(`${where}'s context names ${k}, which isn't a kind or level ${here}`, f.line);
+    if (f.replaces === f.name) throw new CrubalError(`${where} replaces itself`, f.line);
+    let deferred = false;
+    for (const st of f.stops) {
+      const isLane = laneNames.has(st.name);
+      const isForm = env.forms.has(st.name);
+      if (!isLane && !isForm && !strict) {
+        deferred = true;
+        continue;
+      }
+      if (st.act !== undefined && !isLane) throw new CrubalError(`${where}'s stop ${st.name} -> ${st.act}: ${st.name} isn't a lane ${here}`, st.line);
+      if (st.of !== undefined && !isForm) throw new CrubalError(`${where}'s stop ${st.name} of ${st.of}: ${st.name} isn't a form ${here}`, st.line);
+      if (!isLane && !isForm) throw new CrubalError(`${where}'s stop ${st.name} is neither a lane nor a form ${here}`, st.line);
+      if (st.act !== undefined && acts && !acts.has(st.act)) throw new CrubalError(`${where}'s stop ${st.name} -> ${st.act}: ${st.act} isn't an act of ${f.utility ?? "its utility"}`, st.line);
+      if (st.of !== undefined && !dict.levels.has(st.of) && !dict.kinds.has(st.of) && strict) throw new CrubalError(`${where}'s stop ${st.name} of ${st.of}: ${st.of} isn't a level or kind ${here}`, st.line);
+    }
+    if (f.done) {
+      const flt = env.filters.get(f.done.filter);
+      if (!flt && strict) throw new CrubalError(`${where}'s done names ${f.done.filter}, which isn't a filter ${here}`, f.done.line);
+      const facet = flt ? dict.facets.get(flt.facet) : undefined;
+      if (facet?.values && !facet.values.some((x) => x.value === f.done?.value)) throw new CrubalError(`${where}'s done: ${f.done.value} is not a value of ${facet.key}`, f.done.line);
+    }
+    // The chain (12.11, revision 22): consecutive lane stops chain done to pick, a list lane is no stop, and the
+    // flow's done is its last lane's (its pick when that lane holds what is finished). A block between two
+    // lanes leaves the chain as it is. A chain with a stop the file-local check could not see waits for the
+    // check in force.
+    if (deferred) continue;
+    const show = (pk: { filter: string; value: string }) => `${pk.filter} = ${pk.value}`;
+    const same = (a: { filter: string; value: string }, b: { filter: string; value: string }) => a.filter === b.filter && a.value === b.value;
+    let prev: Lane | undefined;
+    for (const st of f.stops) {
+      const l = env.lanes.find((x) => x.name === st.name);
+      if (!l) continue;
+      if (!l.pick) throw new CrubalError(`${where}'s stop ${l.name} is a list: it holds no state, so it is no stop`, st.line);
+      if (prev) {
+        if (!prev.done || prev.done === "viewed") throw new CrubalError(`${where} has a gap: ${prev.name} is done when viewed, so nothing moves on from it to ${l.name}`, st.line);
+        if (!same(prev.done, l.pick)) throw new CrubalError(`${where} has a gap: ${prev.name} is done at ${show(prev.done)}, but ${l.name} picks ${show(l.pick)}`, st.line);
+      }
+      prev = l;
+    }
+    if (f.done && prev) {
+      const end = prev.done && prev.done !== "viewed" ? prev.done : prev.pick;
+      if (end && !same(f.done, end)) throw new CrubalError(`${where}'s done is ${show(f.done)}, but its last lane ${prev.name} leaves a record at ${show(end)}`, f.done.line);
+    }
+  }
+}
+
+/** The file-local flow checks: strict for a package that extends nothing, deferring what it cannot see otherwise. */
 function checkFlows(source: string, pkgs: PackageInfo[]): void {
   if (!pkgs.some((p) => p.flows.length)) return;
   const { perms } = readAccess(source);
   const dict = readDefinitions(source);
   const views = readViews(source);
   const forms = new Set(readContracts(source).filter((c) => c.kind === "form").map((c) => c.name));
-  const known = (n: string) => perms.presets.has(n) || perms.relations.has(n) || AUDIENCES.has(n);
-  const item = (n: string) => perms.presets.has(n) || perms.menu.has(n) || perms.relations.has(n);
-  for (const p of pkgs) {
-    const lanes = new Set(p.lanes.map((l) => l.name));
-    for (const f of p.flows) {
-      const where = `the flow ${f.name}`;
-      const utility = f.utility ? p.utilities.find((u) => u.name === f.utility) : undefined;
-      if (f.utility && !utility) throw new CrubalError(`${where} names the utility ${f.utility}, which this package doesn't declare`, f.line);
-      const acts = new Set((utility?.acts ?? []).map((a) => a.name));
-      for (const sv of f.serves) {
-        if (!known(sv.as)) throw new CrubalError(`${where} serves ${sv.as}, which isn't a preset, relation or audience here`, sv.line);
-        for (const i of sv.items ?? []) if (!item(i)) throw new CrubalError(`${where} serves ${sv.as}(${i}): ${i} isn't a preset, menu item or relation`, sv.line);
-      }
-      for (const st of f.stops) {
-        const isLane = lanes.has(st.name);
-        const isForm = forms.has(st.name);
-        if (st.act !== undefined && !isLane) throw new CrubalError(`${where}'s stop ${st.name} -> ${st.act}: ${st.name} isn't a lane of this package`, st.line);
-        if (st.of !== undefined && !isForm) throw new CrubalError(`${where}'s stop ${st.name} of ${st.of}: ${st.name} isn't a form of this package`, st.line);
-        if (!isLane && !isForm) throw new CrubalError(`${where}'s stop ${st.name} is neither a lane nor a form of this package`, st.line);
-        if (st.act !== undefined && !acts.has(st.act)) throw new CrubalError(`${where}'s stop ${st.name} -> ${st.act}: ${st.act} isn't an act of ${f.utility ?? "its utility"}`, st.line);
-        if (st.of !== undefined && !dict.levels.has(st.of) && !dict.kinds.has(st.of)) throw new CrubalError(`${where}'s stop ${st.name} of ${st.of}: ${st.of} isn't a level or kind of this package`, st.line);
-      }
-      if (f.done) {
-        const flt = views.filters.get(f.done.filter);
-        if (!flt) throw new CrubalError(`${where}'s done names ${f.done.filter}, which isn't a filter of this package`, f.done.line);
-        const facet = dict.facets.get(flt.facet);
-        if (facet?.values && !facet.values.some((x) => x.value === f.done?.value)) throw new CrubalError(`${where}'s done: ${f.done.value} is not a value of ${facet.key}`, f.done.line);
-      }
-      // The chain (12.11, revision 22): consecutive lane stops chain done to pick, a list lane is no stop, and the
-      // flow's done is its last lane's (its pick when that lane holds what is finished). A block between two
-      // lanes leaves the chain as it is.
-      const show = (pk: { filter: string; value: string }) => `${pk.filter} = ${pk.value}`;
-      const same = (a: { filter: string; value: string }, b: { filter: string; value: string }) => a.filter === b.filter && a.value === b.value;
-      let prev: Lane | undefined;
-      for (const st of f.stops) {
-        const l = p.lanes.find((x) => x.name === st.name);
-        if (!l) continue;
-        if (!l.pick) throw new CrubalError(`${where}'s stop ${l.name} is a list: it holds no state, so it is no stop`, st.line);
-        if (prev) {
-          if (!prev.done || prev.done === "viewed") throw new CrubalError(`${where} has a gap: ${prev.name} is done when viewed, so nothing moves on from it to ${l.name}`, st.line);
-          if (!same(prev.done, l.pick)) throw new CrubalError(`${where} has a gap: ${prev.name} is done at ${show(prev.done)}, but ${l.name} picks ${show(l.pick)}`, st.line);
-        }
-        prev = l;
-      }
-      if (f.done && prev) {
-        const end = prev.done && prev.done !== "viewed" ? prev.done : prev.pick;
-        if (end && !same(f.done, end)) throw new CrubalError(`${where}'s done is ${show(f.done)}, but its last lane ${prev.name} leaves a record at ${show(end)}`, f.done.line);
-      }
-    }
-  }
+  for (const p of pkgs) checkFlowList(p.flows, { lanes: p.lanes, forms, utilities: p.utilities, filters: views.filters, dict, perms, strict: p.extends.length === 0, here: "of this package" });
+}
+
+/**
+ * The flow checks over the packages in force together (11.4, revision 23): everything a file-local check
+ * deferred because the package extends others, refused as the publish would have; run where the
+ * permissions are checked in force (at install, and on a trial definition).
+ */
+export function checkFlowsInForce(p: { info: Pick<PackageInfo, "flows" | "lanes" | "utilities">; dict: Dictionary; contracts: { kind: string; name: string }[]; views: { filters: Map<string, { facet: string }> }; perms: Permissions }): void {
+  if (!p.info.flows.length) return;
+  checkFlowList(p.info.flows, { lanes: p.info.lanes, forms: new Set(p.contracts.filter((c) => c.kind === "form").map((c) => c.name)), utilities: p.info.utilities, filters: p.views.filters, dict: p.dict, perms: p.perms, strict: true, here: "in force here" });
 }
 
 /**
