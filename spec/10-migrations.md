@@ -106,7 +106,9 @@ A package MUST be refused at publish when a recipe breaks these:
 3. `convert` names units the units table can convert between.
 4. A `split` either has `else` or is accepted as sending its leftovers to review.
 5. Every breaking change between the two versions (chapter 4.8) is covered by a step; a facet retired is
-   covered by `review`, `move` or `hand`.
+   covered by `review`, `move` or `hand`. A member that holds no value on any record, a view, shape, filter,
+   display, print, lane or flow, retires without a step (revision 24): nothing on a record is lost by its
+   going, and whatever still names it the version's own checks refuse (12.8).
 6. A recipe whose steps are all `fill` or `recompute` is a backfill and MAY accompany a version where nothing
    broke; any other recipe with nothing broken is refused.
 7. A class version that stops projecting a key (a `level::` line removed, chapter 5.3.3) carries the
