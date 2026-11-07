@@ -604,7 +604,7 @@ function readClass(node: Node): ClassDef {
   return c;
 }
 
-const SKIP = new Set(["rule", "contract", "view", "shape", "display", "print", "filter", "role", "migration", "package", "resolve", "permissions", "ownership", "emergency", "edge", "instructions", "utility", "lane", "flow", "subject"]); // "subject": the lane's first name (revision 9), carried unchanged in text already published
+const SKIP = new Set(["rule", "contract", "view", "shape", "display", "print", "filter", "role", "migration", "package", "resolve", "permissions", "ownership", "emergency", "edge", "instructions", "utility", "lane", "flow", "act", "subject"]); // "subject": the lane's first name (revision 9), carried unchanged in text already published
 
 /** Read definition text (facets, classes and kinds) into a dictionary. Other blocks are skipped. */
 /** The sorts of definition a link may name (4.2.2, revision 20): `&def:facet` holds a facet's key, never a record. */

@@ -8,6 +8,7 @@ import { readContracts } from "./store.ts";
 import { type Permissions, readAccess } from "./access.ts";
 import { readViews } from "./views.ts";
 import { CrubalError, type Node, readTree } from "./tree.ts";
+import { type Act, checkActList, readAct } from "./acts.ts";
 
 export type PackageInfo = {
   name: string;
@@ -31,6 +32,8 @@ export type PackageInfo = {
   lanes: Lane[];
   /** The flows the package declares (12.11, `flow:` blocks). */
   flows: Flow[];
+  /** The acts the package declares in words (15, revision 25), beside the utilities' lists of names. */
+  acts: Act[];
 };
 
 /**
@@ -371,7 +374,7 @@ export function readPackages(source: string): PackageInfo[] {
     const [head, ...rest] = readTree(text);
     if (!head) throw new CrubalError("an empty package", start + 1);
     const [name = "", version = ""] = head.value.split(/\s+\//).map((s) => s.trim());
-    const info: PackageInfo = { name, version, owner: "", line: head.line, crubal: LANGUAGE, crubalLine: head.line, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {}, utilities: [], lanes: [], flows: [] };
+    const info: PackageInfo = { name, version, owner: "", line: head.line, crubal: LANGUAGE, crubalLine: head.line, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {}, utilities: [], lanes: [], flows: [], acts: [] };
     for (const c of head.children) {
       if (c.key === "owner") info.owner = c.value;
       if (c.key === "crubal") {
@@ -404,6 +407,11 @@ export function readPackages(source: string): PackageInfo[] {
         const f = readFlow(node);
         if (info.flows.some((x) => x.name === f.name)) throw new CrubalError(`the flow ${f.name} twice in one package`, node.line);
         info.flows.push(f);
+      }
+      if (node.key === "act") {
+        const a = readAct(node);
+        if (info.acts.some((x) => x.name === a.name)) throw new CrubalError(`the act ${a.name} twice in one package`, node.line);
+        info.acts.push(a);
       }
     }
     // Definitions are everything after the header block.
@@ -471,6 +479,7 @@ export function checkPackages(source: string): PackageInfo[] {
   checkUtilities(source, pkgs);
   checkLanes(source, pkgs);
   checkFlows(source, pkgs);
+  checkActs(source, pkgs);
   checkFormUtilities(source, pkgs);
   return pkgs;
 }
@@ -685,4 +694,32 @@ function checkFormUtilities(source: string, pkgs: PackageInfo[]): void {
     if (was) throw new CrubalError(`the forms ${was} and ${c.name} both name the act ${act} of ${name}: one form per act`, c.partLines.act ?? c.line);
     taken.set(key, c.name);
   }
+}
+
+/** The file-local act checks (15): strict for a package that extends nothing, deferring what it cannot see otherwise. */
+function checkActs(source: string, pkgs: PackageInfo[]): void {
+  if (!pkgs.some((p) => p.acts.length)) return;
+  const dict = readDefinitions(source);
+  for (const p of pkgs)
+    checkActList(p.acts, {
+      utilities: p.utilities,
+      levels: new Set(dict.levels.keys()),
+      kinds: new Set(dict.kinds.keys()),
+      facets: new Set(dict.facets.keys()),
+      strict: p.extends.length === 0,
+      here: "of this package",
+    });
+}
+
+/** The act checks over the packages in force together (11.4): what a file-local check deferred. */
+export function checkActsInForce(p: { info: Pick<PackageInfo, "acts" | "utilities">; dict: Dictionary }): void {
+  if (!p.info.acts.length) return;
+  checkActList(p.info.acts, {
+    utilities: p.info.utilities,
+    levels: new Set(p.dict.levels.keys()),
+    kinds: new Set(p.dict.kinds.keys()),
+    facets: new Set(p.dict.facets.keys()),
+    strict: true,
+    here: "in force here",
+  });
 }

@@ -16,9 +16,9 @@ export type Change = { member: string; kind: "unchanged" | "safe" | "minor" | "b
 
 /** Where a member's JSON lives in a bundle, by its `member:name` key. */
 /** The member kinds that hold no value on any record (10.5, revision 24): retiring one is a safe change. */
-const VALUELESS = new Set(["view", "shape", "filter", "display", "print", "lane", "flow"]);
+const VALUELESS = new Set(["view", "shape", "filter", "display", "print", "lane", "flow", "act"]);
 
-const SECTIONS: { [member: string]: [string, string] } = { facet: ["facets", "facet"], class: ["classes", "class"], rule: ["rules", "rule"], contract: ["contracts", "contract"], view: ["views", "view"], shape: ["shapes", "shape"], display: ["displays", "display"], print: ["prints", "print"], filter: ["filters", "filter"], kind: ["kinds", "kind"], utility: ["utilities", "utility"], lane: ["lanes", "lane"], flow: ["flows", "flow"] };
+const SECTIONS: { [member: string]: [string, string] } = { facet: ["facets", "facet"], class: ["classes", "class"], rule: ["rules", "rule"], contract: ["contracts", "contract"], view: ["views", "view"], shape: ["shapes", "shape"], display: ["displays", "display"], print: ["prints", "print"], filter: ["filters", "filter"], kind: ["kinds", "kind"], utility: ["utilities", "utility"], lane: ["lanes", "lane"], flow: ["flows", "flow"], act: ["acts", "act"] };
 
 function membersOf(b: JsonObject): Map<string, JsonObject> {
   const out = new Map<string, JsonObject>();

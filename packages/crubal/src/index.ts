@@ -17,7 +17,7 @@ export { checkRules, Engine, readRules, shortcutRules, type Result, type Rule, t
 export { entryHash, fieldPath, keyFor, land, matchParts, proposeSplit, readContracts, receive, sha256, validate, verifyChain, verifySig, writeHash, type Contract, type IntakeOutcome, type IntakeRecord, type Key, type Keys, type Observation } from "./store.ts";
 export { checkRecipe, dryRun, readRecipes, restamp, type Recipe, type ReviewItem, type Step, type StepStats } from "./migrate.ts";
 export { checkContracts, Exchange, proposalMet, quorumHolds, readRoles, verifyBorder, versionGate, type Role, type RunResult, type Offer } from "./exchange.ts";
-export { checkFlowsInForce, checkPackages, HUES, isHue, readPackages, type Flow, type FlowStamp, flowStamps, type FlowStop, type Hue, type PackageInfo, type Lane, type LanePress, type Utility } from "./packages.ts";
+export { checkActsInForce, checkFlowsInForce, checkPackages, HUES, isHue, readPackages, type Flow, type FlowStamp, flowStamps, type FlowStop, type Hue, type PackageInfo, type Lane, type LanePress, type Utility } from "./packages.ts";
 export { STANDARD_PACKAGES, standardDefinitions } from "./std-packages.ts";
 export { AUDIENCES, checkViews, emptyViewSet, partitionOf, PERIODS, periodOf, readViews, shownAudience, VIEW_SET_KEYS, Views, visibleTo, type Display, type Nested, type Period, type Print, type PrintBox, type PrintElement, type PrintField, type PrintSource, PRINT_PLACE_SLOTS, printSourceFields, type Projection, type ProjectOptions, type Shape, type ShownFor, type StreamEntry, type Sums, type View, type ViewSet } from "./views.ts";
 export { applyEntry, diffWrites, differs, emptyState, Journal, rebuild, redactable, redactableWrite, redactWrite, stateJson, type Draft, type Entry, type State, type Write } from "./log.ts";
@@ -30,3 +30,4 @@ export { bundleHash, bundleOf, classJson, classLineJson, contractJson, emptyPars
 export { classify, publish, type Change, type PublishOptions } from "./publish.ts";
 export { compareVersions, latestVersion, nextVersion } from "./versions.ts";
 export { formOf, type FormOptions } from "./forms.ts";
+export { type Act, type ActFind, type ActInput, type ActRecord, type ActWrites, actJson, actWrites, findPicksOf, readAct } from "./acts.ts";
