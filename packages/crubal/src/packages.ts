@@ -129,6 +129,37 @@ export type Flow = {
   line: number;
 };
 
+/**
+ * A stamp a flow's stop leaves (12.11, revision 22): the facet and value a record takes when the stop's act
+ * lands (a lane stop: its done) or when its form is kept (a block stop: the next lane stop's pick).
+ */
+export type FlowStamp = { stop: string; at: number; facet: string; value: string };
+
+/**
+ * The stamps of a flow's stops, derived from its lanes: never declared, never published. `facetOf` resolves
+ * a filter's name to its facet's key (the views' filters); a stop whose pick names no filter stamps nothing.
+ * A lane stop whose done is `viewed` or absent (an end stop) stamps nothing; a block stop after the last
+ * lane stamps nothing. Pure.
+ */
+export function flowStamps(f: Flow, lanes: Pick<Lane, "name" | "pick" | "done">[], facetOf: (filter: string) => string | undefined): FlowStamp[] {
+  const out: FlowStamp[] = [];
+  const laneOf = (n: string) => lanes.find((x) => x.name === n);
+  const nextPick = (i: number) => {
+    for (let j = i + 1; j < f.stops.length; j++) {
+      const l = laneOf(f.stops[j]?.name ?? "");
+      if (l) return l.pick;
+    }
+    return undefined;
+  };
+  f.stops.forEach((st, i) => {
+    const l = laneOf(st.name);
+    const pk = l ? (l.done && l.done !== "viewed" ? l.done : undefined) : nextPick(i);
+    const facet = pk ? facetOf(pk.filter) : undefined;
+    if (pk && facet) out.push({ stop: st.name, at: i, facet, value: pk.value });
+  });
+  return out;
+}
+
 const ORIGINS = new Set(["observed", "declared", "derived", "reported"]);
 const AUDIENCES = new Set(["public", "member", "staff", "owner"]);
 
@@ -567,6 +598,26 @@ function checkFlows(source: string, pkgs: PackageInfo[]): void {
         if (!flt) throw new CrubalError(`${where}'s done names ${f.done.filter}, which isn't a filter of this package`, f.done.line);
         const facet = dict.facets.get(flt.facet);
         if (facet?.values && !facet.values.some((x) => x.value === f.done?.value)) throw new CrubalError(`${where}'s done: ${f.done.value} is not a value of ${facet.key}`, f.done.line);
+      }
+      // The chain (12.11, revision 22): consecutive lane stops chain done to pick, a list lane is no stop, and the
+      // flow's done is its last lane's (its pick when that lane holds what is finished). A block between two
+      // lanes leaves the chain as it is.
+      const show = (pk: { filter: string; value: string }) => `${pk.filter} = ${pk.value}`;
+      const same = (a: { filter: string; value: string }, b: { filter: string; value: string }) => a.filter === b.filter && a.value === b.value;
+      let prev: Lane | undefined;
+      for (const st of f.stops) {
+        const l = p.lanes.find((x) => x.name === st.name);
+        if (!l) continue;
+        if (!l.pick) throw new CrubalError(`${where}'s stop ${l.name} is a list: it holds no state, so it is no stop`, st.line);
+        if (prev) {
+          if (!prev.done || prev.done === "viewed") throw new CrubalError(`${where} has a gap: ${prev.name} is done when viewed, so nothing moves on from it to ${l.name}`, st.line);
+          if (!same(prev.done, l.pick)) throw new CrubalError(`${where} has a gap: ${prev.name} is done at ${show(prev.done)}, but ${l.name} picks ${show(l.pick)}`, st.line);
+        }
+        prev = l;
+      }
+      if (f.done && prev) {
+        const end = prev.done && prev.done !== "viewed" ? prev.done : prev.pick;
+        if (end && !same(f.done, end)) throw new CrubalError(`${where}'s done is ${show(f.done)}, but its last lane ${prev.name} leaves a record at ${show(end)}`, f.done.line);
       }
     }
   }

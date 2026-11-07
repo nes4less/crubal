@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { bundleOf, parsePackage, printBundle, readBundle } from "../src/bundle.ts";
 import { serialize } from "../src/canonical.ts";
-import { checkPackages, readPackages } from "../src/packages.ts";
+import { checkPackages, flowStamps, readPackages } from "../src/packages.ts";
 import { publish } from "../src/publish.ts";
 import { CrubalError } from "../src/tree.ts";
 
@@ -118,7 +118,7 @@ const flow = `flow: pickPackShip /2026-11-05
     order of order
     ordersToPick -> pick
     ordersToPack -> pack
-  done: orderState = shipped`;
+  done: orderState = packed`;
 
 test("a flow block is read with its parts: a block stop, two lane stops with their acts, the done pick", () => {
   const [info] = readPackages(shop(flow));
@@ -130,7 +130,7 @@ test("a flow block is read with its parts: a block stop, two lane stops with the
   assert.equal(f?.follow, "queue");
   assert.deepEqual(f?.serves.map((x) => [x.as, x.items]), [["owner", undefined], ["fulfiller", ["pick"]]]);
   assert.deepEqual(f?.stops.map((s) => [s.name, s.act, s.of]), [["order", undefined, "order"], ["ordersToPick", "pick", undefined], ["ordersToPack", "pack", undefined]]);
-  assert.deepEqual([f?.done?.filter, f?.done?.value], ["orderState", "shipped"]);
+  assert.deepEqual([f?.done?.filter, f?.done?.value], ["orderState", "packed"]);
   checkPackages(shop(flow));
 });
 
@@ -139,7 +139,7 @@ test("a flow round-trips through its bundle and is versioned in members", () => 
   const flows = first.flows as { flow: string; stops: { name: string; act?: string; of?: string }[]; done: { filter: string; value: string } }[];
   assert.equal(flows[0]?.flow, "pickPackShip");
   assert.deepEqual(flows[0]?.stops, [{ name: "order", of: "order" }, { name: "ordersToPick", act: "pick" }, { name: "ordersToPack", act: "pack" }]);
-  assert.deepEqual(flows[0]?.done, { filter: "orderState", value: "shipped" });
+  assert.deepEqual(flows[0]?.done, { filter: "orderState", value: "packed" });
   const text = printBundle(first);
   assert.match(text, /^flow: pickPackShip \/2026-11-05$/m);
   assert.match(text, /^    ordersToPick -> pick$/m);
@@ -156,9 +156,49 @@ test("a flow is refused when a stop is neither a lane nor a form, an act is not 
   refused(flow.replace("ordersToPack -> pack", "ordersToPack -> refund"), /refund isn't an act of orders/);
   refused(flow.replace("order of order", "invoice of order"), /invoice isn't a form of this package/);
   refused(flow.replace("order of order", "order of parcel"), /parcel isn't a level or kind/);
-  refused(flow.replace("done: orderState = shipped", "done: orderState = lost"), /lost is not a value/);
-  refused(flow.replace("done: orderState = shipped", "done: region = us"), /region, which isn't a filter/);
+  refused(flow.replace("done: orderState = packed", "done: orderState = lost"), /lost is not a value/);
+  refused(flow.replace("done: orderState = packed", "done: region = us"), /region, which isn't a filter/);
   refused(flow.replace("utility: orders", "utility: returns"), /utility returns, which this package doesn't declare/);
   assert.throws(() => readPackages(shop(flow.replace("follow: queue", "follow: sideways"))), /follow is queue or card/);
   assert.throws(() => readPackages(shop(flow.replace(/  stops:\n(?:    .*\n)+/, "  stops:\n"))), /has no stops/);
+});
+
+// Revision 22: the stamps and the chain.
+test("a flow's stamps are derived from its lanes: a lane stop its done, a block stop the next lane's pick", () => {
+  const [info] = readPackages(shop(flow));
+  const f = info?.flows[0];
+  assert.ok(f && info);
+  const stamps = flowStamps(f, info.lanes, (flt) => (flt === "orderState" ? "orderState" : undefined));
+  assert.deepEqual(stamps, [
+    { stop: "order", at: 0, facet: "orderState", value: "paid" },
+    { stop: "ordersToPick", at: 1, facet: "orderState", value: "picking" },
+    { stop: "ordersToPack", at: 2, facet: "orderState", value: "packed" },
+  ]);
+  // A filter the views don't know stamps nothing; a block after the last lane stamps nothing.
+  assert.deepEqual(flowStamps(f, info.lanes, () => undefined), []);
+  const tail = readPackages(shop(flow.replace("    order of order\n", "").replace("    ordersToPack -> pack", "    ordersToPack -> pack\n    order of order")));
+  const g = tail[0]?.flows[0];
+  assert.ok(g && tail[0]);
+  assert.deepEqual(flowStamps(g, tail[0].lanes, () => "orderState").map((x) => x.stop), ["ordersToPick", "ordersToPack"]);
+});
+
+test("a flow is refused when its lane stops do not chain, or its done is not its last lane's, or a stop is a list", () => {
+  refused(flow.replace("    ordersToPick -> pick\n    ordersToPack -> pack", "    ordersToPack -> pack\n    ordersToPick -> pick"), /gap: ordersToPack is done at orderState = packed, but ordersToPick picks orderState = paid/);
+  refused(flow.replace("done: orderState = packed", "done: orderState = shipped"), /done is orderState = shipped, but its last lane ordersToPack leaves a record at orderState = packed/);
+  const list = `lane: ordersAll /2026-11-05
+  label: Every order
+  utility: orders
+  view: desk
+  band: daily
+  house: 9
+  serves: owner
+  home:
+    figure: count
+    press: Look -> /orders
+
+`;
+  refused(`${list}${flow.replace("ordersToPack -> pack", "ordersAll")}`, /ordersAll is a list: it holds no state, so it is no stop/);
+  // A block between two lanes leaves the chain as it is; a block after the last lane is fine.
+  checkPackages(shop(flow.replace("    ordersToPack -> pack", "    order of order\n    ordersToPack -> pack")));
+  checkPackages(shop(flow.replace("    ordersToPack -> pack", "    ordersToPack -> pack\n    order of order")));
 });
