@@ -8,7 +8,8 @@ import { type ActRecord, actWrites, findPicksOf, mintValuesOf, nextInSeries, rou
 import type { JsonObject } from "../src/model.ts";
 import { bundleOf, parsePackage, printBundle, readBundle } from "../src/bundle.ts";
 import { serialize } from "../src/canonical.ts";
-import { checkPackages, readPackages } from "../src/packages.ts";
+import { readDefinitions } from "../src/defs.ts";
+import { checkActsInForce, checkPackages, readPackages } from "../src/packages.ts";
 import { publish } from "../src/publish.ts";
 import { CrubalError } from "../src/tree.ts";
 
@@ -523,3 +524,17 @@ test("revision 31: the post a landing tells, given the owner and the run; nothin
   assert.deepEqual(followersOn(edges, ["U-9"], "2026-11-12T10:00:00Z"), []);
   assert.deepEqual(followersOn(edges, ["U-1"]).map((e) => e.edge), ["E-U-1"], "without a moment, an until is not weighed");
 });
+
+test("in force, a telling whose aspect no kind declares is inert, never a refusal (revision 32's erratum); at publish it is still refused", () => {
+  const [info] = readPackages(feed(told.replace("tells: post as filed", "tells: post as boxed")));
+  assert.ok(info);
+  const dict = readDefinitions(feed(told));
+  // The in-force check: lenient on the aspect alone.
+  checkActsInForce({ info: { acts: info.acts, utilities: info.utilities }, dict });
+  // The file-local check at publish: refused.
+  assert.throws(
+    () => checkPackages(feed(told.replace("tells: post as filed", "tells: post as boxed"))),
+    (e: unknown) => e instanceof CrubalError && /an aspect no kind declares under follow/.test(e.message),
+  );
+});
+

@@ -319,6 +319,9 @@ export type ActEnv = {
   facetOf?: (key: string) => Facet | undefined;
   /** The aspects the kinds declare under `follow:` (revision 31), which an act's `tells:` may answer. */
   aspects?: Set<string>;
+  /** In force (11.4): a telling whose aspect no kind in force declares is inert, never a refusal, since nobody
+   * can follow by an aspect nobody declares; the kind that declares it may land later. Refused at publish only. */
+  inertTelling?: boolean;
   strict: boolean;
   here: string;
 };
@@ -445,7 +448,7 @@ export function checkActList(acts: Act[], env: ActEnv): void {
     if (a.tells) {
       const t = a.tells;
       if (!env.kinds.has(t.kind) && !env.levels.has(t.kind) && strict) throw new CrubalError(`${where} tells ${t.kind}, which isn't a kind ${here}`, t.line);
-      if (env.aspects && !env.aspects.has(t.aspect) && strict) throw new CrubalError(`${where} tells ${t.kind} as ${t.aspect}, an aspect no kind declares under follow ${here}`, t.line);
+      if (env.aspects && !env.aspects.has(t.aspect) && strict && !env.inertTelling) throw new CrubalError(`${where} tells ${t.kind} as ${t.aspect}, an aspect no kind declares under follow ${here}`, t.line);
       const set = new Set<string>();
       for (const s of t.sets) {
         if (set.has(s.facet)) throw new CrubalError(`${where} tells ${t.kind} and sets ${s.facet} twice`, s.line);
