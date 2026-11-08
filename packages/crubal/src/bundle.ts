@@ -13,6 +13,7 @@ import { facetJson } from "./dictionary.ts";
 import { type Recipe, readRecipes, type Step } from "./migrate.ts";
 import type { Json, JsonObject } from "./model.ts";
 import { type PackageInfo, readPackages, type Utility, type Lane, type LanePress, type Flow } from "./packages.ts";
+import { actJson, actText } from "./acts.ts";
 import { readRules, type Rule } from "./rules.ts";
 import { type Contract, type Keys, readContracts, sha256, keyFor } from "./store.ts";
 import { type Display, emptyViewSet, type Filter, type Print, readViews, type Shape, VIEW_SET_KEYS, type View, type ViewSet } from "./views.ts";
@@ -367,6 +368,7 @@ export function bundleOf(p: Parsed): JsonObject {
   for (const u of info.utilities) if (u.version) members[`utility:${u.name}`] = u.version;
   for (const s of info.lanes) if (s.version) members[`lane:${s.name}`] = s.version;
   for (const f of info.flows) if (f.version) members[`flow:${f.name}`] = f.version;
+  for (const a of info.acts) if (a.version) members[`act:${a.name}`] = a.version;
   o.members = members;
   if (dict.kinds.size) o.kinds = [...dict.kinds.values()].map((k) => kindJson(dict, k));
   if (facets.length) o.facets = facets.map(facetJson);
@@ -389,6 +391,7 @@ export function bundleOf(p: Parsed): JsonObject {
   if (info.utilities.length) o.utilities = info.utilities.map(utilityJson);
   if (info.lanes.length) o.lanes = info.lanes.map(laneJson);
   if (info.flows.length) o.flows = info.flows.map(flowJson);
+  if (info.acts.length) o.acts = info.acts.map(actJson);
   return o;
 }
 
@@ -636,6 +639,7 @@ export function printBundle(b: JsonObject): string {
   blocks("utilities", utilityText);
   blocks("lanes", laneText);
   blocks("flows", flowText);
+  blocks("acts", actText);
   return `${out.join("\n").trimEnd()}\n`;
 }
 
@@ -715,7 +719,7 @@ export function readBundleInto(b: JsonObject, into: Dictionary = emptyDictionary
 /** An empty Parsed to read packages onto, in order. */
 export function emptyParsed(): Parsed {
   const { perms } = readAccess("");
-  return { info: { name: "", version: "", owner: "", line: 0, crubal: 2, crubalLine: 0, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {}, utilities: [], lanes: [], flows: [] }, dict: emptyDictionary(), rules: [], contracts: [], views: emptyViewSet(), perms, edges: [], recipes: [], instructions: new Map() };
+  return { info: { name: "", version: "", owner: "", line: 0, crubal: 2, crubalLine: 0, extends: [], prefixes: new Map(), trust: [], dict: emptyDictionary(), contracts: [], header: {}, terms: {}, utilities: [], lanes: [], flows: [], acts: [] }, dict: emptyDictionary(), rules: [], contracts: [], views: emptyViewSet(), perms, edges: [], recipes: [], instructions: new Map() };
 }
 
 /**
@@ -726,7 +730,7 @@ export function readBundleOnto(bundle: JsonObject, base: Parsed): Parsed {
   const text = printBundle(bundle);
   readDefinitions(text, base.dict);
   const [info] = readPackages(text);
-  if (info) base.info = { ...info, dict: base.dict, terms: Object.keys(info.terms).length ? info.terms : base.info.terms, utilities: [...base.info.utilities.filter((h) => !info.utilities.some((n) => n.name === h.name)), ...info.utilities], lanes: [...base.info.lanes.filter((h) => !info.lanes.some((n) => n.name === h.name)), ...info.lanes], flows: [...base.info.flows.filter((h) => !info.flows.some((n) => n.name === h.name)), ...info.flows] };
+  if (info) base.info = { ...info, dict: base.dict, terms: Object.keys(info.terms).length ? info.terms : base.info.terms, utilities: [...base.info.utilities.filter((h) => !info.utilities.some((n) => n.name === h.name)), ...info.utilities], lanes: [...base.info.lanes.filter((h) => !info.lanes.some((n) => n.name === h.name)), ...info.lanes], flows: [...base.info.flows.filter((h) => !info.flows.some((n) => n.name === h.name)), ...info.flows], acts: [...base.info.acts.filter((h) => !info.acts.some((n) => n.name === h.name)), ...info.acts] };
   const byName = <T extends { name: string }>(have: T[], next: T[]) => [...have.filter((h) => !next.some((n) => n.name === h.name)), ...next];
   base.rules = byName(base.rules, readRules(text));
   base.contracts = byName(base.contracts, readContracts(text));
