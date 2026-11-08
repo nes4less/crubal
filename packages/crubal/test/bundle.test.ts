@@ -268,6 +268,7 @@ print: tag
     text 0.5 0.95 0.067 "{code} | {title}" anchor middle weight bold clip 0.04 0.86 0.92 0.12
     qr 0.8 0.1 0.15 0.15 id gravity bottom-right
     text 0.5 0.3 0.09 title anchor middle clip 0.3 0.01 0.7 0.5 lines 2
+    image 0.8 0.5 0.15 0.3 shop
 print: square
   for: item
   inches: 2 2

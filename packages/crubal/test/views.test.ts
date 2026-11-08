@@ -263,6 +263,7 @@ print: tag
     text 0.5 0.95 0.067 "{code} | {title}" anchor middle weight bold clip 0.04 0.86 0.92 0.12
     text 0.98 0.08 0.05 shop anchor end rotate cw
     text 0.5 0.3 0.09 title anchor middle clip 0.3 0.01 0.7 0.5 lines 2
+    image 0.8 0.5 0.15 0.3 shop
 print: square
   for: item
   inches: 2 2
@@ -280,7 +281,7 @@ test("a print is read: what it prints, its inches, its fields and its elements, 
   assert.deepEqual(p.inches, { w: 2.5, h: 1 });
   assert.equal(p.stretch, false);
   assert.deepEqual(p.fields.map((f) => [f.slot, f.from]), [["code", "cashierfuId"], ["title", "title"], ["shop", "place:name"]]);
-  assert.equal(p.elements.length, 5);
+  assert.equal(p.elements.length, 6);
   const [rect, bars, line, side] = p.elements;
   assert.deepEqual(rect, { type: "rect", box: { x: 0, y: 0, w: 1, h: 1 }, fill: "white", line: rect?.line });
   assert.equal(bars?.type, "barcode");
@@ -311,7 +312,7 @@ test("a print without a for or inches, a malformed element, an unknown class, a 
   const dict = readDefinitions(printSrc);
   assert.throws(() => readViews("print: x\n  inches: 2 1\n  elements:\n    rect 0 0 1 1\n"), (e: unknown) => e instanceof CrubalError && /says no for/.test(e.message));
   assert.throws(() => readViews("print: x\n  for: Filed\n  inches: 2\n  elements:\n    rect 0 0 1 1\n"), (e: unknown) => e instanceof CrubalError && /width height/.test(e.message));
-  assert.throws(() => readViews("print: x\n  for: Filed\n  inches: 2 1\n  elements:\n    circle 0 0 1 1\n"), (e: unknown) => e instanceof CrubalError && /a rect, a barcode, a qr or a text/.test(e.message));
+  assert.throws(() => readViews("print: x\n  for: Filed\n  inches: 2 1\n  elements:\n    circle 0 0 1 1\n"), (e: unknown) => e instanceof CrubalError && /a rect, a barcode, a qr, a text or an image/.test(e.message));
   assert.throws(() => readViews("print: x\n  for: Filed\n  inches: 2 1\n  elements:\n    rect 0 0 1 2\n"), (e: unknown) => e instanceof CrubalError && /fraction of the art/.test(e.message));
   assert.throws(() => readViews("print: x\n  for: Filed\n  inches: 2 1\n"), (e: unknown) => e instanceof CrubalError && /draws nothing/.test(e.message));
   assert.throws(() => checkViews(readViews("print: x\n  for: Nothing\n  inches: 2 1\n  elements:\n    rect 0 0 1 1\n"), dict), (e: unknown) => e instanceof CrubalError && /neither a class nor a kind/.test(e.message));
@@ -377,4 +378,12 @@ test("revision 27: a text's lines, 2 to 9, wraps the words; one line, or ten, is
   assert.equal(wrapped && wrapped.type === "text" ? wrapped.lines : undefined, 2);
   assert.throws(() => readViews(printSrc.replace("lines 2", "lines 1")), /lines is a count from 2 to 9, not 1/);
   assert.throws(() => readViews(printSrc.replace("lines 2", "lines ten")), /lines is a count from 2 to 9, not ten/);
+});
+
+test("revision 28: an image element, the field's picture fit within its box; one with options or without a field is refused", () => {
+  const p = readViews(printSrc).prints.get("tag");
+  const img = p?.elements.find((e) => e.type === "image");
+  assert.deepEqual(img && img.type === "image" ? { box: img.box, field: img.field } : undefined, { box: { x: 0.8, y: 0.5, w: 0.15, h: 0.3 }, field: "shop" });
+  assert.throws(() => readViews(printSrc.replace("image 0.8 0.5 0.15 0.3 shop", "image 0.8 0.5 0.15 0.3")), /an image is "image x y w h <field>"/);
+  assert.throws(() => readViews(printSrc.replace("image 0.8 0.5 0.15 0.3 shop", "image 0.8 0.5 0.15 0.3 shop gravity top-left")), /takes no options/);
 });

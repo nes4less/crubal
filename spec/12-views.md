@@ -627,11 +627,12 @@ width and vertical ones (and a text's size) of its height:
 | a rectangle | `rect x y w h [fill white\|black\|none] [stroke dots]` |
 | a Code 128 barcode | `barcode x y w h <field> [rotate cw\|ccw] [text]`: the field's value in the bars; `text` prints it under them |
 | a QR code | `qr x y w h <field> [gravity bottom-right\|top-left]`: the field's value encoded; centred unless a gravity is said |
+| a picture | `image x y w h <field>` (revision 28): the field's value an image's address (the place's mark, `place:mark`, or an image facet); drawn to fit the box keeping its aspect, centred; a thermal lane prints it as a bitmap, dark where the picture is dark, and prints nothing where it cannot read the picture |
 | a line of text | `text x y size <field \| "words">` then any of `anchor start\|middle\|end`, `weight bold`, `clip x y w h`, `rotate cw\|ccw\|180`, `lines n` (revision 27): `x y` the anchor's point, `size` the font's height; a quoted literal may hold `{field}` places; with `lines`, from 2 to 9, the words wrap into that many lines of the font's height stacked down from `y`, within the clip's width when there is one, the last line cut with an ellipsis |
 
 A package MUST be refused at publish when a print says no `for:`, names a `for:` that is neither a class nor a
 kind, names no inches or inches that are not two numbers above zero, declares a field whose source is not a
-facet, `id` or a brand slot, names a field twice, draws nothing, draws an element of another type or with a
+facet, `id` or a brand slot, names a field twice, draws nothing, draws an element of another type (a rect, a barcode, a qr, a text, an image) or with a
 number outside 0 to 1, or draws a field it did not declare. The engine carries a print and checks nothing
 of how it prints: resolving the art to a stock (letterboxed or stretched, rotated when the stock is
 portrait), the renders (a page for a driver, ZPL for a thermal printer, a bitmap) and the printers are the
