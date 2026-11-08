@@ -60,6 +60,7 @@ utility: orders /2026-10-16
 |---|---|
 | `utility` | its name (a lower-case word, its identity like a contract's) and dated version |
 | `label` · `describe` | what people see |
+| `group` | revision 32: the group the utility stands in where a room of the mounting app segments its rows by utility (Org, Platform, Services, Clients): a word; utilities sharing it stand together under it. Absent, the utility stands under its own word |
 | `serves` | whom it mounts for: presets, relations or audiences (chapter 14.6, 12.4), each optionally narrowed in parentheses to the presets, menu items or relations it shows screens for |
 | `needs` | the packages (`domain/name`, optionally with a version) and the other utilities it depends on |
 | `acts` | the acts the utility provides by name (lower-case words), which a lane's presses may name (12.10); the app that mounts the utility provides their bodies; an act a form names (7.7, revision 16) opens that form before it runs |
@@ -232,7 +233,7 @@ A published version MUST NOT change. A mistake is fixed by a new version.
   "trust": ["person", "me:unitizer", "observed", "declared", "reported"],
   "facet-trust": { "runtime": ["observed", "person"] },
   "members": { "facet:videoCodec": "2026-10-13", "class:OpticalDisc": "2026-10-13" },
-  "utilities": [ { "utility": "orders", "version": "2026-10-16", "serves": [ { "as": "controller" }, { "as": "fulfiller", "items": ["ship", "returns"] } ],
+  "utilities": [ { "utility": "orders", "version": "2026-10-16", "group": "Platform", "serves": [ { "as": "controller" }, { "as": "fulfiller", "items": ["ship", "returns"] } ],
                   "needs": [ { "name": "cashierfu.com/commerce" } ], "setup": [ { "connection": "stripe" }, { "setting": "shippingOrigin" } ] } ]
 }
 ```

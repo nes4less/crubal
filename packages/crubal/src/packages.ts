@@ -44,6 +44,8 @@ export type PackageInfo = {
 export type Utility = {
   name: string;
   version: string;
+  /** Revision 32: the group the utility stands in where a room segments its rows (Org, Platform, Services, Clients). */
+  group?: string;
   label?: string;
   describe?: string;
   /** `curator(ship, returns)` → `{ as: "curator", items: ["ship", "returns"] }`; `controller` → no items. */
@@ -76,6 +78,8 @@ export type LanePress = { word: string; to: string; line: number };
 export type Lane = {
   name: string;
   version: string;
+  /** Revision 32: one of the view's filters whose buckets group the row's cards, each a heading card with its cards tucked. */
+  group?: string;
   label?: string;
   utility?: string;
   view?: string;
@@ -198,7 +202,11 @@ function readUtility(node: Node): Utility {
     if (!c.key) continue;
     if (c.key === "label") u.label = unquote(c.value.trim());
     else if (c.key === "describe") u.describe = unquote(c.value.trim());
-    else if (c.key === "serves") {
+    else if (c.key === "group") {
+      const g = unquote(c.value.trim());
+      if (!g) throw new CrubalError("group names the group the utility stands in: a word", c.line);
+      u.group = g;
+    } else if (c.key === "serves") {
       for (const p of splitServes(c.value)) {
         const m = p.match(/^([A-Za-z][\w-]*)(?:\((.*)\))?$/);
         if (!m) throw new CrubalError(`serves: ${p} is not a name, or a name with items in parentheses`, c.line);
@@ -226,7 +234,7 @@ function readUtility(node: Node): Utility {
       if (!m) throw new CrubalError(`mark: is "<glyph> <hue>", the glyph a lower-case word and the hue one of ${HUES.join(", ")}: ${c.value.trim()}`, c.line);
       if (!isHue(m[2])) throw new CrubalError(`mark: ${m[2]} is not a hue; the eight are ${HUES.join(", ")}`, c.line);
       u.mark = { glyph: m[1] as string, hue: m[2], line: c.line };
-    } else throw new CrubalError(`a utility has label, describe, serves, needs, setup, acts and mark, not ${c.key}`, c.line);
+    } else throw new CrubalError(`a utility has label, describe, group, serves, needs, setup, acts and mark, not ${c.key}`, c.line);
   }
   return u;
 }
@@ -262,6 +270,10 @@ function readLane(node: Node): Lane {
     else if (c.key === "serve") s.serve = v;
     else if (c.key === "pick") s.pick = readPick(v, c.line, "pick");
     else if (c.key === "done") s.done = v === "viewed" ? "viewed" : readPick(v, c.line, "done");
+    else if (c.key === "group") {
+      if (!/^[\w:-]+$/.test(v)) throw new CrubalError(`group names one of the view's filters: ${v}`, c.line);
+      s.group = v;
+    }
     else if (c.key === "band") {
       if (v !== "daily" && v !== "weekly" && v !== "rarely") throw new CrubalError(`band is daily, weekly or rarely, not ${v}`, c.line);
       s.band = v;
@@ -314,7 +326,7 @@ function readLane(node: Node): Lane {
       }
       if (!card.name.length) throw new CrubalError(`the lane ${name}'s card names nothing`, c.line);
       s.card = card;
-    } else throw new CrubalError(`a lane has label, utility, view, serve, pick, done, band, house, serves, home and card, not ${c.key}`, c.line);
+    } else throw new CrubalError(`a lane has label, utility, view, serve, pick, done, group, band, house, serves, home and card, not ${c.key}`, c.line);
   }
   if (!s.view && !s.serve) throw new CrubalError(`the lane ${name} names no view and no serve`, node.line);
   if (s.view && s.serve) throw new CrubalError(`the lane ${name} names both a view and a serve`, node.line);
@@ -516,10 +528,13 @@ function checkLanes(source: string, pkgs: PackageInfo[]): void {
       press(s.home.press, "press");
       if (s.serve) {
         if (!/^[a-z][\w-]*$/.test(s.serve)) throw new CrubalError(`${where}'s serve is a lower-case word: ${s.serve}`, s.line);
+        if (s.group) throw new CrubalError(`${where} groups by ${s.group}, but a lane the app serves has no view to group by`, s.line);
         continue;
       }
       const view = views.views.get(s.view as string);
       if (!view) throw new CrubalError(`${where} names the view ${s.view}, which this package doesn't declare`, s.line);
+      // Revision 32: the group is one of the view's filters, whose buckets the row's cards stand in.
+      if (s.group && !view.filters.includes(s.group)) throw new CrubalError(`${where} groups by ${s.group}, which isn't a filter of ${view.name}`, s.line);
       // Serves nothing wider than the view shows (12.4): an audience named must rank at or above the view's.
       for (const sv of s.serves) {
         const rank = AUDIENCE_RANK[sv.as];
