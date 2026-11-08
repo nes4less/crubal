@@ -845,7 +845,11 @@ export class Host {
       e.versions.push(r.version);
       byId.set(id, e);
     }
-    return [...byId.entries()].map(([id, e]) => ({ package: id, latest: e.versions[e.versions.length - 1] as string, versions: Object.fromEntries(e.versions.map((v) => [v, this.bundleUrl(e.owner, e.pkg, v)])) }));
+    // The latest by the version order (11.8: a dated version with a dotted count), never by text: .9 sorts after .16 as text.
+    return [...byId.entries()].map(([id, e]) => {
+      const versions = [...e.versions].sort(compareVersions);
+      return { package: id, latest: versions[versions.length - 1] as string, versions: Object.fromEntries(versions.map((v) => [v, this.bundleUrl(e.owner, e.pkg, v)])) };
+    });
   }
 
   // ─── The well-known file ───────────────────────────────────────────────────
