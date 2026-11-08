@@ -42,6 +42,8 @@ export type PrintElement =
   | { type: "rect"; box: PrintBox; fill: "white" | "black" | "none"; stroke?: number; line: number }
   | { type: "barcode"; box: PrintBox; field: string; rotate?: "cw" | "ccw"; text?: boolean; line: number }
   | { type: "qr"; box: PrintBox; field: string; gravity?: "bottom-right" | "top-left"; line: number }
+  /** Revision 28: a picture, the field's value an image's address, fit within the box. */
+  | { type: "image"; box: PrintBox; field: string; line: number }
   | { type: "text"; x: number; y: number; size: number; source: PrintSource; anchor?: "start" | "middle" | "end"; weight?: "bold"; clip?: PrintBox; rotate?: "cw" | "ccw" | "180"; /** Revision 27: the words wrap into this many lines, 2 to 9. */ lines?: number; line: number };
 /** A print's field: the slot its elements name, and what fills it: a facet, `id`, or a brand slot `place:…`. */
 export type PrintField = { slot: string; from: string; line: number };
@@ -175,6 +177,12 @@ function readPrintElement(text: string, line: number): PrintElement {
     const gravity = one(o, "gravity", ["bottom-right", "top-left"]);
     return { type, box: printBox(t, 1, "the qr", line), field, ...(gravity ? { gravity: gravity as "bottom-right" | "top-left" } : {}), line };
   }
+  if (type === "image") {
+    const field = t[5];
+    if (!field || field.startsWith('"')) throw new CrubalError(`an image is "image x y w h <field>"`, line);
+    if (t.length > 6) throw new CrubalError(`an image takes no options after its field: ${t.slice(6).join(" ")}`, line);
+    return { type, box: printBox(t, 1, "the image", line), field, line };
+  }
   if (type === "text") {
     const src = t[4];
     if (!src) throw new CrubalError(`a text is "text x y size <field or \"words\">"`, line);
@@ -190,7 +198,7 @@ function readPrintElement(text: string, line: number): PrintElement {
     if (lines !== undefined && !(Number.isInteger(lines) && lines >= 2 && lines <= 9)) throw new CrubalError(`lines is a count from 2 to 9, not ${linesT}`, line);
     return { type, x: fraction(t[1], "the text's x", line), y: fraction(t[2], "the text's y", line), size: fraction(t[3], "the text's size", line), source, ...(anchor ? { anchor: anchor as "start" | "middle" | "end" } : {}), ...(weight ? { weight: "bold" as const } : {}), ...(clip ? { clip } : {}), ...(rotate ? { rotate: rotate as "cw" | "ccw" | "180" } : {}), ...(lines !== undefined ? { lines } : {}), line };
   }
-  throw new CrubalError(`an element is a rect, a barcode, a qr or a text, not ${type ?? "nothing"}`, line);
+  throw new CrubalError(`an element is a rect, a barcode, a qr, a text or an image, not ${type ?? "nothing"}`, line);
 }
 /** The field names a print's text draws: its field, or the `{field}` places of its literal. */
 export const printSourceFields = (s: PrintSource): string[] => ("field" in s ? [s.field] : [...s.literal.matchAll(/\{(\w+)\}/g)].map((m) => m[1] as string));
