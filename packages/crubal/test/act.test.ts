@@ -214,13 +214,15 @@ const fileWhole = `act: file /2026-11-09
       containerLocation -> context.station.stationLocation
       containerCapacity -> slot.boxCapacity
       containerState -> open
+  count:
+    boxed -> unit where filedIn = box
   set:
     filedIn -> link box
     filedBox -> box.containerLabel
     filedSlot -> slot.slotName
     filedAt -> now
   then:
-    when box.containerCount + 1 >= box.containerCapacity set box.containerState = full, box.filledAt = now send notify containerFull about context.station
+    when boxed + 1 >= box.containerCapacity set box.containerState = full, box.filledAt = now send notify containerFull about context.station
 `;
 
 const byCategory = `act: fileByCategory /2026-11-09
@@ -251,6 +253,8 @@ test("revision 26: the route, the mint, the series, the then's several sets and 
   assert.equal(box?.mint?.kind, "container");
   assert.deepEqual(box?.mint?.sets[0]?.source, { next: { prefix: { route: "slot", column: "boxPrefix" }, in: { kind: "container", facet: "containerLabel" }, suffix: { route: "slot", column: "boxSuffix" } } });
   assert.deepEqual(box?.mint?.sets[3]?.source, { context: "station", facet: "stationLocation" });
+  assert.deepEqual(a.counts, [{ name: "boxed", kind: "unit", where: [{ facet: "filedIn", value: { found: "box" }, line: a.counts[0]?.line }], line: a.counts[0]?.line }]);
+  assert.deepEqual(a.thens[0]?.when.left, { count: "boxed", plus: 1 });
   assert.deepEqual(a.thens[0]?.sets, [
     { found: "box", facet: "containerState", value: { literal: "full" } },
     { found: "box", facet: "filledAt", value: { now: true } },
@@ -263,7 +267,8 @@ test("revision 26: the route, the mint, the series, the then's several sets and 
   const text = printBundle(first);
   assert.match(text, /^    slot -> row of context\.station\.slots by slotRule over record, record\.of keep keep by unit where of = record\.of, filedSlot = slot\.slotName, filedIn\.containerStation = context\.station$/m);
   assert.match(text, /^  mint:\n    box -> container when none\n      containerLabel -> next slot\.boxPrefix in container\.containerLabel, slot\.boxSuffix$/m);
-  assert.match(text, /^    when box\.containerCount \+ 1 >= box\.containerCapacity set box\.containerState = full, box\.filledAt = now send notify containerFull about context\.station$/m);
+  assert.match(text, /^  count:\n    boxed -> unit where filedIn = box$/m);
+  assert.match(text, /^    when boxed \+ 1 >= box\.containerCapacity set box\.containerState = full, box\.filledAt = now send notify containerFull about context\.station$/m);
   assert.match(text, /^  replaces: file$/m);
   assert.equal(serialize(bundleOf(readBundle(first))), serialize(first));
   // A revision-25 then (one `set`) still prints.
@@ -280,6 +285,8 @@ test("revision 26: the refusals: a route over no compound or by a column it lack
   refused(byCategory.replace("replaces: file", "replaces: fileByCategory"), /replaces itself/);
   refused(byCategory.replace("replaces: file", "replaces: pack"), /replaces pack, which isn't among bench's acts/);
   refused(byCategory.replace("  replaces: file\n", ""), /isn't among bench's acts/);
+  refused(fileWhole.replace("boxed -> unit where filedIn = box", "box -> unit where filedIn = box").replace("when boxed", "when box"), /counts box, a name already taken/);
+  refused(fileWhole.replace("when boxed + 1", "when held + 1"), /reads held, which no count declares above it/);
 });
 
 test("the row a route takes: the rack in order, the rule over the unit's values laid over the product's, the last the catch-all, a kept row passed over; the counts' picks per row", () => {
@@ -334,17 +341,20 @@ test("the values a mint makes: the series' next label, the links, the row's colu
   });
   assert.equal(nextInSeries("BIN", undefined, []), "BIN 001");
   assert.equal(nextInSeries("BIN", "Sealed", ["BIN 012", "BIN 3 x"]), "BIN 013 Sealed");
-  const made = { id: "C-9", values: { containerLabel: "NEW 008 Sealed", containerCount: 1, containerCapacity: 2 } };
-  const w = actWrites(a, { ...i, found: { box: [made] } });
+  const made = { id: "C-9", values: { containerLabel: "NEW 008 Sealed", containerCapacity: 2 } };
+  assert.deepEqual(findPicksOf(a.counts[0] as NonNullable<(typeof a.counts)[0]>, { ...i, found: { box: [made] } }), [{ facet: "filedIn", value: "C-9" }]);
+  const w = actWrites(a, { ...i, found: { box: [made] }, counts: { boxed: 1 } });
   assert.deepEqual(w, {
     ok: true,
     record: { filedIn: { $link: "C-9" }, filedBox: "NEW 008 Sealed", filedSlot: "New", filedAt: "2026-11-09T10:00:00Z" },
     then: [{ id: "C-9", values: { containerState: "full", filledAt: "2026-11-09T10:00:00Z" } }],
     sends: [{ verb: "notify", words: "containerFull about context.station" }],
   });
-  const roomy = { ...made, values: { ...made.values, containerCount: 0 } };
-  const w2 = actWrites(a, { ...i, found: { box: [roomy] } });
+  const w2 = actWrites(a, { ...i, found: { box: [made] }, counts: { boxed: 0 } });
   assert.deepEqual(w2.ok && [w2.then, w2.sends], [[], []]);
+  // A count the host never answered leaves the then unread, as a missing facet does.
+  const w3 = actWrites(a, { ...i, found: { box: [made] } });
+  assert.deepEqual(w3.ok && w3.then, []);
   // Nothing found and nothing minted stops the act.
   assert.deepEqual(actWrites(a, { ...i, found: {} }), { ok: false, why: "no container for box" });
 });
