@@ -263,9 +263,10 @@ release.
   its `tells:` (15.1). The edge at the owner is the plain `follower` relation on the record, carrying no
   grants (a relation never grants); the aspects a person chose are theirs to keep, on their own chain, and
   their feed reads the posts by them. The owner makes a post when any follower stands on the record or an
-  ancestor at the act's landing, one per run; no follower, no post, so what nobody follows writes nothing
-  extra. A post is visible by its own rule (`show`, 12.4); a repost is a link to the original and is read
-  through the original's rule, never wider.
+  ancestor at the act's landing, one per run, within the record, so a view of posts partitioned by this relation
+  serves each follower theirs; no follower, no post, so what nobody follows writes nothing extra. A post is
+  visible by its own rule (`show`, 12.4); a repost is a link to the original and is read through the original's
+  rule, never wider.
 - **Paid subscriptions are contracts.** A checkout that sells a season's stats creates an edge with
   `mode: view`, `relation: subscriber` and an `until`, and usually a `follower` relation beside it. The
   purchase decides access; the relation decides the feed.
