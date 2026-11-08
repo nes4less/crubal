@@ -30,7 +30,7 @@ export type ActSeries = { prefix: ActRef; in: { kind: string; facet: string }; s
 
 /** What a set writes: a literal, a link to a found or context record, a reference's value, the moment, or the
  * next in a series. */
-export type ActSource = { literal: string } | { link: string } | { now: true } | { caller: true } | { none: true } | { next: ActSeries } | ActRef;
+export type ActSource = { literal: string } | { link: string } | { now: true } | { caller: true } | { none: true } | { owner: true } | { run: true } | { next: ActSeries } | ActRef;
 
 export type ActSet = { facet: string; source: ActSource; line: number };
 
@@ -94,8 +94,13 @@ export type Act = {
   send?: { verb: string; words: string };
   /** When the act counts as landed: at once, or when its send reports. */
   lands: "now" | "reports";
+  /** Revision 31: the post the act lands when the record in hand or an ancestor is followed (15.1). */
+  tells?: ActTells;
   line: number;
 };
+
+/** `tells: post as filed`, its set lines beneath: the kind made, the aspect it answers, the values it takes. */
+export type ActTells = { kind: string; aspect: string; sets: ActSet[]; line: number };
 
 const WORD = /^[a-z][\w-]*$/;
 
@@ -176,6 +181,9 @@ function readSet(text: string, line: number, routes: Set<string>): ActSet {
   const facet = m[1] as string;
   const src = (m[2] as string).trim();
   if (src === "link caller") return { facet, source: { caller: true }, line };
+  // Revision 31: the owner's domain, the act run's id, a link to the record in hand (a told post's sender, run and subject).
+  if (src === "owner") return { facet, source: { owner: true }, line };
+  if (src === "run") return { facet, source: { run: true }, line };
   const link = src.match(/^link\s+([\w-]+)$/);
   if (link) return { facet, source: { link: link[1] as string }, line };
   if (src === "now") return { facet, source: { now: true }, line };
@@ -284,7 +292,13 @@ export function readAct(node: Node): Act {
       if (v === "now") a.lands = "now";
       else if (/^when the send reports$/.test(v)) a.lands = "reports";
       else throw new CrubalError(`lands is "now" or "when the send reports", not ${v}`, c.line);
-    } else throw new CrubalError(`an act has utility, replaces, label, describe, on, context, route, find, mint, count, set, then, send and lands, not ${c.key}`, c.line);
+    } else if (c.key === "tells") {
+      const m = v.match(/^([\w-]+)\s+as\s+([a-z][\w-]*)$/);
+      if (!m) throw new CrubalError(`tells is "<kind> as <aspect>", its set lines beneath: ${v}`, c.line);
+      if (a.tells) throw new CrubalError(`the act ${name} tells twice`, c.line);
+      a.tells = { kind: m[1] as string, aspect: m[2] as string, sets: c.children.filter((l) => l.text.trim()).map((l) => readSet(l.text.trim(), l.line, routes)), line: c.line };
+      if (!a.tells.sets.length) throw new CrubalError(`the act ${name} tells ${m[1]} and sets nothing: its set lines go beneath tells:`, c.line);
+    } else throw new CrubalError(`an act has utility, replaces, label, describe, on, context, route, find, mint, count, set, then, send, lands and tells, not ${c.key}`, c.line);
   }
   if (!a.utility) throw new CrubalError(`the act ${name} names no utility`, node.line);
   if (!a.on) throw new CrubalError(`the act ${name} says no on: the level it acts on`, node.line);
@@ -303,6 +317,8 @@ export type ActEnv = {
   facets: Set<string>;
   /** The facet itself, when the dictionary is at hand: a compound's columns and a link's type are checked by it. */
   facetOf?: (key: string) => Facet | undefined;
+  /** The aspects the kinds declare under `follow:` (revision 31), which an act's `tells:` may answer. */
+  aspects?: Set<string>;
   strict: boolean;
   here: string;
 };
@@ -388,13 +404,13 @@ export function checkActList(acts: Act[], env: ActEnv): void {
       needFacet(s.facet, s.line, doing);
       const src = s.source;
       if ("link" in src) {
-        if (!found.has(src.link) && !a.context.includes(src.link)) throw new CrubalError(`${where} links ${s.facet} to ${src.link}, which no find or context declares`, s.line);
+        if (src.link !== "record" && !found.has(src.link) && !a.context.includes(src.link)) throw new CrubalError(`${where} links ${s.facet} to ${src.link}, which no find or context declares`, s.line);
       } else if ("next" in src) {
         refOk(src.next.prefix, s.line);
         if (src.next.suffix) refOk(src.next.suffix, s.line);
         if (!env.kinds.has(src.next.in.kind) && !env.levels.has(src.next.in.kind) && strict) throw new CrubalError(`${where} numbers ${s.facet} in ${src.next.in.kind}, which isn't a kind ${here}`, s.line);
         needFacet(src.next.in.facet, s.line, "numbers by");
-      } else if (!("literal" in src) && !("now" in src) && !("caller" in src) && !("none" in src)) refOk(src, s.line);
+      } else if (!("literal" in src) && !("now" in src) && !("caller" in src) && !("none" in src) && !("owner" in src) && !("run" in src)) refOk(src, s.line);
     };
     for (const f of a.finds) {
       if (found.has(f.name)) throw new CrubalError(`${where} finds ${f.name} twice`, f.line);
@@ -425,6 +441,17 @@ export function checkActList(acts: Act[], env: ActEnv): void {
       if (sets.has(s.facet)) throw new CrubalError(`${where} sets ${s.facet} twice`, s.line);
       sets.add(s.facet);
       sourceOk(s, "sets");
+    }
+    if (a.tells) {
+      const t = a.tells;
+      if (!env.kinds.has(t.kind) && !env.levels.has(t.kind) && strict) throw new CrubalError(`${where} tells ${t.kind}, which isn't a kind ${here}`, t.line);
+      if (env.aspects && !env.aspects.has(t.aspect) && strict) throw new CrubalError(`${where} tells ${t.kind} as ${t.aspect}, an aspect no kind declares under follow ${here}`, t.line);
+      const set = new Set<string>();
+      for (const s of t.sets) {
+        if (set.has(s.facet)) throw new CrubalError(`${where} tells ${t.kind} and sets ${s.facet} twice`, s.line);
+        set.add(s.facet);
+        sourceOk(s, "tells with");
+      }
     }
     for (const t of a.thens) {
       for (const term of [t.when.left, t.when.right]) {
@@ -462,6 +489,10 @@ export type ActInput = {
   now: string;
   /** The person running the act (revision 29): what `link caller` links to. */
   caller?: string;
+  /** The owner the act lands at (revision 31): what a told post's `owner` source carries. */
+  owner?: string;
+  /** The act run's id (revision 31): what a told post's `run` source carries. */
+  run?: string;
 };
 
 export type ActWrites =
@@ -577,8 +608,16 @@ const sourceValue = (s: ActSet, i: ActInput): { ok: true; value: Json | undefine
     if (!i.caller) return { ok: false, why: `no caller to link ${s.facet} to` };
     return { ok: true, value: { $link: i.caller } };
   }
+  if ("owner" in src) {
+    if (!i.owner) return { ok: false, why: `no owner to set ${s.facet} to` };
+    return { ok: true, value: i.owner };
+  }
+  if ("run" in src) {
+    if (!i.run) return { ok: false, why: `no act run to set ${s.facet} to` };
+    return { ok: true, value: i.run };
+  }
   if ("link" in src) {
-    const id = i.found[src.link]?.[0]?.id ?? i.context[src.link]?.id;
+    const id = src.link === "record" ? i.record.id : (i.found[src.link]?.[0]?.id ?? i.context[src.link]?.id);
     if (!id) return { ok: false, why: `nothing to link ${s.facet} to: ${src.link}` };
     return { ok: true, value: { $link: id } };
   }
@@ -601,6 +640,20 @@ export function mintValuesOf(f: ActFind, i: ActInput): { ok: true; kind: string;
     if (v.value !== undefined && v.value !== "") values[bare(s.facet)] = v.value;
   }
   return { ok: true, kind: f.mint.kind, values };
+}
+
+/** The post an act tells when it lands followed (15.1, revision 31): the kind, the aspect and the values, given the
+ * owner and the act run's id. The app asks `followersOn` first; with no follower on the record or its ancestors,
+ * nothing is made. Pure. */
+export function tellsValuesOf(a: Act, i: ActInput): { ok: true; kind: string; aspect: string; values: JsonObject } | { ok: false; why: string } {
+  if (!a.tells) return { ok: false, why: `${a.name} tells nothing` };
+  const values: JsonObject = {};
+  for (const s of a.tells.sets) {
+    const v = sourceValue(s, i);
+    if (!v.ok) return v;
+    if (v.value !== undefined && v.value !== "") values[bare(s.facet)] = v.value;
+  }
+  return { ok: true, kind: a.tells.kind, aspect: a.tells.aspect, values };
 }
 
 /** The writes an act makes when it lands (15): pure, given what the finds answered or minted. A `first` find
@@ -659,7 +712,7 @@ const q = (s: string) => (/[\s,:]|^$/.test(s) ? JSON.stringify(s) : s);
 
 const pickJson = (p: ActPick): JsonObject => ({ facet: p.facet, value: "literal" in p.value ? { literal: p.value.literal } : refJson(p.value) });
 const sourceJson = (s: ActSource): JsonObject =>
-  "literal" in s ? { literal: s.literal } : "link" in s ? { link: s.link } : "now" in s ? { now: true } : "caller" in s ? { caller: true } : "none" in s ? { none: true } : "next" in s ? { next: { prefix: refJson(s.next.prefix), in: { kind: s.next.in.kind, facet: s.next.in.facet }, ...(s.next.suffix ? { suffix: refJson(s.next.suffix) } : {}) } } : refJson(s);
+  "literal" in s ? { literal: s.literal } : "link" in s ? { link: s.link } : "now" in s ? { now: true } : "caller" in s ? { caller: true } : "none" in s ? { none: true } : "owner" in s ? { owner: true } : "run" in s ? { run: true } : "next" in s ? { next: { prefix: refJson(s.next.prefix), in: { kind: s.next.in.kind, facet: s.next.in.facet }, ...(s.next.suffix ? { suffix: refJson(s.next.suffix) } : {}) } } : refJson(s);
 const setJson = (s: ActSet): JsonObject => ({ facet: s.facet, source: sourceJson(s.source) });
 
 export function actJson(a: Act): JsonObject {
@@ -702,6 +755,7 @@ export function actJson(a: Act): JsonObject {
     ),
     ...(a.send ? { send: { verb: a.send.verb, words: a.send.words } } : {}),
     lands: a.lands,
+    ...(a.tells ? { tells: { kind: a.tells.kind, aspect: a.tells.aspect, sets: a.tells.sets.map(setJson) } } : {}),
   };
 }
 
@@ -725,6 +779,8 @@ const sourceText = (src: JsonObject): string => {
   if (src.now === true) return "now";
   if (src.caller === true) return "link caller";
   if (src.none === true) return "none";
+  if (src.owner === true) return "owner";
+  if (src.run === true) return "run";
   if (src.next && typeof src.next === "object") {
     const n = src.next as JsonObject;
     const into = n.in as JsonObject;
@@ -800,5 +856,10 @@ export function actText(a: JsonObject): string[] {
     out.push(`  send: ${s.verb}${s.words ? ` ${s.words}` : ""}`);
   }
   if (a.lands === "reports") out.push("  lands: when the send reports");
+  if (a.tells && typeof a.tells === "object") {
+    const t = a.tells as JsonObject;
+    out.push(`  tells: ${t.kind} as ${t.aspect}`);
+    for (const s of (t.sets as JsonObject[] | undefined) ?? []) out.push(`    ${s.facet} -> ${sourceText(s.source as JsonObject)}`);
+  }
   return out;
 }

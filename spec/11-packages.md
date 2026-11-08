@@ -103,6 +103,9 @@ kind: item
   match:
     product: gtin; title + format + releaseDate
   archive: independent
+  follow:
+    product: units, details, posts
+    unit: price, sold, posts
 ```
 
 | Setting | Holds |
@@ -115,6 +118,7 @@ kind: item
 | `identify` | per level, the **strong** keys: a value held by one record names that record, so an arrival carrying it is bound there (chapter 9.2a). Each MUST also be `unique` within the level |
 | `match` | per level, the **weak** keys, separated by `;`: an arrival sharing one is probably the same record and goes to review, never bound by itself. `a + b` means all of them together. A key that real data reuses (a recycled barcode) belongs here, not in `identify` |
 | `archive` | what archiving a record does to the records below it: `cascade of`, `cascade within` or `cascade both` (they are archived too, with reason `parent archived`, along that link) or `independent` (the default) (chapter 1.12) |
+| `follow` | revision 31: per level, the **aspects** a follower of a record at that level may choose, lower-case words, the first the default: what a short press on Follow takes, what a long press offers (14.10). An act answers an aspect through its `tells:` (15.1). A level without a line is followed whole. A line naming a level the kind lacks, no aspect, an aspect twice or a word in another case is refused |
 
 Classes add vary steps for their wearers with level prefixes (chapter 5.3.3). A package that `extends`
 another MAY add levels' vary steps to that package's kinds; it MUST NOT remove any.

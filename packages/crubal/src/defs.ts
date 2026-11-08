@@ -105,7 +105,7 @@ export type ClassDef = {
 };
 
 /** A kind as declared (11.2), beyond what the engine indexes by level. */
-export type KindDef = { name: string; line: number; levels: string[]; base?: string; schema?: string | { [level: string]: string }; follows?: { [facet: string]: string } };
+export type KindDef = { name: string; line: number; levels: string[]; base?: string; schema?: string | { [level: string]: string }; follows?: { [facet: string]: string }; /** Revision 31: per level, the aspects a follower may choose, the first the default (11.2). */ follow?: { [level: string]: string[] }; followLine?: number };
 
 export type Dictionary = {
   facets: Map<string, Facet>;
@@ -661,6 +661,21 @@ export function readDefinitions(source: string, into: Dictionary = emptyDictiona
         if (schema) def.schema = schema.children.length ? Object.fromEntries(schema.children.filter((c) => c.key).map((c) => [c.key as string, c.value.trim()])) : schema.value.trim();
         const follows = node.children.find((c) => c.key === "follows");
         if (follows) def.follows = Object.fromEntries(follows.children.filter((c) => c.key).map((c) => [c.key as string, c.value.trim()]));
+        // Revision 31: `follow:`, per level the aspects a follower may choose, lower-case words, the first the default.
+        const follow = node.children.find((c) => c.key === "follow");
+        if (follow) {
+          def.follow = {};
+          def.followLine = follow.line;
+          for (const l of follow.children) {
+            if (!l.key) continue;
+            if (!names.includes(l.key)) throw new CrubalError(`follow names ${l.key}, which isn't a level of ${kind}`, l.line);
+            const aspects = splitTop(l.value, ",", l.line).filter(Boolean);
+            if (!aspects.length) throw new CrubalError(`follow at ${l.key} names no aspect`, l.line);
+            for (const a of aspects) if (!/^[a-z][\w-]*$/.test(a)) throw new CrubalError(`follow at ${l.key}: an aspect is a lower-case word, not ${a}`, l.line);
+            if (new Set(aspects).size !== aspects.length) throw new CrubalError(`follow at ${l.key} names an aspect twice`, l.line);
+            def.follow[l.key] = aspects;
+          }
+        }
         into.kinds.set(kind, def);
         const vary = node.children.find((c) => c.key === "vary");
         for (const step of vary?.children ?? []) {

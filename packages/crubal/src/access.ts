@@ -497,3 +497,13 @@ export function checkPermissions(perms: Permissions, dict: Dictionary, contracts
   }
   for (const p of perms.presets.values()) for (const i of p.items) if (!perms.menu.has(i)) throw new CrubalError(`${p.name}: ${i} isn't a menu item`, p.line);
 }
+
+/**
+ * The live edges of a relation that stand on any of the records named (14.10, revision 31): what an act's
+ * `tells:` asks before it lands a post. The record in hand and its ancestors are the ids; an edge past its
+ * `until` doesn't count. Pure.
+ */
+export function followersOn(edges: Edge[], ids: string[], now?: string, relation = "follower"): Edge[] {
+  const set = new Set(ids);
+  return edges.filter((e) => e.relation === relation && set.has(e.on) && (!e.until || !now || e.until > now));
+}

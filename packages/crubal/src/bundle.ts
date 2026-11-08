@@ -47,6 +47,7 @@ export function kindJson(dict: Dictionary, k: KindDef): JsonObject {
   }
   if (Object.keys(vary).length) o.vary = vary;
   if (k.follows) o.follows = { ...k.follows };
+  if (k.follow) o.follow = Object.fromEntries(Object.entries(k.follow).map(([l, a]) => [l, [...a]]));
   const identify: JsonObject = {};
   const match: JsonObject = {};
   for (const level of k.levels) {
@@ -467,6 +468,7 @@ function kindText(k: JsonObject): string[] {
   else if (isObj(k.schema)) out.push("  schema:", ...Object.entries(k.schema).map(([l, t]) => `    ${l}: ${t}`));
   for (const block of ["vary", "identify"]) if (isObj(k[block])) out.push(`  ${block}:`, ...Object.entries(k[block] as JsonObject).map(([l, keys]) => `    ${l}: ${(keys as string[]).join(", ")}`));
   if (isObj(k.follows)) out.push("  follows:", ...Object.entries(k.follows).map(([a, b]) => `    ${a}: ${b}`));
+  if (isObj(k.follow)) out.push("  follow:", ...Object.entries(k.follow as JsonObject).map(([l, aspects]) => `    ${l}: ${(aspects as string[]).join(", ")}`));
   if (isObj(k.match)) out.push("  match:", ...Object.entries(k.match).map(([l, groups]) => `    ${l}: ${(groups as string[][]).map((g) => g.join(" + ")).join("; ")}`));
   out.push(...kv("  ", "archive", k.archive));
   return out;

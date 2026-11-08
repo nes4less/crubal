@@ -707,6 +707,7 @@ function checkActs(source: string, pkgs: PackageInfo[]): void {
       kinds: new Set(dict.kinds.keys()),
       facets: new Set(dict.facets.keys()),
       facetOf: (k) => dict.facets.get(k),
+      aspects: aspectsOf(dict),
       strict: p.extends.length === 0,
       here: "of this package",
     });
@@ -721,7 +722,11 @@ export function checkActsInForce(p: { info: Pick<PackageInfo, "acts" | "utilitie
     kinds: new Set(p.dict.kinds.keys()),
     facets: new Set(p.dict.facets.keys()),
     facetOf: (k) => p.dict.facets.get(k),
+    aspects: aspectsOf(p.dict),
     strict: true,
     here: "in force here",
   });
 }
+
+/** Every aspect the kinds declare under `follow:` (11.2, revision 31), which an act's `tells:` may name. */
+const aspectsOf = (dict: Dictionary): Set<string> => new Set([...dict.kinds.values()].flatMap((k) => Object.values(k.follow ?? {}).flat()));
