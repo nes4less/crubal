@@ -627,7 +627,7 @@ width and vertical ones (and a text's size) of its height:
 | a rectangle | `rect x y w h [fill white\|black\|none] [stroke dots]` |
 | a Code 128 barcode | `barcode x y w h <field> [rotate cw\|ccw] [text]`: the field's value in the bars; `text` prints it under them |
 | a QR code | `qr x y w h <field> [gravity bottom-right\|top-left]`: the field's value encoded; centred unless a gravity is said |
-| a line of text | `text x y size <field \| "words">` then any of `anchor start\|middle\|end`, `weight bold`, `clip x y w h`, `rotate cw\|ccw\|180`: `x y` the anchor's point, `size` the font's height; a quoted literal may hold `{field}` places |
+| a line of text | `text x y size <field \| "words">` then any of `anchor start\|middle\|end`, `weight bold`, `clip x y w h`, `rotate cw\|ccw\|180`, `lines n` (revision 27): `x y` the anchor's point, `size` the font's height; a quoted literal may hold `{field}` places; with `lines`, from 2 to 9, the words wrap into that many lines of the font's height stacked down from `y`, within the clip's width when there is one, the last line cut with an ellipsis |
 
 A package MUST be refused at publish when a print says no `for:`, names a `for:` that is neither a class nor a
 kind, names no inches or inches that are not two numbers above zero, declares a field whose source is not a

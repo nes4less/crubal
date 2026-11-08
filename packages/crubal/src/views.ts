@@ -42,7 +42,7 @@ export type PrintElement =
   | { type: "rect"; box: PrintBox; fill: "white" | "black" | "none"; stroke?: number; line: number }
   | { type: "barcode"; box: PrintBox; field: string; rotate?: "cw" | "ccw"; text?: boolean; line: number }
   | { type: "qr"; box: PrintBox; field: string; gravity?: "bottom-right" | "top-left"; line: number }
-  | { type: "text"; x: number; y: number; size: number; source: PrintSource; anchor?: "start" | "middle" | "end"; weight?: "bold"; clip?: PrintBox; rotate?: "cw" | "ccw" | "180"; line: number };
+  | { type: "text"; x: number; y: number; size: number; source: PrintSource; anchor?: "start" | "middle" | "end"; weight?: "bold"; clip?: PrintBox; rotate?: "cw" | "ccw" | "180"; /** Revision 27: the words wrap into this many lines, 2 to 9. */ lines?: number; line: number };
 /** A print's field: the slot its elements name, and what fills it: a facet, `id`, or a brand slot `place:…`. */
 export type PrintField = { slot: string; from: string; line: number };
 /**
@@ -185,7 +185,10 @@ function readPrintElement(text: string, line: number): PrintElement {
     const rotate = one(o, "rotate", ["cw", "ccw", "180"]);
     const clipT = o.get("clip");
     const clip = clipT ? printBox(clipT, 0, "the text's clip", line) : undefined;
-    return { type, x: fraction(t[1], "the text's x", line), y: fraction(t[2], "the text's y", line), size: fraction(t[3], "the text's size", line), source, ...(anchor ? { anchor: anchor as "start" | "middle" | "end" } : {}), ...(weight ? { weight: "bold" as const } : {}), ...(clip ? { clip } : {}), ...(rotate ? { rotate: rotate as "cw" | "ccw" | "180" } : {}), line };
+    const linesT = o.get("lines")?.[0];
+    const lines = linesT === undefined ? undefined : Number(linesT);
+    if (lines !== undefined && !(Number.isInteger(lines) && lines >= 2 && lines <= 9)) throw new CrubalError(`lines is a count from 2 to 9, not ${linesT}`, line);
+    return { type, x: fraction(t[1], "the text's x", line), y: fraction(t[2], "the text's y", line), size: fraction(t[3], "the text's size", line), source, ...(anchor ? { anchor: anchor as "start" | "middle" | "end" } : {}), ...(weight ? { weight: "bold" as const } : {}), ...(clip ? { clip } : {}), ...(rotate ? { rotate: rotate as "cw" | "ccw" | "180" } : {}), ...(lines !== undefined ? { lines } : {}), line };
   }
   throw new CrubalError(`an element is a rect, a barcode, a qr or a text, not ${type ?? "nothing"}`, line);
 }

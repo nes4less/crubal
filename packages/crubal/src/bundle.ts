@@ -215,7 +215,7 @@ export function printJson(p: Print): JsonObject {
       if (e.type === "rect") return { type: "rect", box: box(e.box), fill: e.fill, ...(e.stroke !== undefined ? { stroke: e.stroke } : {}) };
       if (e.type === "barcode") return { type: "barcode", box: box(e.box), field: e.field, ...(e.rotate ? { rotate: e.rotate } : {}), ...(e.text ? { text: true } : {}) };
       if (e.type === "qr") return { type: "qr", box: box(e.box), field: e.field, ...(e.gravity ? { gravity: e.gravity } : {}) };
-      return { type: "text", x: e.x, y: e.y, size: e.size, ...("field" in e.source ? { field: e.source.field } : { literal: e.source.literal }), ...(e.anchor ? { anchor: e.anchor } : {}), ...(e.weight ? { weight: e.weight } : {}), ...(e.clip ? { clip: box(e.clip) } : {}), ...(e.rotate ? { rotate: e.rotate } : {}) };
+      return { type: "text", x: e.x, y: e.y, size: e.size, ...("field" in e.source ? { field: e.source.field } : { literal: e.source.literal }), ...(e.anchor ? { anchor: e.anchor } : {}), ...(e.weight ? { weight: e.weight } : {}), ...(e.clip ? { clip: box(e.clip) } : {}), ...(e.rotate ? { rotate: e.rotate } : {}), ...(e.lines ? { lines: e.lines } : {}) };
     }),
   };
 }
@@ -551,7 +551,7 @@ const printText = (p: JsonObject): string[] => {
     if (e.type === "rect") return `rect ${b(e.box)} fill ${String(e.fill ?? "white")}${e.stroke !== undefined ? ` stroke ${String(e.stroke)}` : ""}`;
     if (e.type === "barcode") return `barcode ${b(e.box)} ${String(e.field)}${e.rotate ? ` rotate ${String(e.rotate)}` : ""}${e.text === true ? " text" : ""}`;
     if (e.type === "qr") return `qr ${b(e.box)} ${String(e.field)}${e.gravity ? ` gravity ${String(e.gravity)}` : ""}`;
-    return `text ${String(e.x)} ${String(e.y)} ${String(e.size)} ${typeof e.literal === "string" ? JSON.stringify(e.literal) : String(e.field)}${e.anchor ? ` anchor ${String(e.anchor)}` : ""}${e.weight ? ` weight ${String(e.weight)}` : ""}${isObj(e.clip) ? ` clip ${b(e.clip)}` : ""}${e.rotate ? ` rotate ${String(e.rotate)}` : ""}`;
+    return `text ${String(e.x)} ${String(e.y)} ${String(e.size)} ${typeof e.literal === "string" ? JSON.stringify(e.literal) : String(e.field)}${e.anchor ? ` anchor ${String(e.anchor)}` : ""}${e.weight ? ` weight ${String(e.weight)}` : ""}${isObj(e.clip) ? ` clip ${b(e.clip)}` : ""}${e.rotate ? ` rotate ${String(e.rotate)}` : ""}${typeof e.lines === "number" ? ` lines ${String(e.lines)}` : ""}`;
   };
   const inches = isObj(p.inches) ? p.inches : {};
   return [
