@@ -138,7 +138,16 @@ async function writeBuilt(client: Client, owner: string, key: string, parsed: Pa
 export function latestInstalls<T extends { [column: string]: unknown }>(installed: T[]): T[] {
   const last = new Map<string, number>();
   installed.forEach((r, i) => last.set(String((r.json as JsonObject).package), i));
-  return installed.filter((r, i) => last.get(String((r.json as JsonObject).package)) === i);
+  // A package whose last write is a leaving (11.4, revision 30) is not in force.
+  return installed.filter((r, i) => last.get(String((r.json as JsonObject).package)) === i && (r.json as JsonObject).left !== true);
+}
+
+/** The install log without the packages that left (11.4, revision 30): every write of a package whose last write
+ * is a leaving is dropped, so a reader of what is in force sees it gone; the raw log is `installLog()`. Pure. */
+export function installsInForce(installed: JsonObject[]): JsonObject[] {
+  const last = new Map<string, JsonObject>();
+  for (const i of installed) last.set(String(i.package), i);
+  return installed.filter((i) => last.get(String(i.package))?.left !== true && i.left !== true);
 }
 
 /** Forget this process's parsed copies (a test standing in for a new instance). */

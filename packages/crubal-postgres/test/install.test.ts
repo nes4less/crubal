@@ -470,3 +470,42 @@ test("a deferred restamp lands on the record as the commit finds it: another han
   }
 });
 
+const TOWER = `package: tower /2026-10-01
+  owner: lab.example
+  label: Tower
+  crubal: 2
+  extends: thing /2026-10-01
+
+class: Tagged
+  for: thing
+  facets:
+    size
+`;
+
+test("a package leaves (11.4, revision 30): refused while another extends it or a record holds a value under its own key; a valueless one leaves and is no longer in force; the log keeps the leaving; it installs again", { skip: !url }, async () => {
+  const store = new PgStore(pool, "leave.example", { allowUnsigned: true });
+  const v1 = publish(text("2026-10-01", "S|M|L"), { date: "2026-10-01" }).bundle;
+  await store.install(v1, undefined, "2026-10-18T00:00:00Z");
+  await store.install(publish(TOWER, { date: "2026-10-01" }).bundle, undefined, "2026-10-18T00:00:01Z");
+  await store.commit(
+    { person: "leave.example" },
+    (d) => {
+      d.records.set("T-1", { id: "T-1", kind: "thing", level: "thing", owner: "leave.example", values: { size: "S" }, sources: { "*": { origin: "declared", via: "L-1" } } });
+    },
+    "2026-10-18T00:00:02Z",
+  );
+  await assert.rejects(store.leave("lab.example/thing", "2026-10-18T00:00:03Z"), /lab.example\/tower extends it/);
+  // The tower declares no key of its own: it leaves with nothing to do, and is no longer in force.
+  const left = await store.leave("lab.example/tower", "2026-10-18T00:00:04Z");
+  assert.ok(left.log);
+  assert.ok(!(await store.installed()).some((i) => i.package === "lab.example/tower"), "not in force");
+  const log = await store.installLog();
+  assert.deepEqual(log.at(-1), { package: "lab.example/tower", version: "2026-10-01", left: true });
+  assert.ok(!(await store.definitions(true)).dict.classes.has("Tagged"), "its class is gone from the set in force");
+  // The thing holds a value under its own key: it stays until the key is handed or cut.
+  await assert.rejects(store.leave("lab.example/thing", "2026-10-18T00:00:05Z"), /1 record holds values under size; hand or cut them first/);
+  // Installing the tower again is an install like any other.
+  await store.install(publish(TOWER, { date: "2026-10-01" }).bundle, undefined, "2026-10-18T00:00:06Z");
+  assert.ok((await store.installed()).some((i) => i.package === "lab.example/tower"), "in force again");
+  assert.ok((await store.definitions(true)).dict.classes.has("Tagged"));
+});

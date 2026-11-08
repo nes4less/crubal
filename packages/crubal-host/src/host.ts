@@ -720,6 +720,12 @@ export class Host {
     return { installed: String(bundle.id), version: String(bundle.version), entry: String(entry.log), ...(pending ? { restamp: "pending" } : {}) };
   }
 
+  /** A package leaves an owner (11.4, revision 30): the store refuses while anything in force stands on it. */
+  async leave(owner: string, pkg: string): Promise<JsonObject> {
+    const entry = await (await this.storeFor(owner)).leave(pkg, this.now());
+    return { left: pkg, entry: String(entry.log) };
+  }
+
   /** The restamps an owner has not finished (0.3.11): installs whose records are still being walked. */
   async pendingRestamps(owner: string): Promise<{ package: string; version: string; from: string; afterOrd: number; restamped: number; review: number; started?: string }[]> {
     return (await this.storeFor(owner)).pendingRestamps();

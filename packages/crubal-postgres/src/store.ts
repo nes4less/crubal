@@ -29,7 +29,7 @@ import { isObj, loadState, persist, wipeState, recordOf } from "./state.ts";
 import { type Facet, type Parsed, readBundle, readBundleOnto, verifyBundle } from "@cruba/crubal";
 import { classify } from "@cruba/crubal";
 import { dryRun, restamp, type StepStats } from "@cruba/crubal";
-import { checkAll, definitionsOf, unitsExtensionOf, workingBundle } from "./definitions.ts";
+import { installsInForce, checkAll, definitionsOf, unitsExtensionOf, workingBundle } from "./definitions.ts";
 import { decideReview, type Decision, openItems } from "@cruba/crubal";
 import { land, receive, type IntakeOutcome } from "@cruba/crubal";
 import { entriesSince, markStale, type Projecting, publish } from "./projector.ts";
@@ -1079,10 +1079,57 @@ export class PgStore {
     return (rows as { json: Edge }[]).map((r) => r.json);
   }
 
-  /** The install log: every version taken, in order. */
+  /** The install log as what is in force: every version taken, in order, less the packages that left (11.4). */
   async installed(): Promise<JsonObject[]> {
+    return installsInForce(await this.installLog());
+  }
+
+  /** The install log whole: every version taken and every leaving, in order. */
+  async installLog(): Promise<JsonObject[]> {
     const { rows } = await this.pool.query("select json from installed where owner = $1 order by ord", [this.owner]);
     return (rows as { json: JsonObject }[]).map((r) => r.json);
+  }
+
+  /**
+   * A package leaves (11.4, revision 30): refused while a package in force extends it, a utility in force needs it
+   * (its own excepted), or a record holds a value under a key it alone declares; else the log takes an install
+   * write with `left`, and the set in force is read without it.
+   */
+  async leave(pkg: string, at?: string): Promise<Entry> {
+    const inForce = await this.installed();
+    const mine = inForce.filter((i) => i.package === pkg);
+    if (!mine.length) throw new Error(`${pkg} isn't in force here`);
+    const version = String(mine.at(-1)?.version);
+    const others = [...new Map(inForce.filter((i) => i.package !== pkg).map((i) => [String(i.package), String(i.version)])).entries()];
+    const bundleOf = async (p: string, v: string): Promise<JsonObject | undefined> =>
+      ((await this.pool.query("select json from bundles where owner = $1 and package = $2 and version = $3", [this.owner, p, v])).rows[0] as { json: JsonObject } | undefined)?.json;
+    const own = await bundleOf(pkg, version);
+    if (!own) throw new Error(`${pkg} /${version} is installed but its bundle is missing`);
+    const theirFacets = new Set<string>();
+    for (const [p, v] of others) {
+      const b = await bundleOf(p, v);
+      if (!b) continue;
+      for (const e of (b.extends as JsonObject[] | undefined) ?? []) {
+        const dep = String(e.package).includes("/") ? String(e.package) : `${b.owner}/${e.package}`;
+        if (dep === pkg) throw new Error(`${pkg} can't leave: ${b.id} extends it; it leaves first`);
+      }
+      for (const k of readBundle(b).dict.facets.keys()) theirFacets.add(k);
+    }
+    const parsedOwn = readBundle(own);
+    const ownUtilities = new Set(parsedOwn.info.utilities.map((u) => u.name));
+    const defs = await this.definitions(true);
+    const needing = defs.info.utilities.filter((u) => !ownUtilities.has(u.name) && u.needs.some((n) => n.name === pkg)).map((u) => u.name);
+    if (needing.length) throw new Error(`${pkg} can't leave: ${needing.join(", ")} need${needing.length === 1 ? "s" : ""} it; switch ${needing.length === 1 ? "it" : "them"} off first`);
+    // The package's own keys: not the standard's (`crubal:`), not another package's in force.
+    const ownKeys = [...parsedOwn.dict.facets.keys()].filter((k) => !k.startsWith("crubal:") && !theirFacets.has(k));
+    if (ownKeys.length) {
+      const { rows } = await this.pool.query("select count(*)::int as n from records where owner = $1 and doc -> 'values' ?| $2::text[]", [this.owner, ownKeys]);
+      const n = Number((rows[0] as { n: number } | undefined)?.n ?? 0);
+      if (n > 0) throw new Error(`${pkg} can't leave: ${n} record${n === 1 ? " holds" : "s hold"} values under ${ownKeys.join(", ")}; hand or cut them first (10.3)`);
+    }
+    const r = await this.commitFrom(() => ({ by: { person: "owner" }, extra: [{ install: { package: pkg, version, left: true } }], out: null }), at);
+    if (!r.entry) throw new Error(`${pkg}: the leaving wrote no entry`);
+    return r.entry;
   }
 
   /** The record a binding (`contract|ref`) names, if any. */
