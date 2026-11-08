@@ -262,6 +262,7 @@ print: tag
     barcode 0.06 0.02 0.88 0.68 code text
     text 0.5 0.95 0.067 "{code} | {title}" anchor middle weight bold clip 0.04 0.86 0.92 0.12
     text 0.98 0.08 0.05 shop anchor end rotate cw
+    text 0.5 0.3 0.09 title anchor middle clip 0.3 0.01 0.7 0.5 lines 2
 print: square
   for: item
   inches: 2 2
@@ -279,7 +280,7 @@ test("a print is read: what it prints, its inches, its fields and its elements, 
   assert.deepEqual(p.inches, { w: 2.5, h: 1 });
   assert.equal(p.stretch, false);
   assert.deepEqual(p.fields.map((f) => [f.slot, f.from]), [["code", "cashierfuId"], ["title", "title"], ["shop", "place:name"]]);
-  assert.equal(p.elements.length, 4);
+  assert.equal(p.elements.length, 5);
   const [rect, bars, line, side] = p.elements;
   assert.deepEqual(rect, { type: "rect", box: { x: 0, y: 0, w: 1, h: 1 }, fill: "white", line: rect?.line });
   assert.equal(bars?.type, "barcode");
@@ -367,4 +368,13 @@ test("revision 11: a linked partition names a link facet; the row carries whom i
   assert.ok(access.standsIn("person:P-2", "N-2", "linked to"));
   assert.ok(!access.standsIn("person:P-2", "N-1", "linked to"));
   assert.ok(!access.standsIn("person:P-2", "N-3", "linked to"));
+});
+
+
+test("revision 27: a text's lines, 2 to 9, wraps the words; one line, or ten, is refused", () => {
+  const p = readViews(printSrc).prints.get("tag");
+  const wrapped = p?.elements.find((e) => e.type === "text" && e.lines);
+  assert.equal(wrapped && wrapped.type === "text" ? wrapped.lines : undefined, 2);
+  assert.throws(() => readViews(printSrc.replace("lines 2", "lines 1")), /lines is a count from 2 to 9, not 1/);
+  assert.throws(() => readViews(printSrc.replace("lines 2", "lines ten")), /lines is a count from 2 to 9, not ten/);
 });

@@ -267,6 +267,7 @@ print: tag
     barcode 0.06 0.02 0.88 0.68 code text
     text 0.5 0.95 0.067 "{code} | {title}" anchor middle weight bold clip 0.04 0.86 0.92 0.12
     qr 0.8 0.1 0.15 0.15 id gravity bottom-right
+    text 0.5 0.3 0.09 title anchor middle clip 0.3 0.01 0.7 0.5 lines 2
 print: square
   for: item
   inches: 2 2
