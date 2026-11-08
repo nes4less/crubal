@@ -738,6 +738,7 @@ export function checkActsInForce(p: { info: Pick<PackageInfo, "acts" | "utilitie
     facets: new Set(p.dict.facets.keys()),
     facetOf: (k) => p.dict.facets.get(k),
     aspects: aspectsOf(p.dict),
+    inertTelling: true,
     strict: true,
     here: "in force here",
   });

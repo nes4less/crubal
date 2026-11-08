@@ -109,7 +109,9 @@ or mints a kind the package lacks; counts under a name a find, route or count al
 column the compound's); names a find, route, count or context it did not declare; sets one facet twice; finds one name
 twice; mints a find that takes `all`; lands when the send reports and sends nothing; or, revision 31, tells a kind the
 package lacks, tells as an aspect no kind declares under `follow:`, tells with no set lines, or tells and sets one
-facet twice. As a flow's (12.11), a
+facet twice. In force (11.4, at install) the aspect is the exception: a telling whose aspect no kind in force
+declares is **inert**, never a refusal, since nobody can follow by an aspect nobody declares and the kind that
+declares it may land on a later install; the other checks refuse as the publish would have. As a flow's (12.11), a
 package that extends others may name their utilities, kinds and facets: what the file-local check cannot see it
 leaves to the check of the packages in force together (11.4, at install), which refuses as the publish would have.
 
