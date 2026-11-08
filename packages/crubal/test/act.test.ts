@@ -29,7 +29,6 @@ kind: location
   base: Location
 title$
 condition$
-of&product
 filedIn&container
 filedBox$
 filedSlot$
@@ -64,7 +63,6 @@ class: Item
   facets:
     !title
     condition
-    of
     filedIn
     filedBox
     filedSlot
@@ -299,8 +297,8 @@ test("the row a route takes: the rack in order, the rule over the unit's values 
   ];
   const station: ActRecord = { id: "T-1", values: { stationLocation: { $link: "K-1" }, slots } };
   const product: ActRecord = { id: "P-1", values: { title: "A thing", condition: "used" } };
-  const unitNew: ActRecord = { id: "U-1", values: { of: { $link: "P-1" }, condition: "new" } };
-  const unitPlain: ActRecord = { id: "U-2", values: { of: { $link: "P-1" } } };
+  const unitNew: ActRecord = { id: "U-1", of: "P-1", values: { condition: "new" } };
+  const unitPlain: ActRecord = { id: "U-2", of: "P-1", values: {} };
   const base = { context: { station }, linked: { of: product }, now: "2026-11-09T10:00:00Z" };
   const r1 = routeOf(a.route, { ...base, record: unitNew });
   assert.deepEqual(r1.ok && [r1.index, r1.row.slotName, r1.why], [0, "New", 'row 1 took it: condition is "new"']);
@@ -311,7 +309,7 @@ test("the row a route takes: the rack in order, the rule over the unit's values 
   const r3 = routeOf(a.route, { ...base, record: unitNew }, [1, 0]);
   assert.deepEqual(r3.ok && r3.index, 1);
   assert.deepEqual(routeCountPicksOf(a.route, { ...base, record: unitNew }, slots[0] as JsonObject), [
-    { facet: "of", value: { $link: "P-1" } },
+    { facet: "of", value: "P-1" },
     { facet: "filedSlot", value: "New" },
     { facet: "filedIn.containerStation", value: "T-1" },
   ]);
@@ -326,7 +324,7 @@ test("the values a mint makes: the series' next label, the links, the row's colu
   assert.ok(a);
   const station: ActRecord = { id: "T-1", values: { stationLocation: { $link: "K-1" } } };
   const row: JsonObject = { slotName: "New", slotRule: 'condition is "new"', boxPrefix: "NEW", boxSuffix: "Sealed", boxCapacity: 2 };
-  const unit: ActRecord = { id: "U-1", values: { of: { $link: "P-1" } } };
+  const unit: ActRecord = { id: "U-1", of: "P-1", values: {} };
   const i = { record: unit, context: { station }, route: { index: 0, row }, found: {}, labels: { "container.containerLabel": ["NEW 001", "NEW 007 Sealed", "BIN 002"] }, now: "2026-11-09T10:00:00Z" };
   const box = a.finds[0] as NonNullable<(typeof a.finds)[0]>;
   assert.deepEqual(findPicksOf(box, i), [
