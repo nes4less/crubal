@@ -122,3 +122,21 @@ test("a utility serving or narrowing to a name the package doesn't declare is re
   refuses("utility: Orders /2026-10-16\n  serves: owner", /the name a lower-case word/);
   refuses("utility: orders /2026-10-16\n  serves: owner\nutility: orders /2026-10-16\n  serves: owner", /twice in one package/);
 });
+
+// ─── Revision 32: a utility's group, the segment it stands in ─────────────────────────────────────────────────────
+
+test("revision 32: a utility names the group it stands in; it round-trips; empty is refused", () => {
+  const text = `utility: orders /2026-11-13
+  label: Orders
+  group: Platform
+  serves: owner
+`;
+  const [info] = readPackages(shop(text));
+  assert.equal(info?.utilities.find((u) => u.name === "orders")?.group, "Platform");
+  const b = bundleOf(parsePackage(shop(text)));
+  assert.equal((b.utilities as { group?: string }[])[0]?.group, "Platform");
+  assert.match(printBundle(b), /^  group: Platform$/m);
+  assert.equal(serialize(bundleOf(readBundle(b))), serialize(b));
+  assert.throws(() => readPackages(shop(text.replace("group: Platform", "group:"))), /group names the group the utility stands in/);
+});
+

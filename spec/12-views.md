@@ -380,7 +380,7 @@ A display (12.9) is `{"display", "label", "describe", "layout", "slots": [{"from
 {name: value}}` under `displays`, its slots in order and its tokens as the words they were written.
 
 A lane (12.10) is `{"lane", "version", "label", "utility", "view" | "serve", "pick": {"filter",
-"value"}, "done": {"filter", "value"} | "viewed", "band", "house", "serves": [{"as", "items"}], "home":
+"value"}, "done": {"filter", "value"} | "viewed", "group" (revision 32), "band", "house", "serves": [{"as", "items"}], "home":
 {"figure", "word": {"one", "many"} | "…", "press": {"word", "to"}, "chips"}, "card": {"name", "sub",
 "lines", "state", "moment", "figure", "primary", "quiet", "quick": [{"word", "to"}], "opens"}}` under
 `lanes`, `house` as a string like every number.
@@ -397,7 +397,8 @@ A package MUST be refused at publish when:
 5. a role grants anything its audience can't see, or names a target that doesn't exist;
 6. a public view's slots or filters read a facet that `show` rules hide from `public`;
 8. a lane names a view, filter, value, slot, utility or act the package doesn't declare, serves an
-   audience wider than its view shows, opens anything but a page, or names both a view and a serve;
+   audience wider than its view shows, opens anything but a page, names both a view and a serve, or
+   (revision 32) groups by a filter that isn't its view's or groups a lane the app serves;
 9. a flow names a utility it doesn't declare, a stop that is neither a lane nor a form of the package, an
    act its utility lacks, a level its kinds lack, or a done that is not a declared filter with a real value;
    or whose lane stops do not chain, done to pick, or whose done is not its last lane's (12.11, revision 22),
@@ -488,6 +489,7 @@ lane: ordersToPick /2026-11-05
 | `done` | `filter = value` for what is done (the history), or `viewed`: a card is done once the person has viewed it; the mark is the person's own, never the place's |
 | `band` | `daily`, `weekly` or `rarely`: how soon it wants attention; `rarely` unless said |
 | `house` | a whole number, governance first (0) and the doing rows after; 8 unless said |
+| `group` | revision 32: one of the view's filters (12.3), whose buckets group the row's cards: the row draws one heading card per bucket, the bucket's word and its count (the page's tally), the bucket's cards tucked beneath, one bucket open at a time; absent, the cards stand in one run. A lane the app serves has no view to group by |
 | `serves` | whom the row is for, as a utility's `serves` (14.6): presets, relations or audiences, each optionally narrowed to items; never wider than the view's `show` |
 | `home` | the home card: `figure` is `count` (the view's tally under the pick), `sum <slot>` or `state <slot>`; `word` is `one "…" many "…"` or one text; `press` is `Word -> target`; `chips` are the view's filters the home carries |
 | `card` | the object card on the compass: `name`, `sub` and `lines` name slots in order; `state`, `moment` and `figure` name one slot each; `primary`, `quiet` and `quick` are `Word -> target`; `opens` is `page` |

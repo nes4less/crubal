@@ -170,3 +170,43 @@ test("a utility's mark is read, carried through the bundle and back, and refused
   const [plain] = readPackages(shop(toPick).replace("  mark: parcel amber\n", ""));
   assert.equal(plain?.utilities[0]?.mark, undefined);
 });
+
+// ─── Revision 32: a lane's group over one of its view's filters ───────────────────────────────────────────────────
+
+const grouped = `lane: ordersAll /2026-11-13
+  label: Orders
+  utility: orders
+  view: desk
+  group: orderState
+  band: weekly
+  house: 7
+  serves: owner
+  home:
+    figure: count
+    word: one "order." many "orders."
+    press: Open -> page
+  card:
+    name: buyer
+    state: state
+`;
+
+test("revision 32: a lane groups by one of its view's filters; it round-trips; refused on a filter the view lacks or on a lane the app serves", () => {
+  const [info] = readPackages(shop(grouped));
+  assert.equal(info?.lanes.find((l) => l.name === "ordersAll")?.group, "orderState");
+  checkPackages(shop(grouped));
+  const b = bundleOf(parsePackage(shop(grouped)));
+  const lane = (b.lanes as { lane: string; group?: string }[]).find((l) => l.lane === "ordersAll");
+  assert.equal(lane?.group, "orderState");
+  assert.match(printBundle(b), /^  group: orderState$/m);
+  assert.equal(serialize(bundleOf(readBundle(b))), serialize(b));
+  assert.throws(
+    () => checkPackages(shop(grouped.replace("group: orderState", "group: buyer"))),
+    (e: unknown) => e instanceof CrubalError && /groups by buyer, which isn't a filter of desk/.test(e.message),
+  );
+  assert.throws(
+    () => checkPackages(shop(grouped.replace("  view: desk\n", "  serve: tally\n").replace(/  card:\n(?: {4}.*\n)+/, ""))),
+    (e: unknown) => e instanceof CrubalError && /a lane the app serves has no view to group by/.test(e.message),
+  );
+  assert.throws(() => readPackages(shop(grouped.replace("group: orderState", "group: by state"))), /group names one of the view's filters/);
+});
+

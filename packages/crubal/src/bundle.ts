@@ -287,6 +287,7 @@ export function utilityJson(u: Utility): JsonObject {
   const o: JsonObject = { utility: u.name, version: u.version };
   if (u.label) o.label = u.label;
   if (u.describe) o.describe = u.describe;
+  if (u.group) o.group = u.group;
   if (u.serves.length) o.serves = u.serves.map((s) => ({ as: s.as, ...(s.items ? { items: [...s.items] } : {}) }));
   if (u.needs.length) o.needs = u.needs.map((n) => ({ name: n.name, ...(n.version ? { version: n.version } : {}) }));
   if (u.setup.length) o.setup = u.setup.map((s): JsonObject => ("connection" in s ? { connection: s.connection } : { setting: s.setting }));
@@ -320,6 +321,7 @@ export function laneJson(s: Lane): JsonObject {
   if (s.serve) o.serve = s.serve;
   if (s.pick) o.pick = { filter: s.pick.filter, value: s.pick.value };
   if (s.done) o.done = s.done === "viewed" ? "viewed" : { filter: s.done.filter, value: s.done.value };
+  if (s.group) o.group = s.group;
   o.band = s.band;
   o.house = String(s.house);
   if (s.serves.length) o.serves = s.serves.map((x) => ({ as: x.as, ...(x.items ? { items: [...x.items] } : {}) }));
@@ -669,7 +671,7 @@ function laneText(s: JsonObject): string[] {
   const out = [`lane: ${s.lane} /${s.version}`, ...kv("  ", "label", s.label), ...kv("  ", "utility", s.utility), ...kv("  ", "view", s.view), ...kv("  ", "serve", s.serve)];
   if (s.pick !== undefined) out.push(`  pick: ${pickText(s.pick)}`);
   if (s.done !== undefined) out.push(`  done: ${pickText(s.done)}`);
-  out.push(...kv("  ", "band", s.band), ...kv("  ", "house", s.house));
+  out.push(...kv("  ", "group", s.group), ...kv("  ", "band", s.band), ...kv("  ", "house", s.house));
   if (Array.isArray(s.serves)) out.push(`  serves: ${(s.serves as JsonObject[]).map((x) => `${x.as}${Array.isArray(x.items) ? `(${(x.items as string[]).join(", ")})` : ""}`).join(", ")}`);
   if (isObj(s.home)) {
     const h = s.home;
@@ -697,7 +699,7 @@ function laneText(s: JsonObject): string[] {
 }
 
 function utilityText(u: JsonObject): string[] {
-  const out = [`utility: ${u.utility} /${u.version}`, ...kv("  ", "label", u.label), ...kv("  ", "describe", u.describe)];
+  const out = [`utility: ${u.utility} /${u.version}`, ...kv("  ", "label", u.label), ...kv("  ", "describe", u.describe), ...kv("  ", "group", u.group)];
   if (Array.isArray(u.serves)) out.push(`  serves: ${(u.serves as JsonObject[]).map((s) => `${s.as}${Array.isArray(s.items) ? `(${(s.items as string[]).join(", ")})` : ""}`).join(", ")}`);
   if (Array.isArray(u.needs)) out.push(`  needs: ${(u.needs as JsonObject[]).map((n) => `${n.name}${n.version ? ` /${n.version}` : ""}`).join(", ")}`);
   if (Array.isArray(u.setup)) out.push(`  setup: ${(u.setup as JsonObject[]).map((s) => (typeof s.connection === "string" ? `connection ${s.connection}` : `setting ${s.setting}`)).join(", ")}`);
