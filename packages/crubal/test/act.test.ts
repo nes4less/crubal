@@ -184,6 +184,7 @@ test("the writes a landing makes: the links, the copies, the moment, and the the
   assert.deepEqual(w, {
     ok: true,
     record: { filedIn: { $link: "C-7" }, filedBox: "BIN 007", filedAt: "2026-11-08T10:00:00Z" },
+    clear: [],
     then: [{ id: "C-7", values: { containerState: "full" } }],
     sends: [],
   });
@@ -345,6 +346,7 @@ test("the values a mint makes: the series' next label, the links, the row's colu
   assert.deepEqual(w, {
     ok: true,
     record: { filedIn: { $link: "C-9" }, filedBox: "NEW 008 Sealed", filedSlot: "New", filedAt: "2026-11-09T10:00:00Z" },
+    clear: [],
     then: [{ id: "C-9", values: { containerState: "full", filledAt: "2026-11-09T10:00:00Z" } }],
     sends: [{ verb: "notify", words: "containerFull about context.station" }],
   });
@@ -355,4 +357,38 @@ test("the values a mint makes: the series' next label, the links, the row's colu
   assert.deepEqual(w3.ok && w3.then, []);
   // Nothing found and nothing minted stops the act.
   assert.deepEqual(actWrites(a, { ...i, found: {} }), { ok: false, why: "no container for box" });
+});
+
+// ─── Revision 29: the caller as a link, a facet cleared ───────────────────────────────────────────────────────────
+
+const arrive = `act: arrive /2026-11-10
+  utility: bench
+  on: station
+  set:
+    stationOperator -> link caller
+act: leave /2026-11-10
+  utility: bench
+  on: station
+  set:
+    stationOperator -> none
+`;
+
+test("revision 29: a set links the caller or clears the facet; carried, printed back, and written as the caller's link or nothing", () => {
+  const src = bench(file + label + arrive).replace("acts: file, label", "acts: file, label, arrive, leave").replace("stationLocation&location\n", "stationLocation&location\nstationOperator&person\n").replace("    stationLocation\n", "    stationLocation\n    stationOperator\n");
+  const [info] = readPackages(src);
+  const a = info?.acts.find((x) => x.name === "arrive");
+  const l = info?.acts.find((x) => x.name === "leave");
+  assert.deepEqual(a?.sets[0]?.source, { caller: true });
+  assert.deepEqual(l?.sets[0]?.source, { none: true });
+  checkPackages(src);
+  const text = printBundle(bundleOf(parsePackage(src)));
+  assert.match(text, /^    stationOperator -> link caller$/m);
+  assert.match(text, /^    stationOperator -> none$/m);
+  const station = { id: "T-1", values: {} };
+  const came = actWrites(a as NonNullable<typeof a>, { record: station, context: {}, found: {}, now: "x", caller: "person:P-3" });
+  assert.deepEqual(came.ok && came.record, { stationOperator: { $link: "person:P-3" } });
+  const nobody = actWrites(a as NonNullable<typeof a>, { record: station, context: {}, found: {}, now: "x" });
+  assert.deepEqual(nobody, { ok: false, why: "no caller to link stationOperator to" });
+  const left = actWrites(l as NonNullable<typeof l>, { record: station, context: {}, found: {}, now: "x" });
+  assert.deepEqual(left.ok && [left.record, left.clear], [{}, ["stationOperator"]]);
 });

@@ -30,7 +30,7 @@ export type ActSeries = { prefix: ActRef; in: { kind: string; facet: string }; s
 
 /** What a set writes: a literal, a link to a found or context record, a reference's value, the moment, or the
  * next in a series. */
-export type ActSource = { literal: string } | { link: string } | { now: true } | { next: ActSeries } | ActRef;
+export type ActSource = { literal: string } | { link: string } | { now: true } | { caller: true } | { none: true } | { next: ActSeries } | ActRef;
 
 export type ActSet = { facet: string; source: ActSource; line: number };
 
@@ -175,9 +175,11 @@ function readSet(text: string, line: number, routes: Set<string>): ActSet {
   if (!m) throw new CrubalError(`a set is "<facet> -> <source>": ${text}`, line);
   const facet = m[1] as string;
   const src = (m[2] as string).trim();
+  if (src === "link caller") return { facet, source: { caller: true }, line };
   const link = src.match(/^link\s+([\w-]+)$/);
   if (link) return { facet, source: { link: link[1] as string }, line };
   if (src === "now") return { facet, source: { now: true }, line };
+  if (src === "none") return { facet, source: { none: true }, line };
   const next = src.match(/^next\s+(\S+)\s+in\s+([\w-]+)\.([\w:]+)(?:\s*,\s*(\S+))?$/);
   if (next) {
     return {
@@ -392,7 +394,7 @@ export function checkActList(acts: Act[], env: ActEnv): void {
         if (src.next.suffix) refOk(src.next.suffix, s.line);
         if (!env.kinds.has(src.next.in.kind) && !env.levels.has(src.next.in.kind) && strict) throw new CrubalError(`${where} numbers ${s.facet} in ${src.next.in.kind}, which isn't a kind ${here}`, s.line);
         needFacet(src.next.in.facet, s.line, "numbers by");
-      } else if (!("literal" in src) && !("now" in src)) refOk(src, s.line);
+      } else if (!("literal" in src) && !("now" in src) && !("caller" in src) && !("none" in src)) refOk(src, s.line);
     };
     for (const f of a.finds) {
       if (found.has(f.name)) throw new CrubalError(`${where} finds ${f.name} twice`, f.line);
@@ -458,10 +460,19 @@ export type ActInput = {
   labels?: { [kindFacet: string]: string[] };
   /** The moment, as the host stamps it. */
   now: string;
+  /** The person running the act (revision 29): what `link caller` links to. */
+  caller?: string;
 };
 
 export type ActWrites =
-  | { ok: true; record: JsonObject; then: { id: string; values: JsonObject }[]; sends: { verb: string; words: string }[] }
+  | {
+      ok: true;
+      record: JsonObject;
+      /** The record's facets a set clears (`none`, revision 29): taken off, since a value is never null. */
+      clear: string[];
+      then: { id: string; values: JsonObject }[];
+      sends: { verb: string; words: string }[];
+    }
   | { ok: false; why: string };
 
 /** A record's facet, or its parent's id for `of`. */
@@ -561,6 +572,11 @@ const sourceValue = (s: ActSet, i: ActInput): { ok: true; value: Json | undefine
   const src = s.source;
   if ("literal" in src) return { ok: true, value: src.literal };
   if ("now" in src) return { ok: true, value: i.now };
+  if ("none" in src) return { ok: true, value: undefined };
+  if ("caller" in src) {
+    if (!i.caller) return { ok: false, why: `no caller to link ${s.facet} to` };
+    return { ok: true, value: { $link: i.caller } };
+  }
   if ("link" in src) {
     const id = i.found[src.link]?.[0]?.id ?? i.context[src.link]?.id;
     if (!id) return { ok: false, why: `nothing to link ${s.facet} to: ${src.link}` };
@@ -592,7 +608,12 @@ export function mintValuesOf(f: ActFind, i: ActInput): { ok: true; kind: string;
 export function actWrites(a: Act, i: ActInput): ActWrites {
   for (const f of a.finds) if (f.take === "first" && !i.found[f.name]?.length) return { ok: false, why: `no ${f.kind} for ${f.name}` };
   const record: JsonObject = {};
+  const clear: string[] = [];
   for (const s of a.sets) {
+    if ("none" in s.source) {
+      clear.push(bare(s.facet));
+      continue;
+    }
     const v = sourceValue(s, i);
     if (!v.ok) return v;
     if (v.value !== undefined) record[bare(s.facet)] = v.value;
@@ -614,7 +635,7 @@ export function actWrites(a: Act, i: ActInput): ActWrites {
       }
     if (t.send) sends.push({ ...t.send });
   }
-  return { ok: true, record, then, sends };
+  return { ok: true, record, clear, then, sends };
 }
 
 /** The picks of a find or a count resolved for the host to run: a literal, or the referenced value as it stands.
@@ -638,7 +659,7 @@ const q = (s: string) => (/[\s,:]|^$/.test(s) ? JSON.stringify(s) : s);
 
 const pickJson = (p: ActPick): JsonObject => ({ facet: p.facet, value: "literal" in p.value ? { literal: p.value.literal } : refJson(p.value) });
 const sourceJson = (s: ActSource): JsonObject =>
-  "literal" in s ? { literal: s.literal } : "link" in s ? { link: s.link } : "now" in s ? { now: true } : "next" in s ? { next: { prefix: refJson(s.next.prefix), in: { kind: s.next.in.kind, facet: s.next.in.facet }, ...(s.next.suffix ? { suffix: refJson(s.next.suffix) } : {}) } } : refJson(s);
+  "literal" in s ? { literal: s.literal } : "link" in s ? { link: s.link } : "now" in s ? { now: true } : "caller" in s ? { caller: true } : "none" in s ? { none: true } : "next" in s ? { next: { prefix: refJson(s.next.prefix), in: { kind: s.next.in.kind, facet: s.next.in.facet }, ...(s.next.suffix ? { suffix: refJson(s.next.suffix) } : {}) } } : refJson(s);
 const setJson = (s: ActSet): JsonObject => ({ facet: s.facet, source: sourceJson(s.source) });
 
 export function actJson(a: Act): JsonObject {
@@ -702,6 +723,8 @@ const sourceText = (src: JsonObject): string => {
   if (typeof src.literal === "string") return q(src.literal);
   if (typeof src.link === "string") return `link ${src.link}`;
   if (src.now === true) return "now";
+  if (src.caller === true) return "link caller";
+  if (src.none === true) return "none";
   if (src.next && typeof src.next === "object") {
     const n = src.next as JsonObject;
     const into = n.in as JsonObject;
