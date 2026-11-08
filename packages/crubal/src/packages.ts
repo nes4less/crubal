@@ -706,6 +706,7 @@ function checkActs(source: string, pkgs: PackageInfo[]): void {
       levels: new Set(dict.levels.keys()),
       kinds: new Set(dict.kinds.keys()),
       facets: new Set(dict.facets.keys()),
+      facetOf: (k) => dict.facets.get(k),
       strict: p.extends.length === 0,
       here: "of this package",
     });
@@ -719,6 +720,7 @@ export function checkActsInForce(p: { info: Pick<PackageInfo, "acts" | "utilitie
     levels: new Set(p.dict.levels.keys()),
     kinds: new Set(p.dict.kinds.keys()),
     facets: new Set(p.dict.facets.keys()),
+    facetOf: (k) => p.dict.facets.get(k),
     strict: true,
     here: "in force here",
   });

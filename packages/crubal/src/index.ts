@@ -30,4 +30,4 @@ export { bundleHash, bundleOf, classJson, classLineJson, contractJson, emptyPars
 export { classify, publish, type Change, type PublishOptions } from "./publish.ts";
 export { compareVersions, latestVersion, nextVersion } from "./versions.ts";
 export { formOf, type FormOptions } from "./forms.ts";
-export { type Act, type ActFind, type ActInput, type ActRecord, type ActWrites, actJson, actWrites, findPicksOf, readAct } from "./acts.ts";
+export { type Act, type ActFind, type ActInput, type ActRecord, type ActRef, type ActRoute, type ActSet, type ActWrites, type ActCount, type Routed, actJson, actText, actWrites, checkActList, findPicksOf, mintValuesOf, nextInSeries, readAct, routeCountPicksOf, routeOf, routeRowsOf } from "./acts.ts";
