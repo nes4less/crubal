@@ -3,7 +3,8 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type ActRecord, actWrites, findPicksOf, mintValuesOf, nextInSeries, routeCountPicksOf, routeOf } from "../src/acts.ts";
+import { followersOn } from "../src/access.ts";
+import { type ActRecord, actWrites, findPicksOf, mintValuesOf, nextInSeries, routeCountPicksOf, routeOf, tellsValuesOf } from "../src/acts.ts";
 import type { JsonObject } from "../src/model.ts";
 import { bundleOf, parsePackage, printBundle, readBundle } from "../src/bundle.ts";
 import { serialize } from "../src/canonical.ts";
@@ -391,4 +392,134 @@ test("revision 29: a set links the caller or clears the facet; carried, printed 
   assert.deepEqual(nobody, { ok: false, why: "no caller to link stationOperator to" });
   const left = actWrites(l as NonNullable<typeof l>, { record: station, context: {}, found: {}, now: "x" });
   assert.deepEqual(left.ok && [left.record, left.clear], [{}, ["stationOperator"]]);
+});
+
+// ─── Revision 31: a kind's follow aspects, an act's tells, the post it lands when followed ───────────────────────────
+
+const feed = (tail: string) => `package: feed /2026-11-12
+  owner: shop.example
+  crubal: 2
+
+kind: item
+  levels: product, unit
+  base: Item
+  follow:
+    product: units, details, posts
+    unit: filed, price, posts
+kind: station
+  levels: station
+  base: Station
+kind: post
+  levels: post
+  base: Post
+title$
+filedAt@
+sender$
+postAbout&item
+actRun$
+postedAt@
+visibility{public|followers|private}
+
+class: Item
+  for: item
+  facets:
+    !title
+    filedAt
+class: Station
+  for: station
+  facets:
+    title
+class: Post
+  for: post
+  facets:
+    sender
+    postAbout
+    actRun
+    postedAt
+    visibility
+
+utility: bench /2026-11-12
+  label: Bench
+  serves: owner
+  acts: file
+  mark: box amber
+
+${tail}`;
+
+const told = `act: file /2026-11-12
+  utility: bench
+  label: File
+  on: unit
+  context: station
+  set:
+    filedAt -> now
+  tells: post as filed
+    sender -> owner
+    postAbout -> link record
+    actRun -> run
+    postedAt -> now
+    visibility -> public
+`;
+
+test("revision 31: a kind declares the aspects a follower may choose per level, the first the default; refused off its levels, empty or twice", () => {
+  const [info] = readPackages(feed(told));
+  assert.deepEqual(info?.dict.kinds.get("item")?.follow, { product: ["units", "details", "posts"], unit: ["filed", "price", "posts"] });
+  assert.equal(info?.dict.kinds.get("post")?.follow, undefined);
+  const b = bundleOf(parsePackage(feed(told)));
+  const item = (b.kinds as JsonObject[]).find((k) => k.kind === "item");
+  assert.deepEqual(item?.follow, { product: ["units", "details", "posts"], unit: ["filed", "price", "posts"] });
+  assert.match(printBundle(b), /^  follow:\n    product: units, details, posts\n    unit: filed, price, posts$/m);
+  assert.equal(serialize(bundleOf(readBundle(b))), serialize(b));
+  assert.throws(() => readPackages(feed(told).replace("    unit: filed, price, posts", "    parcel: filed")), /follow names parcel, which isn't a level of item/);
+  assert.throws(() => readPackages(feed(told).replace("    unit: filed, price, posts", "    unit:")), /follow at unit names no aspect/);
+  assert.throws(() => readPackages(feed(told).replace("    unit: filed, price, posts", "    unit: filed, filed")), /names an aspect twice/);
+  assert.throws(() => readPackages(feed(told).replace("    unit: filed, price, posts", "    unit: Filed")), /an aspect is a lower-case word/);
+});
+
+test("revision 31: an act tells a post as an aspect, with the owner, the run and a link to the record among its sources; it round-trips; refused on an unknown kind, an undeclared aspect, no set lines or a facet set twice", () => {
+  const [info] = readPackages(feed(told));
+  const a = info?.acts.find((x) => x.name === "file");
+  assert.equal(a?.tells?.kind, "post");
+  assert.equal(a?.tells?.aspect, "filed");
+  assert.deepEqual(a?.tells?.sets.map((s) => s.source), [{ owner: true }, { link: "record" }, { run: true }, { now: true }, { literal: "public" }]);
+  checkPackages(feed(told));
+  const b = bundleOf(parsePackage(feed(told)));
+  const text = printBundle(b);
+  assert.match(text, /^  tells: post as filed$/m);
+  assert.match(text, /^    sender -> owner$/m);
+  assert.match(text, /^    postAbout -> link record$/m);
+  assert.match(text, /^    actRun -> run$/m);
+  assert.equal(serialize(bundleOf(readBundle(b))), serialize(b));
+  const refusedFeed = (tail: string, why: RegExp) => assert.throws(() => checkPackages(feed(tail)), (e: unknown) => e instanceof CrubalError && why.test(e.message));
+  refusedFeed(told.replace("tells: post as filed", "tells: notice as filed"), /tells notice, which isn't a kind/);
+  refusedFeed(told.replace("tells: post as filed", "tells: post as boxed"), /tells post as boxed, an aspect no kind declares under follow/);
+  refusedFeed(told.replace("    postedAt -> now\n", "    postedAt -> now\n    sender -> owner\n"), /tells post and sets sender twice/);
+  refusedFeed(told.replace("    visibility -> public\n", "    weight -> public\n"), /tells with weight, which isn't a facet/);
+  assert.throws(() => readPackages(feed(told.replace(/  tells: post as filed\n(    .*\n)+/, "  tells: post as filed\n"))), /tells post and sets nothing/);
+  assert.throws(() => readPackages(feed(told.replace("tells: post as filed", "tells: post"))), /tells is "<kind> as <aspect>"/);
+});
+
+test("revision 31: the post a landing tells, given the owner and the run; nothing without them; the followers on a record or its ancestors, live ones only", () => {
+  const [info] = readPackages(feed(told));
+  const a = info?.acts[0];
+  assert.ok(a);
+  const unit: ActRecord = { id: "U-1", values: { title: "A thing" }, of: "P-1" };
+  const station = { id: "T-1", values: {} };
+  const at = { record: unit, context: { station }, found: {}, now: "2026-11-12T10:00:00Z" };
+  assert.deepEqual(tellsValuesOf(a, { ...at, owner: "shop.example", run: "R-9" }), {
+    ok: true,
+    kind: "post",
+    aspect: "filed",
+    values: { sender: "shop.example", postAbout: { $link: "U-1" }, actRun: "R-9", postedAt: "2026-11-12T10:00:00Z", visibility: "public" },
+  });
+  assert.deepEqual(tellsValuesOf(a, { ...at, run: "R-9" }), { ok: false, why: "no owner to set sender to" });
+  assert.deepEqual(tellsValuesOf(a, { ...at, owner: "shop.example" }), { ok: false, why: "no act run to set actRun to" });
+  // The landing's own writes stand apart from the post: the set lines alone.
+  const w = actWrites(a, at);
+  assert.deepEqual(w.ok && w.record, { filedAt: "2026-11-12T10:00:00Z" });
+  const edge = (on: string, until?: string, relation = "follower") => ({ edge: `E-${on}`, who: "person:P-2", relation, mode: "none" as const, on, grants: [], by: "owner", ...(until ? { until } : {}) });
+  const edges = [edge("P-1"), edge("U-7"), edge("U-1", "2026-11-01T00:00:00Z"), edge("P-1", undefined, "subscriber")];
+  assert.deepEqual(followersOn(edges, ["U-1", "P-1"], "2026-11-12T10:00:00Z").map((e) => e.edge), ["E-P-1"], "the product's follower stands for its unit; the lapsed edge and the subscriber don't");
+  assert.deepEqual(followersOn(edges, ["U-9"], "2026-11-12T10:00:00Z"), []);
+  assert.deepEqual(followersOn(edges, ["U-1"]).map((e) => e.edge), ["E-U-1"], "without a moment, an until is not weighed");
 });
