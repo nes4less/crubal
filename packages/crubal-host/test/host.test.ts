@@ -870,11 +870,20 @@ class: Noted
   assert.equal(t2.already, false, "a same-day suffix publishes");
   assert.equal(t2.bundle.version, "2026-10-17.2");
   assert.equal((await host.publishPackage("shop.example", TOWER2)).already, true);
+  // The list names the latest by the version order, never by text (0.3.68): the ninth cut, then the sixteenth,
+  // and the sixteenth is the latest though "9" sorts after "16" as text.
+  const cut = (base: string, n: number) => `${base.replace(/^package: tower \/\S+$/m, `package: tower /2026-10-17.${n}`)}class: Tagged${n}\n  for: thing\n  facets:\n    notes\n`;
+  const cut9 = cut(TOWER2, 9);
+  assert.equal((await host.publishPackage("shop.example", cut9)).bundle.version, "2026-10-17.9");
+  assert.equal((await host.publishPackage("shop.example", cut(cut9, 16))).bundle.version, "2026-10-17.16");
+  const towerRow = (await host.publishedPackages("shop.example")).find((r) => r.package === "shop.example/tower") as JsonObject;
+  assert.equal(towerRow.latest, "2026-10-17.16");
+  assert.deepEqual(Object.keys(towerRow.versions as JsonObject).slice(-3), ["2026-10-17.2", "2026-10-17.9", "2026-10-17.16"]);
   assert.equal((await host.publishPackage("shop.example", TOWER)).already, true, "the day's first stays behind it");
   const wk = await call("GET", "/.well-known/crubal.json");
   const listed = (wk.body.packages as JsonObject[]).find((p) => p.package === "shop.example/tower");
   assert.ok(listed, JSON.stringify(wk.body.packages));
-  assert.equal(listed?.latest, "2026-10-17.2");
+  assert.equal(listed?.latest, "2026-10-17.16", "the well-known file names the latest by the version order too");
   const where = String((listed?.versions as JsonObject)["2026-10-17"]);
   assert.equal(where, `${base}/packages/shop.example/tower/2026-10-17/package.json`);
   const served = await fetch(where);
@@ -896,7 +905,7 @@ class: Noted
     assert.equal(defs.dict.levels.get("thing"), "thing");
     // Tampered on the wire: the signature doesn't verify against the published key, nothing installs.
     const inner = host.o.fetchJson;
-    host.o.fetchJson = async (u) => { const d = await (inner as (u: string) => Promise<JsonObject>)(u); return u.endsWith("tower/2026-10-17.2/package.json") ? { ...d, label: "tampered" } : d; };
+    host.o.fetchJson = async (u) => { const d = await (inner as (u: string) => Promise<JsonObject>)(u); return u.endsWith("tower/2026-10-17.16/package.json") ? { ...d, label: "tampered" } : d; };
     await host.createOwner("fresh2.example");
     const k2 = await host.issueKey("fresh2.example", "fresh2.example", "owner");
     const bad = await call("POST", "/o/fresh2.example/install", k2, { package: "shop.example/tower" });
