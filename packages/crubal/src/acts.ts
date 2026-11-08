@@ -307,6 +307,10 @@ export type ActEnv = {
 
 const bare = (facet: string) => facet.replace(/^\w+::/, "");
 
+/** `of` is a record's parent (1.1), no facet: it may stand where a facet may (a pick's facet, `record.of`, a
+ * route's `over`) and the dictionary is never asked for it. */
+const PARENT = "of";
+
 /** The checks (15.3). */
 export function checkActList(acts: Act[], env: ActEnv): void {
   const { strict, here } = env;
@@ -323,6 +327,7 @@ export function checkActList(acts: Act[], env: ActEnv): void {
     for (const k of a.context) if (!env.kinds.has(k) && !env.levels.has(k) && strict) throw new CrubalError(`${where}'s context names ${k}, which isn't a kind ${here}`, a.line);
     const facetKnown = (f: string) => env.facets.has(bare(f));
     const needFacet = (f: string, line: number, doing: string) => {
+      if (bare(f) === PARENT) return;
       if (!facetKnown(f) && strict) throw new CrubalError(`${where} ${doing} ${f}, which isn't a facet ${here}`, line);
     };
     const found = new Set<string>();
@@ -350,7 +355,7 @@ export function checkActList(acts: Act[], env: ActEnv): void {
         const [head, hop] = p.facet.split(".");
         needFacet(head as string, p.line, `${what} picks`);
         if (hop) {
-          const f = env.facetOf?.(bare(head as string));
+          const f = bare(head as string) === PARENT ? undefined : env.facetOf?.(bare(head as string));
           if (f && f.type !== "link") throw new CrubalError(`${where} ${what} picks through ${head}, which isn't a link`, p.line);
           needFacet(hop, p.line, `${what} picks`);
         }
@@ -366,7 +371,7 @@ export function checkActList(acts: Act[], env: ActEnv): void {
       const rf = rowsFacet ? env.facetOf?.(bare(rowsFacet)) : undefined;
       if (rf && rf.type !== "compound") throw new CrubalError(`${where} routes over ${rowsFacet}, which isn't a compound`, r.line);
       if (routeColumns && !routeColumns.has(r.by)) throw new CrubalError(`${where} routes by ${r.by}, a column the rows lack`, r.line);
-      for (const o of r.over) if ("record" in o && o.record) {
+      for (const o of r.over) if ("record" in o && o.record && bare(o.record) !== PARENT) {
         needFacet(o.record, r.line, "routes over");
         const lf = env.facetOf?.(bare(o.record));
         if (lf && lf.type !== "link") throw new CrubalError(`${where} routes over record.${o.record}, which isn't a link`, r.line);
@@ -434,7 +439,8 @@ export function checkActList(acts: Act[], env: ActEnv): void {
 
 // ─── The steps, pure ───────────────────────────────────────────────────────────
 
-export type ActRecord = { id: string; values: JsonObject };
+/** A record as the act reads it: its id, its values, and its parent (`of`, 1.1) when it has one. */
+export type ActRecord = { id: string; values: JsonObject; of?: string };
 
 export type ActInput = {
   record: ActRecord;
@@ -458,11 +464,18 @@ export type ActWrites =
   | { ok: true; record: JsonObject; then: { id: string; values: JsonObject }[]; sends: { verb: string; words: string }[] }
   | { ok: false; why: string };
 
+/** A record's facet, or its parent's id for `of`. */
+const facetOf = (rec: ActRecord | undefined, facet: string): Json | undefined => {
+  if (!rec) return undefined;
+  const f = bare(facet);
+  return f === PARENT ? (rec.of ?? rec.values[f]) : rec.values[f];
+};
+
 const valueOf = (r: ActRef, i: Pick<ActInput, "record" | "context" | "found" | "route">): Json | undefined => {
-  if ("record" in r) return i.record.values[bare(r.record)];
-  if ("context" in r) return r.facet ? i.context[r.context]?.values[bare(r.facet)] : i.context[r.context]?.id;
+  if ("record" in r) return facetOf(i.record, r.record);
+  if ("context" in r) return r.facet ? facetOf(i.context[r.context], r.facet) : i.context[r.context]?.id;
   if ("route" in r) return i.route?.row[r.column];
-  return r.facet ? i.found[r.found]?.[0]?.values[bare(r.facet)] : i.found[r.found]?.[0]?.id;
+  return r.facet ? facetOf(i.found[r.found]?.[0], r.facet) : i.found[r.found]?.[0]?.id;
 };
 
 const numberOf = (t: ActTerm, i: ActInput): number | undefined => {
