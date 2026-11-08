@@ -175,6 +175,13 @@ Adopted values (chapter 8.2) are outside the trust order: they don't change unti
   contracts and views, add aliases and values to the extended package's facets, add vary steps, and narrow
   its classes in classes of its own. It MUST NOT change the extended package's definitions or widen them.
 - A new package version that breaks its members (chapter 4.8) ships the recipes (chapter 10).
+- **Leaving** (revision 30). A place may stop a package it holds: the log takes an install write with `left`
+  (`{"install": {"package", "version", "left": true}}`), the package is no longer in force, and the set in force
+  is read without it; installing it again later is an install like any other, and the log keeps both. A store
+  MUST refuse the leaving when a package in force extends it, when a utility in force needs it (a utility of its
+  own excepted), or when any record holds a value under a key the package alone declares: a value is never lost,
+  so the keys are handed or cut by a recipe first (chapter 10.3). A package whose members are all valueless, or
+  whose keys another package in force also declares, leaves with nothing to do.
 
 ## 11.5 Publishing
 
