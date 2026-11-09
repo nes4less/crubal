@@ -381,8 +381,8 @@ A display (12.9) is `{"display", "label", "describe", "layout", "slots": [{"from
 
 A lane (12.10) is `{"lane", "version", "label", "utility", "view" | "serve", "pick": {"filter",
 "value"}, "done": {"filter", "value"} | "viewed", "group" (revision 32), "band", "house", "serves": [{"as", "items"}], "home":
-{"figure", "word": {"one", "many"} | "…", "press": {"word", "to"}, "chips"}, "card": {"name", "sub",
-"lines", "state", "moment", "figure", "primary", "quiet", "quick": [{"word", "to"}], "opens"}}` under
+{"figure", "word": {"one", "many"} | "…", "press": {"word", "to", "glyph"?}, "chips"}, "card": {"name", "sub",
+"lines", "state", "moment", "figure", "primary", "quiet", "quick": [{"word", "to", "glyph"?}], "opens"}}` under
 `lanes`, `house` as a string like every number.
 
 ## 12.8 Well-formed views
@@ -491,11 +491,14 @@ lane: ordersToPick /2026-11-05
 | `house` | a whole number, governance first (0) and the doing rows after; 8 unless said |
 | `group` | revision 32: one of the view's filters (12.3), whose buckets group the row's cards: the row draws one heading card per bucket, the bucket's word and its count (the page's tally), the bucket's cards tucked beneath, one bucket open at a time; absent, the cards stand in one run. A lane the app serves has no view to group by |
 | `serves` | whom the row is for, as a utility's `serves` (14.6): presets, relations or audiences, each optionally narrowed to items; never wider than the view's `show` |
-| `home` | the home card: `figure` is `count` (the view's tally under the pick), `sum <slot>` or `state <slot>`; `word` is `one "…" many "…"` or one text; `press` is `Word -> target`; `chips` are the view's filters the home carries |
-| `card` | the object card on the compass: `name`, `sub` and `lines` name slots in order; `state`, `moment` and `figure` name one slot each; `primary`, `quiet` and `quick` are `Word -> target`; `opens` is `page` |
+| `home` | the home card: `figure` is `count` (the view's tally under the pick), `sum <slot>` or `state <slot>`; `word` is `one "…" many "…"` or one text; `press` is `Word -> target` or `Word as glyph -> target` (revision 33); `chips` are the view's filters the home carries |
+| `card` | the object card on the compass: `name`, `sub` and `lines` name slots in order; `state`, `moment` and `figure` name one slot each; `primary`, `quiet` and `quick` are `Word -> target` or `Word as glyph -> target`; `opens` is `page` |
 
 A press's target is a path (`/orders?tab=pick`), `page` (the object's own page) or an act the lane's
-utility declares. A package MUST be refused at publish when a lane names a view, filter, value, slot,
+utility declares. A press MAY name its glyph (revision 33: `Walk as footprints -> /logistics`), a lower-case
+name an app maps to its own drawing; an app that draws presses as glyphs with the word on hover uses it, and
+falls back to its own table for a press that names none. The glyph is carried in the bundle as `glyph` and
+checked nowhere: a name no app knows draws as the word. A package MUST be refused at publish when a lane names a view, filter, value, slot,
 utility or act it doesn't declare, serves an audience wider than its view shows, opens anything but a page,
 or names both a view and a serve (12.8). A lane reads only through its view's served pages (12.6): the
 figure is the index's tally, the cards a page, the history the same view under the `done` pick; it never

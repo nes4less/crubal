@@ -94,6 +94,16 @@ const setup = `lane: setup /2026-11-05
     word: one "step done" many "steps done"
     press: Open Setup -> /setup`;
 
+test("revision 33: a press names its glyph, Word as glyph -> target, carried in the bundle and written back", () => {
+  const text = toPick.replace("press: Pick -> /orders?tab=pick", "press: Walk as footprints -> /orders?tab=pick").replace('quick: "Confirm address" -> confirmAddress', 'quick: "Confirm address" as circle-check -> confirmAddress');
+  const [info] = readPackages(shop(text));
+  const s = info?.lanes[0];
+  assert.deepEqual([s?.home.press?.word, s?.home.press?.glyph, s?.home.press?.to], ["Walk", "footprints", "/orders?tab=pick"]);
+  assert.deepEqual(s?.card?.quick.map((q) => [q.word, q.glyph, q.to]), [["Confirm address", "circle-check", "confirmAddress"]]);
+  assert.equal(s?.card?.primary?.glyph, undefined);
+  checkPackages(shop(text));
+});
+
 test("a lane block is read with its parts", () => {
   const [info] = readPackages(shop(toPick));
   const s = info?.lanes[0];
