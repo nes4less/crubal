@@ -66,8 +66,9 @@ export const HUES = ["amber", "blue", "violet", "slate", "teal", "plum", "coral"
 export type Hue = (typeof HUES)[number];
 export const isHue = (v: unknown): v is Hue => typeof v === "string" && (HUES as readonly string[]).includes(v);
 
-/** A press on a lane's home or card (12.10): a word, and where it lands: a path, `page`, or an act. */
-export type LanePress = { word: string; to: string; line: number };
+/** A press on a lane's home or card (12.10): a word, and where it lands: a path, `page`, or an act; revision 33:
+ * the glyph it wears where an app draws presses as glyphs (`Word as glyph -> target`), a lower-case name. */
+export type LanePress = { word: string; to: string; glyph?: string; line: number };
 
 /**
  * A lane (12.10): a row of the grid a package declares. What it lists (a view and the picks for what
@@ -239,14 +240,21 @@ function readUtility(node: Node): Utility {
   return u;
 }
 
-/** `Word -> target`: a press's word and where it lands. */
+/** `Word -> target`, or `Word as glyph -> target` (revision 33): a press's word, its glyph and where it lands. */
 function readPress(value: string, line: number, what: string): LanePress {
   const at = value.lastIndexOf(" -> ");
-  if (at < 0) throw new CrubalError(`${what} is "Word -> target": ${value}`, line);
-  const word = unquote(value.slice(0, at).trim());
+  if (at < 0) throw new CrubalError(`${what} is "Word -> target" or "Word as glyph -> target": ${value}`, line);
+  let head = value.slice(0, at).trim();
   const to = value.slice(at + 4).trim();
-  if (!word || !to) throw new CrubalError(`${what} is "Word -> target": ${value}`, line);
-  return { word, to, line };
+  let glyph: string | undefined;
+  const as = head.match(/^(.*\S)\s+as\s+([a-z][a-z0-9-]*)$/);
+  if (as) {
+    head = (as[1] as string).trim();
+    glyph = as[2] as string;
+  }
+  const word = unquote(head);
+  if (!word || !to) throw new CrubalError(`${what} is "Word -> target" or "Word as glyph -> target": ${value}`, line);
+  return { word, to, ...(glyph ? { glyph } : {}), line };
 }
 
 /** `filter = value`: a view's filter pick. */

@@ -296,7 +296,7 @@ export function utilityJson(u: Utility): JsonObject {
   return o;
 }
 
-const pressJson = (p: LanePress): JsonObject => ({ word: p.word, to: p.to });
+const pressJson = (p: LanePress): JsonObject => ({ word: p.word, to: p.to, ...(p.glyph ? { glyph: p.glyph } : {}) });
 
 /** A flow (12.11) in the bundle: as written, its stops as `{name, act?, of?}`, its done as `{filter, value}`. */
 export function flowJson(f: Flow): JsonObject {
@@ -651,7 +651,9 @@ export function printBundle(b: JsonObject): string {
 
 const quoteWord = (w: string) => `"${w.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 const pressText = (p: Json | undefined): string | undefined =>
-  isObj(p) && typeof p.word === "string" && typeof p.to === "string" ? `${/[:\s]/.test(p.word) ? quoteWord(p.word) : p.word} -> ${p.to}` : undefined;
+  isObj(p) && typeof p.word === "string" && typeof p.to === "string"
+    ? `${/[:\s]/.test(p.word) ? quoteWord(p.word) : p.word}${typeof p.glyph === "string" ? ` as ${p.glyph}` : ""} -> ${p.to}`
+    : undefined;
 const pickText = (p: Json | undefined): string | undefined => (isObj(p) ? `${p.filter} = ${String(p.value)}` : typeof p === "string" ? p : undefined);
 
 function flowText(f: JsonObject): string[] {
