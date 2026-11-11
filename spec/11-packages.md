@@ -120,6 +120,7 @@ kind: item
 | `match` | per level, the **weak** keys, separated by `;`: an arrival sharing one is probably the same record and goes to review, never bound by itself. `a + b` means all of them together. A key that real data reuses (a recycled barcode) belongs here, not in `identify` |
 | `archive` | what archiving a record does to the records below it: `cascade of`, `cascade within` or `cascade both` (they are archived too, with reason `parent archived`, along that link) or `independent` (the default) (chapter 1.12) |
 | `follow` | revision 31: per level, the **aspects** a follower of a record at that level may choose, lower-case words, the first the default: what a short press on Follow takes, what a long press offers (14.10). An act answers an aspect through its `tells:` (15.1). A level without a line is followed whole. A line naming a level the kind lacks, no aspect, an aspect twice or a word in another case is refused |
+| `shares` | revision 35: per level, the number facet that is its **quantity**: how many of the thing a record at that level stands for. A record there may be taken in part by an act that `takes: share` (15.1); a level with no line is taken whole, always. Refused at publish: a level the kind lacks, a facet the package lacks, a facet that is no number |
 
 Classes add vary steps for their wearers with level prefixes (chapter 5.3.3). A package that `extends`
 another MAY add levels' vary steps to that package's kinds; it MUST NOT remove any.
