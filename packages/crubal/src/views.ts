@@ -58,13 +58,18 @@ export const PRINT_PLACE_SLOTS = ["name", "mark", "primary", "accent", "words"] 
 
 export type Period = "day" | "week" | "month" | "quarter" | "year";
 export const PERIODS: readonly Period[] = ["day", "week", "month", "quarter", "year"];
-export type Bucket = { name: string; values?: string[]; range?: [number, number]; period?: Period };
+/** The two buckets of a filter over a mark (12.3, revision 34): no real value, and one. */
+export const MARK_OPEN = "open";
+export const MARK_DONE = "done";
+export type Bucket = { name: string; values?: string[]; range?: [number, number]; period?: Period; marked?: "open" | "done" };
 export type Filter = {
   name: string;
   facet: string;
   buckets?: Bucket[];
   /** `buckets: by month`: one bucket per period the facet's dates fall in, named by the period (12.3). */
   period?: Period;
+  /** `buckets: marked` (revision 34): two buckets, `open` (no real value for the facet) and `done` (one). */
+  marked?: true;
   /** Facets totalled per bucket beside the count (12.3 `sum:`). */
   sums: string[];
   dependent: string[];
@@ -267,7 +272,9 @@ export function readViews(source: string): ViewSet {
       const by = b && !b.children.length ? b.value.trim().match(/^by\s+(\w+)$/) : null;
       if (b && by && !(PERIODS as readonly string[]).includes(by[1] as string)) throw new CrubalError(`buckets by ${by[1]}: a period is day, week, month, quarter or year`, b.line);
       const period = by ? (by[1] as Period) : undefined;
-      const buckets = period ? undefined : b?.children.map((c): Bucket => {
+      // `buckets: marked` (revision 34): the facet is a step's mark; the records that lack it, and those that hold it.
+      const marked = !!b && !b.children.length && b.value.trim() === "marked";
+      const buckets = period ? undefined : marked ? [{ name: MARK_OPEN, marked: "open" as const }, { name: MARK_DONE, marked: "done" as const }] : b?.children.map((c): Bucket => {
         // A bucket line is `name: values`; the name may be quoted, with spaces ("Like new": NM, VG).
         const m = c.text.match(/^("(?:[^"\\]|\\.)*"|[^:]+):\s+(.*)$/);
         if (!m) throw new CrubalError(`a bucket is "name: values": ${c.text}`, c.line);
@@ -281,6 +288,7 @@ export function readViews(source: string): ViewSet {
         facet: get("facet")?.value ?? name,
         ...(buckets ? { buckets } : {}),
         ...(period ? { period } : {}),
+        ...(marked ? { marked: true as const } : {}),
         sums: (get("sum")?.value ?? "").split(",").map((s) => s.trim()).filter(Boolean),
         dependent: (get("dependent")?.value ?? "").split(",").map((s) => s.trim()).filter(Boolean),
         line: n.line,
@@ -734,6 +742,8 @@ export class Views {
   }
 
   private inBucket(r: Record, f: Filter, b: Bucket): boolean {
+    // A mark's two buckets (12.3, revision 34): the one place an empty value is bucketed.
+    if (b.marked) return this.valuesAt(r, f.facet).some((v) => plainText(v) !== "") === (b.marked === "done");
     return this.valuesAt(r, f.facet).some((v) => {
       const t = plainText(v);
       if (b.period) return periodOf(t, b.period) === b.name;

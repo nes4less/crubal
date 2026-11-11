@@ -496,6 +496,8 @@ export type ActInput = {
   owner?: string;
   /** The act run's id (revision 31): what a told post's `run` source carries. */
   run?: string;
+  /** The facets that are marks (revision 34): those a marked filter in force names. A mark is taken once. */
+  marks?: string[];
 };
 
 export type ActWrites =
@@ -691,7 +693,28 @@ export function actWrites(a: Act, i: ActInput): ActWrites {
       }
     if (t.send) sends.push({ ...t.send });
   }
+  // A mark is taken once (15.2, revision 34): a write to a mark that holds a real value stops the act before
+  // any write, with the reason; clearing one (`none`) is how an act gives it back.
+  const held = (r: ActRecord, k: string) => { const v = r.values[k]; return v !== undefined && v !== "" && !(Array.isArray(v) && !v.length); };
+  for (const m of i.marks ?? []) {
+    const k = bare(m);
+    if (k in record && held(i.record, k)) return { ok: false, why: `${k} is taken: a mark is set once` };
+    for (const t of then) {
+      const rec = Object.values(i.found).flat().find((x) => x.id === t.id);
+      if (k in t.values && rec && held(rec, k)) return { ok: false, why: `${k} is taken on ${t.id}: a mark is set once` };
+    }
+  }
   return { ok: true, record, clear, then, sends };
+}
+
+/**
+ * The facets that are marks (12.3, revision 34): those a marked filter names. A host hands them to `actWrites`
+ * so a second write to a mark is refused where the act lands.
+ */
+export function markFacets(filters: Iterable<{ facet: string; marked?: boolean }>): string[] {
+  const out = new Set<string>();
+  for (const f of filters) if (f.marked) out.add(f.facet);
+  return [...out];
 }
 
 /** The picks of a find or a count resolved for the host to run: a literal, or the referenced value as it stands.

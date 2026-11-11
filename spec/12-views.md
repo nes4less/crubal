@@ -120,6 +120,11 @@ filter: edition
   answers `sums[filter][bucket][facet]` beside `counts`.
 - **Only real values are bucketed.** New and unknown values (chapter 9) never reach a bucket, and neither do
   held values.
+- **A filter over a mark (revision 34).** `buckets: marked` makes exactly two buckets: `open`, the records of
+  the view's selection with no real value for the facet, and `done`, those with one. It is the one place an
+  empty value is bucketed; a held, new or unknown value counts as none. The facet is then a **mark**: what a
+  step leaves on the record it worked (a date for when, a yes-no, or a link to what the record was put in),
+  with who and when in the write's own source (chapter 8). A lane names it as its `step` (12.10).
 - **A record is in a bucket** when any of its values for the facet is (for a level-prefixed facet, when any of
   its lower records' values is). The store decides this and puts it on the record's projection row (12.6).
 - **Counts.** For each bucket, the count is the number of records in the view's selection, narrowed by every
@@ -353,7 +358,7 @@ contract: searchIndex
 ```
 
 Shapes use chapter 7.9's map objects for their slots; filters hold `facet`, `buckets` (`[{"name", "values"} or
-{"name", "range"}]`) or `by` (a period), `sum` (the facets totalled per bucket) and `dependent`; roles hold
+{"name", "range"}]`) or `by` (a period) or `"marked": true` (revision 34), `sum` (the facets totalled per bucket) and `dependent`; roles hold
 `audience` and `may` (verb → targets).
 
 A projection entry, as the stream carries it:
@@ -380,7 +385,7 @@ A display (12.9) is `{"display", "label", "describe", "layout", "slots": [{"from
 {name: value}}` under `displays`, its slots in order and its tokens as the words they were written.
 
 A lane (12.10) is `{"lane", "version", "label", "utility", "view" | "serve", "pick": {"filter",
-"value"}, "done": {"filter", "value"} | "viewed", "group" (revision 32), "band", "house", "serves": [{"as", "items"}], "home":
+"value"}, "done": {"filter", "value"} | "viewed", or in their place (revision 34) "step" and "until": [filter…], "group" (revision 32), "band", "house", "serves": [{"as", "items"}], "home":
 {"figure", "word": {"one", "many"} | "…", "press": {"word", "to", "glyph"?}, "chips"}, "card": {"name", "sub",
 "lines", "state", "moment", "figure", "primary", "quiet", "quick": [{"word", "to", "glyph"?}], "opens"}}` under
 `lanes`, `house` as a string like every number.
@@ -393,6 +398,8 @@ A package MUST be refused at publish when:
    don't have;
 2. a slot, order key or filter facet names a facet the package doesn't define;
 3. a filter's bucket values aren't real values of its facet, or two buckets of one filter overlap;
+   (revision 34) a lane's `step` or `until`, or a flow's `done` written as a filter alone, names a filter
+   that isn't `marked`; a lane names a `step` beside a `pick` or `done`, or an `until` without a `step`;
 4. an `index` filter isn't among the view's `filters`;
 5. a role grants anything its audience can't see, or names a target that doesn't exist;
 6. a public view's slots or filters read a facet that `show` rules hide from `public`;
@@ -485,7 +492,9 @@ lane: ordersToPick /2026-11-05
 | `utility` | the utility of this package whose acts its presses may name |
 | `view` | the view of this package that serves its cards; the view's shapes give the slots a card may name |
 | `serve` | instead of a view: the name of a function the utility provides, for a lane the app serves itself (a setup, a tally); such a lane has no pick, done or card |
-| `pick` | `filter = value`: the view's filter pick for what is ahead (the to-dos); absent, the lane is a **list**: every record its view serves, in the view's order (revision 17) |
+| `pick` | `filter = value`: the view's filter pick for what is ahead (the to-dos); absent, with no `step`, the lane is a **list**: every record its view serves, in the view's order (revision 17) |
+| `step` | revision 34, in place of `pick` and `done`: one of the view's `marked` filters (12.3). What is ahead is the filter's `open` bucket, the history its `done` bucket. A lane names a `step` or a `pick`, never both |
+| `until` | revision 34, with a `step`: one or more of the view's `marked` filters; a record marked on any of them waits here no longer, whether or not this lane's step was ever done. Absent, a record waits until the step is done |
 | `done` | `filter = value` for what is done (the history), or `viewed`: a card is done once the person has viewed it; the mark is the person's own, never the place's |
 | `band` | `daily`, `weekly` or `rarely`: how soon it wants attention; `rarely` unless said |
 | `house` | a whole number, governance first (0) and the doing rows after; 8 unless said |
@@ -506,7 +515,17 @@ widens what the view shows. A reader that doesn't know the block carries it unch
 lane's card looks like on a screen is the app's; the compass (the positions its parts take) is a
 convention of the app that draws it, not of the language.
 
-A lane without a `pick` is a **list** (revision 17): it holds the records of a kind that wait in no state
+**A lane by its step (revision 34).** A lane said by `pick` and `done` holds the records in one state and
+hands them on to the lane that picks that state next. A lane said by `step` knows no other lane: it holds
+the records its view serves that lack the step's mark and are marked on none of its `until`s, read as any
+lane is (the index's tally under `open` on the step's filter and on each `until`'s; a page of the view; the
+history the same view under the step's `done`). So a record stands in every lane whose mark it lacks, at
+once, and a step never done holds nothing up: `until` is how a lane says what it needs, that the thing
+exists and is not finished. A package MUST be refused at publish when a `step` or an `until` is not a
+`marked` filter of the lane's view, when a lane names a `step` beside a `pick` or a `done`, or an `until`
+without a `step`.
+
+A lane without a `pick` or a `step` is a **list** (revision 17): it holds the records of a kind that wait in no state
 (the place's locations, its organizations, its pages), every record its view serves in the view's order.
 Its figure is the view's tally, it has no `done` and so no history, and nothing in it is work waiting: an
 app draws a list where the place keeps the kind, never among the rows of what wants attention, and never
@@ -557,7 +576,7 @@ flow: unitizer /2026-12-20
 | `context` | kinds of this package the flow holds through its run, asked once when it is walked and kept per person (a station, a location); the app draws them at the head and hands them to every stop's act (revision 23) |
 | `replaces` | a flow this one stands in for (revision 23): where the named flow would have been served, this one is; the named flow returns when this one goes; a flow a place draws from a preset names the preset |
 | `stops` | one line per stop, in walking order: `<lane> -> <act>` is a lane of this package with the act of the utility that moves a card on; `<lane>` alone is a lane whose cards move by their own presses; `<form> of <level>` is a block, a form of this package making or acting on a record of that level (the record of the stop before, when it has one) |
-| `done` | `filter = value`: the state a record leaves the line in: the last lane stop's done, or its pick when that lane holds what is finished (revision 22) |
+| `done` | `filter = value`: the state a record leaves the line in: the last lane stop's done, or its pick when that lane holds what is finished (revision 22); or (revision 34) a `marked` filter alone: a record marked on it has left the line |
 
 A package MUST be refused at publish when a flow names a utility it doesn't declare, a stop that is
 neither a lane nor a form of the package, an act its utility lacks, a level its kinds lack, a done that
@@ -588,6 +607,15 @@ it, and the block stamps the second's pick. The flow's `done` is the last lane s
 state, else its `pick` (an end stop holding what is finished). A package MUST be refused at publish when a
 flow's lane stops do not chain, or its done is not its last lane's; the refusal names the gap. A flow
 arranged from lanes a package already walks between needs nothing more to move its records on.
+
+**Step stops (revision 34).** A stop whose lane names a `step` chains with nothing. Step stops stand in any
+order, any may be left out, and one lane may be a stop of several flows; a flow is never refused for their
+order or their number, so a place's own flow (revision 23) arranges a preset's step stops as it likes. State
+stops still chain among themselves, and a step stop between two of them leaves their chain as it is. A step
+stop's stamp is its mark: when the stop's act lands and has not written the mark itself, the stamp writes
+`now` on a date and `yes` on a yes-no; a link mark is never stamped, since the act sets it (the container it
+found or made), and an act that lands without setting it has not done the step. A block stop before a step
+stop stamps nothing. A flow's `done` naming a marked filter alone is checked against no lane.
 
 ## 12.12 Prints
 

@@ -224,7 +224,8 @@ export function printJson(p: Print): JsonObject {
 
 export function filterJson(f: Filter): JsonObject {
   const o: JsonObject = { filter: f.name, facet: f.facet };
-  if (f.buckets) o.buckets = f.buckets.map((b): JsonObject => (b.range ? { name: b.name, range: { min: String(b.range[0]), max: String(b.range[1]) } } : { name: b.name, values: [...(b.values ?? [])] }));
+  if (f.marked) o.marked = true;
+  else if (f.buckets) o.buckets = f.buckets.map((b): JsonObject => (b.range ? { name: b.name, range: { min: String(b.range[0]), max: String(b.range[1]) } } : { name: b.name, values: [...(b.values ?? [])] }));
   // Buckets by period and the facets summed per bucket (12.3) travel as `by` and `sum`.
   if (f.period) o.by = f.period;
   if (f.sums.length) o.sum = [...f.sums];
@@ -308,7 +309,7 @@ export function flowJson(f: Flow): JsonObject {
   if (f.context.length) o.context = [...f.context];
   if (f.replaces) o.replaces = f.replaces;
   o.stops = f.stops.map((st) => ({ name: st.name, ...(st.act ? { act: st.act } : {}), ...(st.of ? { of: st.of } : {}) }));
-  if (f.done) o.done = { filter: f.done.filter, value: f.done.value };
+  if (f.done) o.done = { filter: f.done.filter, value: f.done.value, ...(f.done.mark ? { mark: true } : {}) };
   return o;
 }
 
@@ -319,8 +320,11 @@ export function laneJson(s: Lane): JsonObject {
   if (s.utility) o.utility = s.utility;
   if (s.view) o.view = s.view;
   if (s.serve) o.serve = s.serve;
-  if (s.pick) o.pick = { filter: s.pick.filter, value: s.pick.value };
-  if (s.done) o.done = s.done === "viewed" ? "viewed" : { filter: s.done.filter, value: s.done.value };
+  // A step lane (revision 34) travels as its step and its untils; its picks are the step's two buckets, never written.
+  if (s.step) o.step = s.step;
+  if (s.until?.length) o.until = [...s.until];
+  if (s.pick && !s.step) o.pick = { filter: s.pick.filter, value: s.pick.value };
+  if (s.done && !s.step) o.done = s.done === "viewed" ? "viewed" : { filter: s.done.filter, value: s.done.value };
   if (s.group) o.group = s.group;
   o.band = s.band;
   o.house = String(s.house);
@@ -585,6 +589,7 @@ function filterText(f: JsonObject): string[] {
   const out = [`filter: ${f.filter}`, `  facet: ${f.facet}`];
   if (Array.isArray(f.buckets)) out.push("  buckets:", ...f.buckets.map((b) => { const bb = b as JsonObject; const name = /[\s:]/.test(String(bb.name)) ? JSON.stringify(bb.name) : String(bb.name); return isObj(bb.range) ? `    ${name}: ${bb.range.min}..${bb.range.max}` : `    ${name}: ${list(bb.values as Json[])}`; }));
   else if (typeof f.by === "string") out.push(`  buckets: by ${f.by}`);
+  else if (f.marked === true) out.push("  buckets: marked");
   out.push(...kv("  ", "sum", f.sum));
   out.push(...kv("  ", "dependent", f.dependent));
   return out;
@@ -654,7 +659,7 @@ const pressText = (p: Json | undefined): string | undefined =>
   isObj(p) && typeof p.word === "string" && typeof p.to === "string"
     ? `${/[:\s]/.test(p.word) ? quoteWord(p.word) : p.word}${typeof p.glyph === "string" ? ` as ${p.glyph}` : ""} -> ${p.to}`
     : undefined;
-const pickText = (p: Json | undefined): string | undefined => (isObj(p) ? `${p.filter} = ${String(p.value)}` : typeof p === "string" ? p : undefined);
+const pickText = (p: Json | undefined): string | undefined => (isObj(p) ? (p.mark === true ? String(p.filter) : `${p.filter} = ${String(p.value)}`) : typeof p === "string" ? p : undefined);
 
 function flowText(f: JsonObject): string[] {
   const out = [`flow: ${f.flow} /${f.version}`, ...kv("  ", "label", f.label), ...kv("  ", "utility", f.utility), ...kv("  ", "follow", f.follow)];
@@ -671,6 +676,8 @@ function flowText(f: JsonObject): string[] {
 
 function laneText(s: JsonObject): string[] {
   const out = [`lane: ${s.lane} /${s.version}`, ...kv("  ", "label", s.label), ...kv("  ", "utility", s.utility), ...kv("  ", "view", s.view), ...kv("  ", "serve", s.serve)];
+  if (typeof s.step === "string") out.push(`  step: ${s.step}`);
+  if (Array.isArray(s.until) && s.until.length) out.push(`  until: ${s.until.join(", ")}`);
   if (s.pick !== undefined) out.push(`  pick: ${pickText(s.pick)}`);
   if (s.done !== undefined) out.push(`  done: ${pickText(s.done)}`);
   out.push(...kv("  ", "group", s.group), ...kv("  ", "band", s.band), ...kv("  ", "house", s.house));
