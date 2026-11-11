@@ -1213,3 +1213,90 @@ class: Pnoted
   assert.deepEqual(forward.map((d) => d.version), ["2026-11-01"], "and forward again");
   assert.equal((await held()).at(-1), "pub.example/pbase /2026-11-01");
 });
+
+test("0.3.80: an index lists the values a filter with no bucket list carries, in the view's order, each counted, bounded, under the other picks, for the owner and for a caller placed by an edge", { skip: !url }, async () => {
+  await host.createOwner("walk.example");
+  const dev = new PgStore(pool, "walk.example", { allowUnsigned: true });
+  const store = await host.storeFor("walk.example");
+  for (const text of [STANDARD_PACKAGES.core, STANDARD_PACKAGES.units, STANDARD_PACKAGES.party])
+    await dev.install(publish(text, { date: text.match(/^package: \S+ \/(\S+)/m)?.[1] ?? "2026-10-16" }).bundle, undefined, clock);
+  const pkg = `package: walkshelf /2026-10-01
+  owner: walk.example
+  label: Walk
+  crubal: 2
+  extends: crubal.com/party /2026-10-16
+
+kind: shop
+  levels: shop
+  base: Shop
+kind: item
+  levels: pick
+  base: Item
+
+shopName$
+title$
+slot$
+state{open|done}
+
+class: Shop
+  for: shop
+  facets:
+    shopName
+class: Item
+  for: item
+  facets:
+    !title
+    slot
+    state
+
+shape: card
+  slots:
+    !title -> heading
+    slot -> slot
+filter: slot
+  facet: slot
+filter: state
+  facet: state
+view: walk
+  select:
+    level: pick
+  filters: slot, state
+  order: slot, title
+  shape: card
+  show: staff
+
+permissions: walkshelf
+  menu:
+    keep: edit title
+  presets:
+    keeper: keep   audience: staff
+  relations: operator, staff
+`;
+  await dev.install(publish(pkg, { date: "2026-10-01" }).bundle, undefined, clock);
+  // Slots that read as numbers among them: an object's keys would put 7 and 12 first, the list keeps the order.
+  const picks: [string, string, string][] = [["K1", "B-2", "open"], ["K2", "12", "open"], ["K3", "A-1", "open"], ["K4", "7", "done"], ["K5", "A-1", "open"], ["K6", "B-2", "done"]];
+  await store.commit({ person: "walk.example" }, (d) => {
+    d.records.set("ROOT", { id: "ROOT", kind: "shop", level: "shop", owner: "walk.example", values: { shopName: "Walk" }, sources: { "*": { origin: "declared", via: "L-1" } } });
+    d.edges.set("E-a", { edge: "E-a", who: "person:cashierfu.com:P-1", relation: "operator", mode: "admin", on: "ROOT", grants: [], by: "owner" });
+    for (const [id, slot, state] of picks) d.records.set(id, { id, kind: "item", level: "pick", owner: "walk.example", within: "ROOT", values: { title: id, slot, state }, sources: { "*": { origin: "declared", via: "L-1" } } });
+  }, clock);
+  const index = new Index(pool);
+  await index.apply(store, "walk");
+  const plain = await index.serve(store, "walk", { caller: "walk.example" });
+  assert.equal(plain.counts.slot, undefined, "an unlisted filter is not counted unasked");
+  assert.equal(plain.listed, undefined);
+  for (const caller of ["walk.example", "person:cashierfu.com:P-1"]) {
+    const all = await index.serve(store, "walk", { caller, list: { slot: 50 } });
+    assert.deepEqual(all.listed?.slot, ["12", "7", "A-1", "B-2"], `${caller}: in the view's order`);
+    assert.deepEqual(all.counts.slot, { "12": 1, "7": 1, "A-1": 2, "B-2": 2 });
+    const open = await index.serve(store, "walk", { caller, picks: { state: ["open"] }, list: { slot: 50 } });
+    assert.deepEqual(open.listed?.slot, ["12", "A-1", "B-2"], `${caller}: under the other pick`);
+    assert.deepEqual(open.counts.slot, { "12": 1, "A-1": 2, "B-2": 1 });
+    const two = await index.serve(store, "walk", { caller, list: { slot: 2 } });
+    assert.deepEqual(two.listed?.slot, ["12", "7"], `${caller}: bounded to the first two`);
+  }
+  // A listed filter (its values declared) is not this option's: it is counted as ever and never listed.
+  const listedFilter = await index.serve(store, "walk", { caller: "walk.example", list: { state: 5 } });
+  assert.equal(listedFilter.listed, undefined);
+  assert.deepEqual(listedFilter.counts.state, { open: 4, done: 2 });
+});

@@ -38,6 +38,13 @@ export type Serve = {
    */
   only?: { [filter: string]: string[] };
   /**
+   * For a filter with no bucket list, the first values the selection's rows carry, in the view's order, each
+   * counted: at most the number asked per filter (0.3.80). What a lane grouped by such a filter (a slot, an
+   * order) reads its groups from, where `only` needs the names known already. The names come back in `listed`,
+   * in order (an object's keys do not keep the order of names that read as numbers), their counts in `counts`.
+   */
+  list?: { [filter: string]: number };
+  /**
    * Whether a tally this process and the host's table do not hold may be built on this request: "always" (the
    * default) scans the index for it and keeps it; "stored" serves the page with its total alone, the counts
    * empty, when none is kept, so an ask nobody standard makes (a search, several picks) never scans a catalog
@@ -46,7 +53,7 @@ export type Serve = {
    */
   counts?: "always" | "stored" | "standard";
 };
-export type Page = { view: string; version: string; audience: string; seq: number; page: number; pages: number; /** The rows the picks (and the search) select, across every page: the figure a report stamps. */ total: number; rows: JsonObject[]; counts: { [filter: string]: { [bucket: string]: number } }; sums?: Sums; nested?: Nested; indexable: boolean };
+export type Page = { view: string; version: string; audience: string; seq: number; page: number; pages: number; /** The rows the picks (and the search) select, across every page: the figure a report stamps. */ total: number; rows: JsonObject[]; counts: { [filter: string]: { [bucket: string]: number } }; /** The values listed for the filters `list` named, in the view's order. */ listed?: { [filter: string]: string[] }; sums?: Sums; nested?: Nested; indexable: boolean };
 
 /** A row's slot as a number, in SQL: money by its amount, a quantity by its count, a number as it is, a numeric text read, else nothing. */
 const numericSql = (slot: string) =>
@@ -283,7 +290,10 @@ export class Index {
     const counts: Page["counts"] = {};
     const sums: Sums = {};
     const nested: Nested = {};
-    const key = `${owner}|${view}|${version}|${v.show}|${seq}|${JSON.stringify(pickList)}|${o.q ?? ""}|${standsOn ? standsOn.join(",") : ""}|${linked ? (o.caller ?? "") : ""}|${JSON.stringify(o.only ?? {})}`;
+    const listed: { [filter: string]: string[] } = {};
+    // The filters to list (0.3.80): unlisted ones of this view, each with its bound, at most 500.
+    const toList = Object.entries(o.list ?? {}).filter(([f, n]) => v.filters.includes(f) && this.unlisted(p, f) && n > 0).map(([f, n]) => [f, Math.min(500, Math.floor(n))] as [string, number]);
+    const key = `${owner}|${view}|${version}|${v.show}|${seq}|${JSON.stringify(pickList)}|${o.q ?? ""}|${standsOn ? standsOn.join(",") : ""}|${linked ? (o.caller ?? "") : ""}|${JSON.stringify(o.only ?? {})}${toList.length ? `|${JSON.stringify(toList)}` : ""}`;
     // A standard ask (no search, no pick or one pick on an indexable filter): its tally is kept a week, any
     // other's a day (pruneTallies), so crawlers walking combinations never fill the table. The page is not in
     // the key, so every page of one selection shares the tally; it is not in the standard either (a crawler
@@ -314,11 +324,20 @@ export class Index {
             names.map((b) => [b, Object.fromEntries(summed.map((facet) => [facet, pool.filter((r) => inPick(r, f, [b])).reduce((t, r) => t + numberIn((r.row as JsonObject)?.[this.slotOf(p, v, facet) ?? ""]), 0)]))]),
           );
       }
+      for (const [f, most] of toList) {
+        const by = new Map<string, number>();
+        for (const r of served) {
+          if (!passes(r, f)) continue;
+          for (const b of ((r.buckets as JsonObject)?.[f] as string[] | undefined) ?? []) if (by.has(b) || by.size < most) by.set(b, (by.get(b) ?? 0) + 1);
+        }
+        listed[f] = [...by.keys()];
+        counts[f] = { ...(counts[f] ?? {}), ...Object.fromEntries(by) };
+      }
       const chosen = served.filter((r) => passes(r));
       total = chosen.length;
       onPage = chosen.slice((page - 1) * v.page, page * v.page);
     } else {
-      type Tally = { total: number; counts: Page["counts"]; sums: Sums; nested: Nested };
+      type Tally = { total: number; counts: Page["counts"]; sums: Sums; nested: Nested; listed?: { [filter: string]: string[] } };
       // The tally kept in this process, or in the host's table by any process, under the same key (the
       // index head is in it, so a moved index never answers from an old tally).
       const hashed = createHash("sha256").update(key).digest("hex");
@@ -336,6 +355,7 @@ export class Index {
         Object.assign(counts, cached.counts);
         Object.assign(sums, cached.sums ?? {});
         Object.assign(nested, cached.nested);
+        Object.assign(listed, cached.listed ?? {});
       } else if (!mayBuild) {
         // No tally kept and none to be built here: the page's total, and the counts left empty.
         const all = build();
@@ -389,7 +409,15 @@ export class Index {
           }
           nested[f] = inner;
         }
-        const made: Tally = { total, counts: structuredClone(counts), sums: structuredClone(sums), nested: structuredClone(nested) };
+        // The values listed (0.3.80): the first the selection's rows carry in the view's order, each counted over
+        // the rows the other picks select. One pass per filter, the cost of a tally, kept with it.
+        for (const [f, most] of toList) {
+          const but = build(f, [most]);
+          const rows = (await this.pool.query(`select b.value as bucket, count(*) as n from (select buckets, row_number() over (order by ${order}) as at from index_rows where ${but.sql}) t, jsonb_array_elements_text(t.buckets -> '${f.replace(/'/g, "''")}') b group by b.value order by min(t.at) limit $${but.ps.length}`, but.ps)).rows as { bucket: string; n: string }[];
+          listed[f] = rows.map((r) => r.bucket);
+          counts[f] = { ...(counts[f] ?? {}), ...Object.fromEntries(rows.map((r) => [r.bucket, Number(r.n)])) };
+        }
+        const made: Tally = { total, counts: structuredClone(counts), sums: structuredClone(sums), nested: structuredClone(nested), ...(toList.length ? { listed: structuredClone(listed) } : {}) };
         this.remember(key, made);
         // Kept for every process; the tallies of earlier heads of this view go with it.
         await this.pool.query("insert into index_tallies (key, owner, view, version, audience, seq, json, standard) values ($1, $2, $3, $4, $5, $6, $7, $8) on conflict (key) do nothing", [hashed, owner, view, version, v.show, seq, made, standardAsk]);
@@ -398,6 +426,7 @@ export class Index {
           // A tally that cannot be built within the statement's time (a catalog under load) leaves the page
           // served with its rows, a bounded total and no counts, never an error (the scale rule, 2026-10-26).
           for (const k of Object.keys(counts)) delete counts[k];
+          for (const k of Object.keys(listed)) delete listed[k];
           const all = build();
           total = Number((await this.pool.query(`select count(*) as n from (select 1 from index_rows where ${all.sql} limit 10001) t`, all.ps)).rows[0]?.n ?? 0);
         }
@@ -426,7 +455,7 @@ export class Index {
       delete row.linked;
       return row;
     });
-    return { view, version, audience: v.show, seq, page, pages, total, rows: out, counts, ...(Object.keys(sums).length ? { sums } : {}), ...(Object.keys(nested).length ? { nested } : {}), indexable };
+    return { view, version, audience: v.show, seq, page, pages, total, rows: out, counts, ...(Object.keys(listed).length ? { listed } : {}), ...(Object.keys(sums).length ? { sums } : {}), ...(Object.keys(nested).length ? { nested } : {}), indexable };
   }
 
   private linkedColumn: Promise<void> | undefined;
