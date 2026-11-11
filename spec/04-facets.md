@@ -76,7 +76,7 @@ A definition is a block under `facet: key`. Its settings:
 | choice | `fixed` | `yes` when the list is fixed by definition (4.2.1) |
 | choice | `ranked` | `yes` when the list's order is a ranking (`NM` > `VG` > … > `P`), so `best`, `worst`, `over` and `under` mean something |
 | choice | `scored` | `yes` when each pick also takes a grade from 0 to 10, stored as the qualifier `grade` |
-| link | `to` | what it points at: a kind, a class, `url`, a shared vocabulary's prefix (`wd`), or a sort of definition (`def:facet`, 4.2.2) |
+| link | `to` | what it points at: a kind, a level of a kind (revision 34, erratum: `&unit`, a level of item; a link step reads through it as through a link to a kind, 1.10), a class, `url`, a shared vocabulary's prefix (`wd`), or a sort of definition (`def:facet`, 4.2.2) |
 | compound | `facets` | the child facets: blocks or shorthand lines (4.5) |
 | compound | `identity` | the child that identifies a row; it MUST be a link child (chapter 1.6) |
 
