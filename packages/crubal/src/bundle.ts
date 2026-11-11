@@ -309,7 +309,7 @@ export function flowJson(f: Flow): JsonObject {
   if (f.serves.length) o.serves = f.serves.map((x) => ({ as: x.as, ...(x.items ? { items: [...x.items] } : {}) }));
   if (f.context.length) o.context = [...f.context];
   if (f.replaces) o.replaces = f.replaces;
-  o.stops = f.stops.map((st) => ({ name: st.name, ...(st.act ? { act: st.act } : {}), ...(st.of ? { of: st.of } : {}) }));
+  o.stops = f.stops.map((st) => ({ name: st.name, ...(st.act ? { act: st.act } : {}), ...(st.of ? { of: st.of } : {}), ...(st.with?.length ? { with: st.with.map((w) => ({ facet: w.facet, value: w.value })) } : {}) }));
   if (f.done) o.done = { filter: f.done.filter, value: f.done.value, ...(f.done.mark ? { mark: true } : {}) };
   return o;
 }
@@ -670,7 +670,7 @@ function flowText(f: JsonObject): string[] {
   out.push(...kv("  ", "replaces", f.replaces));
   if (Array.isArray(f.stops)) {
     out.push("  stops:");
-    for (const st of f.stops as JsonObject[]) out.push(`    ${st.name}${typeof st.act === "string" ? ` -> ${st.act}` : ""}${typeof st.of === "string" ? ` of ${st.of}` : ""}`);
+    for (const st of f.stops as JsonObject[]) out.push(`    ${st.name}${typeof st.act === "string" ? ` -> ${st.act}` : ""}${typeof st.of === "string" ? ` of ${st.of}` : ""}${Array.isArray(st.with) && st.with.length ? ` with ${(st.with as JsonObject[]).map((w) => `${w.facet} = ${w.value}`).join(", ")}` : ""}`);
   }
   if (f.done !== undefined) out.push(`  done: ${pickText(f.done)}`);
   return out;

@@ -575,11 +575,12 @@ flow: unitizer /2026-12-20
 | `serves` | whom the line is for, as a lane's `serves` |
 | `context` | kinds of this package the flow holds through its run, asked once when it is walked and kept per person (a station, a location); the app draws them at the head and hands them to every stop's act (revision 23) |
 | `replaces` | a flow this one stands in for (revision 23): where the named flow would have been served, this one is; the named flow returns when this one goes; a flow a place draws from a preset names the preset |
-| `stops` | one line per stop, in walking order: `<lane> -> <act>` is a lane of this package with the act of the utility that moves a card on; `<lane>` alone is a lane whose cards move by their own presses; `<form> of <level>` is a block, a form of this package making or acting on a record of that level (the record of the stop before, when it has one) |
+| `stops` | one line per stop, in walking order: `<lane> -> <act>` is a lane of this package with the act of the utility that moves a card on; `<lane>` alone is a lane whose cards move by their own presses; `<form> of <level>` is a block, a form of this package making or acting on a record of that level (the record of the stop before, when it has one); a block may end `with <facet> = <value>, …` (revision 36): the values its form opens with, set and locked |
 | `done` | `filter = value`: the state a record leaves the line in: the last lane stop's done, or its pick when that lane holds what is finished (revision 22); or (revision 34) a `marked` filter alone: a record marked on it has left the line |
 
 A package MUST be refused at publish when a flow names a utility it doesn't declare, a stop that is
-neither a lane nor a form of the package, an act its utility lacks, a level its kinds lack, a done that
+neither a lane nor a form of the package, an act its utility lacks, a level its kinds lack, a `with` on a
+stop that is not a block or naming a facet that is not declared or one facet twice (revision 36), a done that
 is not a declared filter with a real value, a context that is not a kind or level of the package, or itself
 as what it replaces (12.8); a `replaces` naming a flow not in force at a place is carried and stands in for
 nothing there. A package that extends others may walk the lanes and forms of the packages it extends and name
@@ -599,6 +600,13 @@ stop's `pick`: the form's record is made, or moved, into the state that lane hol
 the utility's: a filing lands when its form is kept, a printing when the printer reports. Nothing watches
 a record for the state to change; a stop stamps when it is told the act landed. A reader derives the
 stamps from the stops; they are never written in the text and never published.
+
+**Locked values (revision 36).** A block stop may end `with <facet> = <value>, …`: the form of that stop
+opens with each named facet holding that value, and the person walking cannot change it there. It is how one
+form serves several lines of work (an offer form with `channel = ebay` in the flow that lists on eBay), and
+how a place draws its own such flow in a designer without a second form. The value is written as the form's
+own write, under the form's source, and is checked as any value the form keeps (4, 7); a lock is not a
+rule: the same form opened elsewhere asks the facet as it always did. A reader derives nothing from it.
 
 **The chain (revision 22).** Two lane stops that follow one another chain: the first's `done` is a state
 (not `viewed`) and it is the second's `pick`, filter and value. A lane with no `pick` (a list, 12.10) is no

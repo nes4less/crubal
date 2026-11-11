@@ -270,3 +270,25 @@ test("a flow in an extending package may name the lanes, forms, utility and pres
   // A package that extends nothing is still checked whole at publish.
   refused(flow.replace("ordersToPack -> pack", "ordersToShip -> ship"), /ordersToShip isn't a lane/);
 });
+
+test("a block stop's with (revision 36): the values its form opens with are read, carried, printed back and checked", () => {
+  const locked = flow.replace("    order of order", "    order of order with buyer = walk-in, total = 0");
+  const [info] = readPackages(shop(locked));
+  assert.deepEqual(info?.flows[0]?.stops[0]?.with, [{ facet: "buyer", value: "walk-in" }, { facet: "total", value: "0" }]);
+  assert.equal(info?.flows[0]?.stops[1]?.with, undefined);
+  checkPackages(shop(locked));
+  const first = bundleOf(parsePackage(shop(locked)));
+  const stops = (first.flows as { stops: JsonLike[] }[])[0]?.stops;
+  assert.deepEqual(stops?.[0], { name: "order", of: "order", with: [{ facet: "buyer", value: "walk-in" }, { facet: "total", value: "0" }] });
+  assert.match(printBundle(first), /^    order of order with buyer = walk-in, total = 0$/m);
+  assert.equal(serialize(bundleOf(readBundle(first))), serialize(first));
+  // The flow as written before says nothing new: no `with` in its bundle.
+  assert.ok(!("with" in ((bundleOf(parsePackage(shop(flow))).flows as { stops: object[] }[])[0]?.stops[0] ?? {})));
+  const bad = (line: string, why: RegExp) => refused(flow.replace("    order of order", line), why);
+  bad("    order of order with colour = red", /locks colour, which isn't a facet/);
+  bad("    order of order with buyer", /a stop's with is/);
+  bad("    order of order with buyer = a, buyer = b", /locks a facet twice/);
+  // A lane stop takes no with: only a block opens a form.
+  assert.throws(() => readPackages(shop(flow.replace("ordersToPick -> pick", "ordersToPick -> pick with buyer = a"))), /a stop is/);
+});
+type JsonLike = { [k: string]: unknown };
