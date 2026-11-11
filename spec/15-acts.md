@@ -100,6 +100,13 @@ in place of that one.
 A send is the app's: which verbs exist, what their words mean, and when they report are not the engine's to
 say.
 
+**A mark is taken once (revision 34).** A facet a `marked` filter names (12.3) is a mark, and holds one value.
+An act whose `set` or `then` would write a mark on a record that already holds a real value for it stops
+before any write, with the reason; the host hands the engine the marks in force, and MUST land an act inside
+the entry's own transaction (8.5) so that of two acts arriving together exactly one lands. This is the whole
+of a claim: two people pressing one press on one record have one winner. Clearing a mark (`none`) is an
+ordinary set by an act that says so, after which it may be taken again.
+
 ## 15.3 Well-formed acts
 
 A package MUST be refused at publish when an act names a utility it doesn't declare or one that neither lists it

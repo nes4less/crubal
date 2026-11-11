@@ -87,6 +87,13 @@ export type Lane = {
   serve?: string;
   pick?: { filter: string; value: string; line: number };
   done?: { filter: string; value: string; line: number } | "viewed";
+  /**
+   * Revision 34: one of the view's marked filters, in place of pick and done. What is ahead is its `open`
+   * bucket and the history its `done` bucket; `pick` and `done` hold those two, so a reader of either sees them.
+   */
+  step?: string;
+  /** Revision 34: marked filters of the view; a record marked on any waits here no longer. */
+  until?: string[];
   band: "daily" | "weekly" | "rarely";
   house: number;
   serves: { as: string; items?: string[]; line: number }[];
@@ -137,7 +144,8 @@ export type Flow = {
   /** The flow this one stands in for (revision 23): served where the named flow would have been. */
   replaces?: string;
   stops: FlowStop[];
-  done?: { filter: string; value: string; line: number };
+  /** `filter = value`, or (revision 34) a marked filter alone: a record marked on it has left the line. */
+  done?: { filter: string; value: string; line: number; mark?: true };
   line: number;
 };
 
@@ -145,21 +153,22 @@ export type Flow = {
  * A stamp a flow's stop leaves (12.11, revision 22): the facet and value a record takes when the stop's act
  * lands (a lane stop: its done) or when its form is kept (a block stop: the next lane stop's pick).
  */
-export type FlowStamp = { stop: string; at: number; facet: string; value: string };
+export type FlowStamp = { stop: string; at: number; facet: string; value: string; mark?: true };
 
 /**
  * The stamps of a flow's stops, derived from its lanes: never declared, never published. `facetOf` resolves
  * a filter's name to its facet's key (the views' filters); a stop whose pick names no filter stamps nothing.
  * A lane stop whose done is `viewed` or absent (an end stop) stamps nothing; a block stop after the last
- * lane stamps nothing. Pure.
+ * lane stamps nothing. A step stop (revision 34) stamps its mark (`mark: true`; the value is the writer's: now on
+ * a date, yes on a yes-no, nothing on a link, which the act sets), and a block before one stamps nothing. Pure.
  */
-export function flowStamps(f: Flow, lanes: Pick<Lane, "name" | "pick" | "done">[], facetOf: (filter: string) => string | undefined): FlowStamp[] {
+export function flowStamps(f: Flow, lanes: Pick<Lane, "name" | "pick" | "done" | "step">[], facetOf: (filter: string) => string | undefined): FlowStamp[] {
   const out: FlowStamp[] = [];
   const laneOf = (n: string) => lanes.find((x) => x.name === n);
   const nextPick = (i: number) => {
     for (let j = i + 1; j < f.stops.length; j++) {
       const l = laneOf(f.stops[j]?.name ?? "");
-      if (l) return l.pick;
+      if (l) return l.step ? undefined : l.pick;
     }
     return undefined;
   };
@@ -167,7 +176,7 @@ export function flowStamps(f: Flow, lanes: Pick<Lane, "name" | "pick" | "done">[
     const l = laneOf(st.name);
     const pk = l ? (l.done && l.done !== "viewed" ? l.done : undefined) : nextPick(i);
     const facet = pk ? facetOf(pk.filter) : undefined;
-    if (pk && facet) out.push({ stop: st.name, at: i, facet, value: pk.value });
+    if (pk && facet) out.push({ stop: st.name, at: i, facet, value: pk.value, ...(l?.step ? { mark: true as const } : {}) });
   });
   return out;
 }
@@ -269,6 +278,7 @@ function readLane(node: Node): Lane {
   const [name = "", version = ""] = node.value.split(/\s+\//).map((s) => s.trim());
   if (!/^[a-z][\w-]*$/.test(name)) throw new CrubalError(`a lane is "lane: <name> /<version>", the name a lower-case word: ${node.value}`, node.line);
   const s: Lane = { name, version, band: "rarely", house: 8, serves: [], home: { chips: [], line: node.line }, line: node.line };
+  const said = new Set<string>();
   for (const c of node.children) {
     if (!c.key) continue;
     const v = c.value.trim();
@@ -276,9 +286,16 @@ function readLane(node: Node): Lane {
     else if (c.key === "utility") s.utility = v;
     else if (c.key === "view") s.view = v;
     else if (c.key === "serve") s.serve = v;
-    else if (c.key === "pick") s.pick = readPick(v, c.line, "pick");
-    else if (c.key === "done") s.done = v === "viewed" ? "viewed" : readPick(v, c.line, "done");
-    else if (c.key === "group") {
+    else if (c.key === "pick") { s.pick = readPick(v, c.line, "pick"); said.add("pick"); }
+    else if (c.key === "done") { s.done = v === "viewed" ? "viewed" : readPick(v, c.line, "done"); said.add("done"); }
+    else if (c.key === "step") {
+      if (!/^[\w:-]+$/.test(v)) throw new CrubalError(`step names one of the view's marked filters: ${v}`, c.line);
+      s.step = v;
+    } else if (c.key === "until") {
+      s.until = splitList(v);
+      for (const u of s.until) if (!/^[\w:-]+$/.test(u)) throw new CrubalError(`until names the view's marked filters: ${u}`, c.line);
+      if (!s.until.length) throw new CrubalError("until names the view's marked filters", c.line);
+    } else if (c.key === "group") {
       if (!/^[\w:-]+$/.test(v)) throw new CrubalError(`group names one of the view's filters: ${v}`, c.line);
       s.group = v;
     }
@@ -334,10 +351,17 @@ function readLane(node: Node): Lane {
       }
       if (!card.name.length) throw new CrubalError(`the lane ${name}'s card names nothing`, c.line);
       s.card = card;
-    } else throw new CrubalError(`a lane has label, utility, view, serve, pick, done, group, band, house, serves, home and card, not ${c.key}`, c.line);
+    } else throw new CrubalError(`a lane has label, utility, view, serve, pick, done, step, until, group, band, house, serves, home and card, not ${c.key}`, c.line);
   }
   if (!s.view && !s.serve) throw new CrubalError(`the lane ${name} names no view and no serve`, node.line);
   if (s.view && s.serve) throw new CrubalError(`the lane ${name} names both a view and a serve`, node.line);
+  // A step lane (revision 34): the step in place of pick and done, which hold its two buckets from here on.
+  if (s.step && (said.has("pick") || said.has("done"))) throw new CrubalError(`the lane ${name} names a step, so it names no pick and no done`, node.line);
+  if (s.until && !s.step) throw new CrubalError(`the lane ${name} names an until, so it needs a step`, node.line);
+  if (s.step) {
+    s.pick = { filter: s.step, value: "open", line: node.line };
+    s.done = { filter: s.step, value: "done", line: node.line };
+  }
   if (s.serve && (s.pick || s.done || s.card)) throw new CrubalError(`the lane ${name} is a utility's own (serve): no pick, done or card`, node.line);
   // A list (12.10, revision 17): a lane without a pick holds every record its view serves and has no history.
   if (s.view && !s.pick && s.done) throw new CrubalError(`the lane ${name} is a list (no pick), so it has no done`, node.line);
@@ -369,7 +393,7 @@ function readFlow(node: Node): Flow {
     } else if (c.key === "replaces") {
       if (!/^[a-z][\w-]*$/.test(v)) throw new CrubalError(`replaces names a flow, a lower-case word: ${v}`, c.line);
       f.replaces = v;
-    } else if (c.key === "done") f.done = readPick(v, c.line, "done");
+    } else if (c.key === "done") f.done = /^[\w:-]+$/.test(v) ? { filter: v, value: "done", line: c.line, mark: true } : readPick(v, c.line, "done");
     else if (c.key === "stops") {
       for (const st of c.children) {
         const text = st.text.trim();
@@ -555,8 +579,16 @@ function checkLanes(source: string, pkgs: PackageInfo[]): void {
         const facet = f ? dict.facets.get(f.facet) : undefined;
         if (facet?.values && !facet.values.some((x) => x.value === pk.value)) throw new CrubalError(`${where}'s ${what}: ${pk.value} is not a value of ${facet.key}`, pk.line);
       };
-      pick(s.pick, "pick");
-      if (s.done && s.done !== "viewed") pick(s.done, "done");
+      if (s.step) {
+        // Revision 34: the step and every until is a marked filter of the lane's view.
+        for (const [m, what] of [[s.step, "step"], ...(s.until ?? []).map((u) => [u, "until"])] as [string, string][]) {
+          if (!view.filters.includes(m)) throw new CrubalError(`${where}'s ${what} names ${m}, which isn't a filter of ${view.name}`, s.line);
+          if (!views.filters.get(m)?.marked) throw new CrubalError(`${where}'s ${what} names ${m}, which isn't a marked filter (buckets: marked)`, s.line);
+        }
+      } else {
+        pick(s.pick, "pick");
+        if (s.done && s.done !== "viewed") pick(s.done, "done");
+      }
       for (const ch of s.home.chips) if (!view.filters.includes(ch)) throw new CrubalError(`${where}'s chips name ${ch}, which isn't a filter of ${view.name}`, s.home.line);
       const slots = new Set<string>(["id"]);
       for (const sh of view.shapes) for (const sl of views.shapes.get(sh)?.slots ?? []) slots.add(sl.to);
@@ -649,7 +681,9 @@ function checkFlowList(flows: Flow[], env: FlowEnv): void {
       const flt = env.filters.get(f.done.filter);
       if (!flt && strict) throw new CrubalError(`${where}'s done names ${f.done.filter}, which isn't a filter ${here}`, f.done.line);
       const facet = flt ? dict.facets.get(flt.facet) : undefined;
-      if (facet?.values && !facet.values.some((x) => x.value === f.done?.value)) throw new CrubalError(`${where}'s done: ${f.done.value} is not a value of ${facet.key}`, f.done.line);
+      if (f.done.mark) {
+        if (flt && !(flt as { marked?: boolean }).marked) throw new CrubalError(`${where}'s done names ${f.done.filter}, which isn't a marked filter (buckets: marked)`, f.done.line);
+      } else if (facet?.values && !facet.values.some((x) => x.value === f.done?.value)) throw new CrubalError(`${where}'s done: ${f.done.value} is not a value of ${facet.key}`, f.done.line);
     }
     // The chain (12.11, revision 22): consecutive lane stops chain done to pick, a list lane is no stop, and the
     // flow's done is its last lane's (its pick when that lane holds what is finished). A block between two
@@ -659,9 +693,13 @@ function checkFlowList(flows: Flow[], env: FlowEnv): void {
     const show = (pk: { filter: string; value: string }) => `${pk.filter} = ${pk.value}`;
     const same = (a: { filter: string; value: string }, b: { filter: string; value: string }) => a.filter === b.filter && a.value === b.value;
     let prev: Lane | undefined;
+    let last: Lane | undefined;
     for (const st of f.stops) {
       const l = env.lanes.find((x) => x.name === st.name);
       if (!l) continue;
+      last = l;
+      // A step stop (revision 34) chains with nothing: it may stand anywhere, and the state stops chain across it.
+      if (l.step) continue;
       if (!l.pick) throw new CrubalError(`${where}'s stop ${l.name} is a list: it holds no state, so it is no stop`, st.line);
       if (prev) {
         if (!prev.done || prev.done === "viewed") throw new CrubalError(`${where} has a gap: ${prev.name} is done when viewed, so nothing moves on from it to ${l.name}`, st.line);
@@ -669,7 +707,7 @@ function checkFlowList(flows: Flow[], env: FlowEnv): void {
       }
       prev = l;
     }
-    if (f.done && prev) {
+    if (f.done && prev && last === prev) {
       const end = prev.done && prev.done !== "viewed" ? prev.done : prev.pick;
       if (end && !same(f.done, end)) throw new CrubalError(`${where}'s done is ${show(f.done)}, but its last lane ${prev.name} leaves a record at ${show(end)}`, f.done.line);
     }
