@@ -487,6 +487,13 @@ export function checkPackages(source: string): PackageInfo[] {
       if (!d.levels.has(level)) throw new CrubalError(`vary names ${level}, which isn't a level`, d.varyLines.get(level));
       for (const k of keys) if (!k.includes(":") && !d.facets.has(k)) throw new CrubalError(`vary at ${level} names ${k}, which isn't a facet`, d.varyLines.get(level));
     }
+    // Revision 35: a level's quantity is a number facet of this package.
+    for (const k of d.kinds.values())
+      for (const [level, facet] of Object.entries(k.shares ?? {})) {
+        const f = d.facets.get(facet);
+        if (!f && !facet.includes(":")) throw new CrubalError(`shares at ${level} names ${facet}, which isn't a facet`, k.sharesLine);
+        if (f && f.type !== "number") throw new CrubalError(`shares at ${level} names ${facet}, which isn't a number`, k.sharesLine);
+      }
   }
   const pkgs = readPackages(source);
   const byName = new Map(pkgs.map((p) => [p.name, p]));
@@ -769,6 +776,7 @@ function checkActs(source: string, pkgs: PackageInfo[]): void {
       facets: new Set(dict.facets.keys()),
       facetOf: (k) => dict.facets.get(k),
       aspects: aspectsOf(dict),
+      shares: sharesOf(dict),
       strict: p.extends.length === 0,
       here: "of this package",
     });
@@ -784,6 +792,7 @@ export function checkActsInForce(p: { info: Pick<PackageInfo, "acts" | "utilitie
     facets: new Set(p.dict.facets.keys()),
     facetOf: (k) => p.dict.facets.get(k),
     aspects: aspectsOf(p.dict),
+    shares: sharesOf(p.dict),
     inertTelling: true,
     strict: true,
     here: "in force here",
@@ -791,4 +800,6 @@ export function checkActsInForce(p: { info: Pick<PackageInfo, "acts" | "utilitie
 }
 
 /** Every aspect the kinds declare under `follow:` (11.2, revision 31), which an act's `tells:` may name. */
+/** Level → the facet that is its quantity, over every kind's `shares:` (11.2, revision 35). */
+export const sharesOf = (dict: Dictionary): Map<string, string> => new Map([...dict.kinds.values()].flatMap((k) => Object.entries(k.shares ?? {})));
 const aspectsOf = (dict: Dictionary): Set<string> => new Set([...dict.kinds.values()].flatMap((k) => Object.values(k.follow ?? {}).flat()));

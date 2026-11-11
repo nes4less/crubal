@@ -20,13 +20,13 @@ export type ActRef =
   | { route: string; column: string };
 
 /** What a pick in a find compares a facet with: a literal, or a reference. */
-export type ActPickValue = { literal: string } | ActRef;
+export type ActPickValue = { literal: string } | { caller: true } | ActRef;
 
 export type ActPick = { facet: string; value: ActPickValue; line: number };
 
 /** The next label in a series (revision 26): the prefix, one more than the highest number the kind's facet
  * carries after it, three digits, the suffix when given. */
-export type ActSeries = { prefix: ActRef; in: { kind: string; facet: string }; suffix?: ActRef };
+export type ActSeries = { prefix: ActRef | { literal: string }; in: { kind: string; facet: string }; suffix?: ActRef };
 
 /** What a set writes: a literal, a link to a found or context record, a reference's value, the moment, or the
  * next in a series. */
@@ -84,6 +84,8 @@ export type Act = {
   label?: string;
   describe?: string;
   on: string;
+  /** Revision 35: the act may land on fewer than the record holds, where its level declares its quantity. */
+  takes?: "share";
   context: string[];
   route?: ActRoute;
   finds: ActFind[];
@@ -121,6 +123,8 @@ const isRef = (t: string) => /^(record|context|[\w-]+)\.[\w:.-]+$/.test(t) && !/
 /** A pick's value: a reference, a found record's bare name (its id, revision 26), or a literal. */
 function readPickValue(t: string, line: number, routes: Set<string>, founds: Set<string> = new Set()): ActPickValue {
   if (founds.has(t)) return { found: t };
+  // Revision 35: the person running the act, as `link caller` is in a set.
+  if (t === "caller") return { caller: true };
   return isRef(t) ? readRef(t, line, "a pick", routes) : { literal: unquote(t) };
 }
 
@@ -188,13 +192,14 @@ function readSet(text: string, line: number, routes: Set<string>): ActSet {
   if (link) return { facet, source: { link: link[1] as string }, line };
   if (src === "now") return { facet, source: { now: true }, line };
   if (src === "none") return { facet, source: { none: true }, line };
-  const next = src.match(/^next\s+(\S+)\s+in\s+([\w-]+)\.([\w:]+)(?:\s*,\s*(\S+))?$/);
+  const next = src.match(/^next\s+("[^"]*"|\S+)\s+in\s+([\w-]+)\.([\w:]+)(?:\s*,\s*(\S+))?$/);
   if (next) {
     return {
       facet,
       source: {
         next: {
-          prefix: readRef(next[1] as string, line, "a series' prefix", routes),
+          // Revision 35: the prefix may be the words themselves, quoted (`next "PULL" in pull.pullLabel`).
+          prefix: (next[1] as string).startsWith('"') ? { literal: unquote(next[1] as string) } : readRef(next[1] as string, line, "a series' prefix", routes),
           in: { kind: next[2] as string, facet: next[3] as string },
           ...(next[4] ? { suffix: readRef(next[4], line, "a series' suffix", routes) } : {}),
         },
@@ -264,6 +269,10 @@ export function readAct(node: Node): Act {
     } else if (c.key === "label") a.label = unquote(v);
     else if (c.key === "describe") a.describe = unquote(v);
     else if (c.key === "on") a.on = v;
+    else if (c.key === "takes") {
+      if (v !== "share") throw new CrubalError(`takes is "share": the act may land on fewer than the record holds, not ${v}`, c.line);
+      a.takes = "share";
+    }
     else if (c.key === "context") {
       a.context = v.split(",").map((s) => s.trim()).filter(Boolean);
       for (const k of a.context) if (!WORD.test(k)) throw new CrubalError(`context names kinds, lower-case words: ${k}`, c.line);
@@ -298,7 +307,7 @@ export function readAct(node: Node): Act {
       if (a.tells) throw new CrubalError(`the act ${name} tells twice`, c.line);
       a.tells = { kind: m[1] as string, aspect: m[2] as string, sets: c.children.filter((l) => l.text.trim()).map((l) => readSet(l.text.trim(), l.line, routes)), line: c.line };
       if (!a.tells.sets.length) throw new CrubalError(`the act ${name} tells ${m[1]} and sets nothing: its set lines go beneath tells:`, c.line);
-    } else throw new CrubalError(`an act has utility, replaces, label, describe, on, context, route, find, mint, count, set, then, send, lands and tells, not ${c.key}`, c.line);
+    } else throw new CrubalError(`an act has utility, replaces, label, describe, on, takes, context, route, find, mint, count, set, then, send, lands and tells, not ${c.key}`, c.line);
   }
   if (!a.utility) throw new CrubalError(`the act ${name} names no utility`, node.line);
   if (!a.on) throw new CrubalError(`the act ${name} says no on: the level it acts on`, node.line);
@@ -319,6 +328,8 @@ export type ActEnv = {
   facetOf?: (key: string) => Facet | undefined;
   /** The aspects the kinds declare under `follow:` (revision 31), which an act's `tells:` may answer. */
   aspects?: Set<string>;
+  /** Revision 35: level → the facet that is its quantity (a kind's `shares:`), which `takes: share` needs. */
+  shares?: Map<string, string>;
   /** In force (11.4): a telling whose aspect no kind in force declares is inert, never a refusal, since nobody
    * can follow by an aspect nobody declares; the kind that declares it may land later. Refused at publish only. */
   inertTelling?: boolean;
@@ -345,6 +356,7 @@ export function checkActList(acts: Act[], env: ActEnv): void {
       if (!a.replaces && !listed(a.name)) throw new CrubalError(`${where} isn't among ${a.utility}'s acts`, a.line);
     }
     if (!env.levels.has(a.on) && strict) throw new CrubalError(`${where} is on ${a.on}, which isn't a level ${here}`, a.line);
+    if (a.takes && env.shares && env.levels.has(a.on) && !env.shares.has(a.on)) throw new CrubalError(`${where} takes a share, and ${a.on} declares no quantity: its kind's shares names none for it`, a.line);
     for (const k of a.context) if (!env.kinds.has(k) && !env.levels.has(k) && strict) throw new CrubalError(`${where}'s context names ${k}, which isn't a kind ${here}`, a.line);
     const facetKnown = (f: string) => env.facets.has(bare(f));
     const needFacet = (f: string, line: number, doing: string) => {
@@ -380,7 +392,7 @@ export function checkActList(acts: Act[], env: ActEnv): void {
           if (f && f.type !== "link") throw new CrubalError(`${where} ${what} picks through ${head}, which isn't a link`, p.line);
           needFacet(hop, p.line, `${what} picks`);
         }
-        if (!("literal" in p.value)) refOk(p.value, p.line, inCount);
+        if (!("literal" in p.value) && !("caller" in p.value)) refOk(p.value, p.line, inCount);
       }
     };
     if (a.route) {
@@ -409,7 +421,7 @@ export function checkActList(acts: Act[], env: ActEnv): void {
       if ("link" in src) {
         if (src.link !== "record" && !found.has(src.link) && !a.context.includes(src.link)) throw new CrubalError(`${where} links ${s.facet} to ${src.link}, which no find or context declares`, s.line);
       } else if ("next" in src) {
-        refOk(src.next.prefix, s.line);
+        if (!("literal" in src.next.prefix)) refOk(src.next.prefix, s.line);
         if (src.next.suffix) refOk(src.next.suffix, s.line);
         if (!env.kinds.has(src.next.in.kind) && !env.levels.has(src.next.in.kind) && strict) throw new CrubalError(`${where} numbers ${s.facet} in ${src.next.in.kind}, which isn't a kind ${here}`, s.line);
         needFacet(src.next.in.facet, s.line, "numbers by");
@@ -549,7 +561,7 @@ export function routeRowsOf(r: ActRoute, i: Pick<ActInput, "record" | "context" 
 export function routeCountPicksOf(r: ActRoute, i: Omit<ActInput, "found" | "now" | "route"> & { found?: ActInput["found"] }, row: JsonObject): { facet: string; value: Json | undefined }[] {
   if (!r.keep) return [];
   const at = { record: i.record, context: i.context, found: i.found ?? {}, route: { index: -1, row } };
-  return r.keep.where.map((p) => ({ facet: p.facet.includes("::") ? p.facet.replace(/^\w+::/, "") : p.facet, value: "literal" in p.value ? p.value.literal : valueOf(p.value, at) }));
+  return r.keep.where.map((p) => ({ facet: p.facet.includes("::") ? p.facet.replace(/^\w+::/, "") : p.facet, value: "literal" in p.value ? p.value.literal : "caller" in p.value ? i.caller : valueOf(p.value, at) }));
 }
 
 export type Routed = { ok: true; index: number; row: JsonObject; why: string } | { ok: false; why: string };
@@ -627,7 +639,7 @@ const sourceValue = (s: ActSet, i: ActInput): { ok: true; value: Json | undefine
     return { ok: true, value: { $link: id } };
   }
   if ("next" in src) {
-    const prefix = asWords(valueOf(src.next.prefix, i)).trim();
+    const prefix = ("literal" in src.next.prefix ? src.next.prefix.literal : asWords(valueOf(src.next.prefix, i))).trim();
     if (!prefix) return { ok: false, why: `no prefix to number ${s.facet} by` };
     const suffix = src.next.suffix ? asWords(valueOf(src.next.suffix, i)).trim() || undefined : undefined;
     return { ok: true, value: nextInSeries(prefix, suffix, i.labels?.[`${src.next.in.kind}.${bare(src.next.in.facet)}`] ?? []) };
@@ -708,6 +720,21 @@ export function actWrites(a: Act, i: ActInput): ActWrites {
 }
 
 /**
+ * A share of a record (revision 35): `take` of the quantity its level declares. All of it is the record itself;
+ * fewer is a split, the count the new record takes and the count the first keeps, for the host to write in the
+ * act's own entry (a new record of the same level under the same parent, carrying every value of the first).
+ * None, more than it holds, or a count that is no whole number is refused.
+ */
+export function shareOf(record: ActRecord, facet: string, take: number): { ok: true; whole: true } | { ok: true; whole: false; taken: string; rest: string } | { ok: false; why: string } {
+  const raw = record.values[bare(facet)];
+  const have = raw === undefined || raw === null || raw === "" ? 1 : Number(typeof raw === "object" && !Array.isArray(raw) && "$qty" in raw ? raw.$qty : raw);
+  if (!Number.isInteger(have) || have < 1) return { ok: false, why: `${record.id} holds no whole quantity to take from` };
+  if (!Number.isInteger(take) || take < 1 || take > have) return { ok: false, why: `take 1 to ${have} of ${record.id}` };
+  if (take === have) return { ok: true, whole: true };
+  return { ok: true, whole: false, taken: String(take), rest: String(have - take) };
+}
+
+/**
  * The facets that are marks (12.3, revision 34): those a marked filter names. A host hands them to `actWrites`
  * so a second write to a mark is refused where the act lands.
  */
@@ -721,7 +748,7 @@ export function markFacets(filters: Iterable<{ facet: string; marked?: boolean }
  * A pick's facet may be `<link>.<facet>`, carried as written for the host to hop. */
 export function findPicksOf(f: { where: ActPick[] }, i: Omit<ActInput, "found" | "now"> & { found?: ActInput["found"] }): { facet: string; value: Json | undefined }[] {
   const at = { record: i.record, context: i.context, found: i.found ?? {}, ...(i.route ? { route: i.route } : {}) };
-  return f.where.map((p) => ({ facet: p.facet.includes("::") ? p.facet.replace(/^\w+::/, "") : p.facet, value: "literal" in p.value ? p.value.literal : valueOf(p.value, at) }));
+  return f.where.map((p) => ({ facet: p.facet.includes("::") ? p.facet.replace(/^\w+::/, "") : p.facet, value: "literal" in p.value ? p.value.literal : "caller" in p.value ? i.caller : valueOf(p.value, at) }));
 }
 
 // ─── JSON and text ──────────────────────────────────────────────────────────────
@@ -736,9 +763,9 @@ const termText = (t: ActTerm): string => ("number" in t ? String(t.number) : `${
 /** The quoting the text form needs for a literal (2.5): words with a space, a comma or a colon are quoted. */
 const q = (s: string) => (/[\s,:]|^$/.test(s) ? JSON.stringify(s) : s);
 
-const pickJson = (p: ActPick): JsonObject => ({ facet: p.facet, value: "literal" in p.value ? { literal: p.value.literal } : refJson(p.value) });
+const pickJson = (p: ActPick): JsonObject => ({ facet: p.facet, value: "literal" in p.value ? { literal: p.value.literal } : "caller" in p.value ? { caller: true } : refJson(p.value) });
 const sourceJson = (s: ActSource): JsonObject =>
-  "literal" in s ? { literal: s.literal } : "link" in s ? { link: s.link } : "now" in s ? { now: true } : "caller" in s ? { caller: true } : "none" in s ? { none: true } : "owner" in s ? { owner: true } : "run" in s ? { run: true } : "next" in s ? { next: { prefix: refJson(s.next.prefix), in: { kind: s.next.in.kind, facet: s.next.in.facet }, ...(s.next.suffix ? { suffix: refJson(s.next.suffix) } : {}) } } : refJson(s);
+  "literal" in s ? { literal: s.literal } : "link" in s ? { link: s.link } : "now" in s ? { now: true } : "caller" in s ? { caller: true } : "none" in s ? { none: true } : "owner" in s ? { owner: true } : "run" in s ? { run: true } : "next" in s ? { next: { prefix: "literal" in s.next.prefix ? { literal: s.next.prefix.literal } : refJson(s.next.prefix), in: { kind: s.next.in.kind, facet: s.next.in.facet }, ...(s.next.suffix ? { suffix: refJson(s.next.suffix) } : {}) } } : refJson(s);
 const setJson = (s: ActSet): JsonObject => ({ facet: s.facet, source: sourceJson(s.source) });
 
 export function actJson(a: Act): JsonObject {
@@ -750,6 +777,7 @@ export function actJson(a: Act): JsonObject {
     ...(a.label ? { label: a.label } : {}),
     ...(a.describe ? { describe: a.describe } : {}),
     on: a.on,
+    ...(a.takes ? { takes: a.takes } : {}),
     ...(a.context.length ? { context: [...a.context] } : {}),
     ...(a.route
       ? {
@@ -797,7 +825,7 @@ const termOfJson = (o: JsonObject): ActTerm =>
   typeof o.number === "number" ? { number: o.number } : typeof o.count === "string" ? { count: o.count, ...(typeof o.plus === "number" ? { plus: o.plus } : {}) } : { ref: refOfJson(o.ref as JsonObject), ...(typeof o.plus === "number" ? { plus: o.plus } : {}) };
 const pickText = (p: JsonObject): string => {
   const v = p.value as JsonObject;
-  return `${p.facet} = ${typeof v.literal === "string" ? q(v.literal) : refText(refOfJson(v))}`;
+  return `${p.facet} = ${typeof v.literal === "string" ? q(v.literal) : v.caller === true ? "caller" : refText(refOfJson(v))}`;
 };
 const sourceText = (src: JsonObject): string => {
   if (typeof src.literal === "string") return q(src.literal);
@@ -810,7 +838,7 @@ const sourceText = (src: JsonObject): string => {
   if (src.next && typeof src.next === "object") {
     const n = src.next as JsonObject;
     const into = n.in as JsonObject;
-    return `next ${refText(refOfJson(n.prefix as JsonObject))} in ${into.kind}.${into.facet}${n.suffix ? `, ${refText(refOfJson(n.suffix as JsonObject))}` : ""}`;
+    return `next ${typeof (n.prefix as JsonObject).literal === "string" ? JSON.stringify((n.prefix as JsonObject).literal) : refText(refOfJson(n.prefix as JsonObject))} in ${into.kind}.${into.facet}${n.suffix ? `, ${refText(refOfJson(n.suffix as JsonObject))}` : ""}`;
   }
   return refText(refOfJson(src));
 };
@@ -822,6 +850,7 @@ export function actText(a: JsonObject): string[] {
   if (typeof a.label === "string") out.push(`  label: ${a.label}`);
   if (typeof a.describe === "string") out.push(`  describe: ${a.describe}`);
   out.push(`  on: ${a.on}`);
+  if (a.takes === "share") out.push("  takes: share");
   if (Array.isArray(a.context) && a.context.length) out.push(`  context: ${(a.context as string[]).join(", ")}`);
   if (a.route && typeof a.route === "object") {
     const r = a.route as JsonObject;

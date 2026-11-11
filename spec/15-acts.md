@@ -70,13 +70,14 @@ act: fileByCategory /2026-11-09
 | `replaces` | revision 26: the act of the same utility this one stands in for; a lane's press and a flow's stop naming that act run this one; the utility's `acts:` need not name the replacing act |
 | `label` · `describe` | its words on a screen |
 | `on` | the level it acts on: the record in hand |
+| `takes` | revision 35: `share`, where the level's kind declares its quantity (11.2 `shares`): the act may land on fewer than the record holds. The one running it gives a count, all of it when none is given. Fewer **splits** the record (15.2) and the act lands on the share taken |
 | `context` | kinds the act holds beside the record, asked once and kept per person (12.11's `context:`): `context.<kind>` in its lines names the record held, `context.<kind>.<facet>` (revision 26) reads its facet |
 | `route` | revision 26, one line: `<name> -> row of <ref> by <column> over record[, record.<link facet>] [keep <column> by <kind> where <picks>]`: the rows of a compound facet on a record (`context.station.slots`, the station's rack), each row's `<column>` a condition (6.3) read over the record in hand's values laid over the linked record's (`record.of`, the product's); the first row whose condition holds is taken; the last row takes what no row above claimed, its condition unread; with `keep`, a row whose count (the records of the kind the picks admit) is its `<column>` or more is passed over. `<name>.<column>` thereafter reads the row taken; in the count's picks it reads the row being weighed |
 | `of` | a record's parent (1.1), no facet: it stands where a facet may (`record.of`, a route's `over`, a pick's facet `of = record.of`) and the dictionary is never asked for it |
-| `find` | one line per find, `<name> -> first\|all <kind> [where <facet> = <value>, …] [order <facet> [after\|before]]`: the records of a kind the picks admit, in the order said, the first or all; a pick's facet may be a link facet's target's, `<link facet>.<facet>` (revision 26, one hop); a pick's value is a literal, `record.<facet>` (the record in hand's), `context.<kind>` (the context record's id), `context.<kind>.<facet>`, `<found>.<facet>` (an earlier find's), `<found>` alone (its id, revision 26) or `<route>.<column>` (the row taken) |
+| `find` | one line per find, `<name> -> first\|all <kind> [where <facet> = <value>, …] [order <facet> [after\|before]]`: the records of a kind the picks admit, in the order said, the first or all; a pick's facet may be a link facet's target's, `<link facet>.<facet>` (revision 26, one hop); a pick's value is a literal, `record.<facet>` (the record in hand's), `context.<kind>` (the context record's id), `context.<kind>.<facet>`, `<found>.<facet>` (an earlier find's), `<found>` alone (its id, revision 26), `caller` (revision 35: the person running the act, as `link caller` is in a set) or `<route>.<column>` (the row taken) |
 | `count` | revision 26: one line per count, `<name> -> <kind> [where <picks>]`: how many records of the kind the picks admit, for a `then` to read by name; a pick's value may be a found record's bare name, its id |
 | `mint` | revision 26: under a find's name, `<found> -> <kind> when none`, then set lines beneath it: when the `first` find answered nothing, a record of the kind is made with these values, through its make form as the act's own source, and stands as what the find found |
-| `set` | one line per write on the record in hand, `<facet> -> <source>`: a literal, `link <found\|context>` (a link to the record found or held), `<found>.<facet>`, `<route>.<column>`, `context.<kind>.<facet>` or `record.<facet>` (a value copied), `now` (the moment), `link caller` (revision 29: a link to the person running the act), `none` (revision 29: the facet cleared), `next <ref> in <kind>.<facet>[, <ref>]` (revision 26: the next label in a series: the prefix, one more than the highest number the kind's facet carries after that prefix, three digits, then the suffix when given), or, revision 31, `owner` (the owner the act lands at, as text), `run` (the act run's id) and `link record` (a link to the record in hand) |
+| `set` | one line per write on the record in hand, `<facet> -> <source>`: a literal, `link <found\|context>` (a link to the record found or held), `<found>.<facet>`, `<route>.<column>`, `context.<kind>.<facet>` or `record.<facet>` (a value copied), `now` (the moment), `link caller` (revision 29: a link to the person running the act), `none` (revision 29: the facet cleared), `next <ref> in <kind>.<facet>[, <ref>]` (revision 26: the next label in a series; revision 35: the prefix MAY be the words themselves, quoted, `next "PULL" in pull.pullLabel`: the prefix, one more than the highest number the kind's facet carries after that prefix, three digits, then the suffix when given), or, revision 31, `owner` (the owner the act lands at, as text), `run` (the act run's id) and `link record` (a link to the record in hand) |
 | `then` | one line per conditional write on records found, `when <term> <op> <term> set <found>.<facet> = <value>[, <found>.<facet> = <value>…] [send <verb> <words>]`: a term a reference, a count's name or a number, with `+ n` added to a reference or a count; the ops `=`, `<`, `>`, `<=`, `>=`; the writes on every record the find answered, a value a literal or `now` (revision 26); the send run only when the condition held |
 | `send` | a transport verb the app provides (`print`, `notify`, `charge`, `ship`), then its words, carried unchanged for the app to read |
 | `lands` | when the act counts as landed, and its lane's stamp is written (12.11): `now` (the default), or `when the send reports` |
@@ -107,6 +108,14 @@ the entry's own transaction (8.5) so that of two acts arriving together exactly 
 of a claim: two people pressing one press on one record have one winner. Clearing a mark (`none`) is an
 ordinary set by an act that says so, after which it may be taken again.
 
+**A share (revision 35).** Where an act `takes: share` and the count given is fewer than the record's quantity,
+the record is split before the act lands: a new record of the same level, under the same parent, carrying every
+value of the first (its marks and its links among them) with the count taken as its quantity, and the first kept
+with the rest. The act then lands on the new record. The engine answers the two counts (`shareOf`); the host MUST
+write the split and the act's writes in **one entry**, so an act refused leaves the record whole. All of the
+quantity is the plain act on the record, with no split; none, more than it holds, or a count that is no whole
+number is refused with the reason. A record with no value for its quantity is one thing, taken whole.
+
 ## 15.3 Well-formed acts
 
 A package MUST be refused at publish when an act names a utility it doesn't declare or one that neither lists it
@@ -114,7 +123,7 @@ among its acts nor lists the act it `replaces`; replaces itself; is `on` no leve
 routes over no compound facet, by a column the compound lacks, or over a link facet the level lacks; finds, counts
 or mints a kind the package lacks; counts under a name a find, route or count already bears; picks, orders by, sets, mints or reads a facet the package lacks (a route's
 column the compound's); names a find, route, count or context it did not declare; sets one facet twice; finds one name
-twice; mints a find that takes `all`; lands when the send reports and sends nothing; or, revision 31, tells a kind the
+twice; mints a find that takes `all`; lands when the send reports and sends nothing; takes anything but `share`, or takes a share on a level whose kind declares no quantity for it (revision 35); or, revision 31, tells a kind the
 package lacks, tells as an aspect no kind declares under `follow:`, tells with no set lines, or tells and sets one
 facet twice. In force (11.4, at install) the aspect is the exception: a telling whose aspect no kind in force
 declares is **inert**, never a refusal, since nobody can follow by an aspect nobody declares and the kind that
@@ -124,11 +133,11 @@ leaves to the check of the packages in force together (11.4, at install), which 
 
 ## 15.4 The JSON form
 
-An act is `{"act", "version", "utility", "replaces", "label", "describe", "on", "context": [...], "route": {"name",
+An act is `{"act", "version", "utility", "replaces", "label", "describe", "on", "takes", "context": [...], "route": {"name",
 "rows": reference, "by", "over": [reference…], "keep": {"column", "kind", "where": [pick…]}}, "finds": [{"name",
-"take", "kind", "where": [{"facet", "value": {"literal"} | reference}], "order": {"facet", "dir"}, "mint": {"kind",
+"take", "kind", "where": [{"facet", "value": {"literal"} | {"caller": true} | reference}], "order": {"facet", "dir"}, "mint": {"kind",
 "sets": [set…]}}], "counts": [{"name", "kind", "where": [pick…]}], "sets": [{"facet", "source": {"literal"} | {"link"} | {"now": true} | {"caller": true} | {"none": true} | {"next": {"prefix":
-reference, "in": {"kind", "facet"}, "suffix": reference}} | {"owner": true} | {"run": true} | reference}], "thens": [{"when": {"left", "op", "right"} (a term `{"ref", "plus"} | {"count", "plus"} | {"number"}`),
+reference | {"literal"}, "in": {"kind", "facet"}, "suffix": reference}} | {"owner": true} | {"run": true} | reference}], "thens": [{"when": {"left", "op", "right"} (a term `{"ref", "plus"} | {"count", "plus"} | {"number"}`),
 "sets": [{"found", "facet", "value": {"literal"} | {"now": true}}], "send": {"verb", "words"}}], "send": {"verb",
 "words"}, "lands", "tells": {"kind", "aspect", "sets": [set…]}}` under `acts` (`tells` from revision 31; a link set's `link` may be `record`); a reference is `{"record"} | {"context"} | {"context", "facet"} | {"found"} | {"found",
 "facet"} | {"route", "column"}`; a pick's facet may be `"<link>.<facet>"`. An act holds no value on any record:

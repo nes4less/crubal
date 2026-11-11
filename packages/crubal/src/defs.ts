@@ -105,7 +105,7 @@ export type ClassDef = {
 };
 
 /** A kind as declared (11.2), beyond what the engine indexes by level. */
-export type KindDef = { name: string; line: number; levels: string[]; base?: string; schema?: string | { [level: string]: string }; follows?: { [facet: string]: string }; /** Revision 31: per level, the aspects a follower may choose, the first the default (11.2). */ follow?: { [level: string]: string[] }; followLine?: number };
+export type KindDef = { name: string; line: number; levels: string[]; base?: string; schema?: string | { [level: string]: string }; follows?: { [facet: string]: string }; /** Revision 31: per level, the aspects a follower may choose, the first the default (11.2). */ follow?: { [level: string]: string[] }; followLine?: number; /** Revision 35: per level, the number facet that is its quantity, so a record there may be taken in part (11.2). */ shares?: { [level: string]: string }; sharesLine?: number };
 
 export type Dictionary = {
   facets: Map<string, Facet>;
@@ -674,6 +674,19 @@ export function readDefinitions(source: string, into: Dictionary = emptyDictiona
             for (const a of aspects) if (!/^[a-z][\w-]*$/.test(a)) throw new CrubalError(`follow at ${l.key}: an aspect is a lower-case word, not ${a}`, l.line);
             if (new Set(aspects).size !== aspects.length) throw new CrubalError(`follow at ${l.key} names an aspect twice`, l.line);
             def.follow[l.key] = aspects;
+          }
+        }
+        // Revision 35: `shares:`, per level the facet that is its quantity: a record there may be taken in part.
+        const shares = node.children.find((c) => c.key === "shares");
+        if (shares) {
+          def.shares = {};
+          def.sharesLine = shares.line;
+          for (const l of shares.children) {
+            if (!l.key) continue;
+            if (!names.includes(l.key)) throw new CrubalError(`shares names ${l.key}, which isn't a level of ${kind}`, l.line);
+            const facet = l.value.trim();
+            if (!/^[\w:-]+$/.test(facet)) throw new CrubalError(`shares at ${l.key} names one facet, its quantity: ${facet}`, l.line);
+            def.shares[l.key] = facet;
           }
         }
         into.kinds.set(kind, def);
