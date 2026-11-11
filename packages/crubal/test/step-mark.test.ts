@@ -192,3 +192,41 @@ act: putBack /2027-01-05
   const cleared = actWrites(back, { record: taken, context: {}, found: {}, now: "x", marks });
   assert.deepEqual(cleared.ok && cleared.clear, ["pulled"]);
 });
+
+test("erratum: a link step reads through a link to a level of a kind, in a slot, a filter and the order", () => {
+  const src = `
+kind: item
+  levels: product, unit
+kind: order
+  levels: order, pick
+title$
+slot$
+pickUnit&unit
+shape: row
+  slots:
+    pickUnit.title -> title
+    pickUnit.slot -> slot
+filter: slot
+  facet: pickUnit.slot
+view: walk
+  select:
+    level: pick
+  order: pickUnit.slot
+  shape: row
+  filters: slot
+`;
+  const dict = readDefinitions(src);
+  const set = readViews(src);
+  checkViews(set, dict);
+  const v = new Views(dict, set);
+  v.put({ id: "P", kind: "item", level: "product", owner: "t", values: { title: "Jaws" } });
+  v.put({ id: "U1", kind: "item", level: "unit", owner: "t", of: "P", values: { slot: "B-2" } } as never);
+  v.put({ id: "U2", kind: "item", level: "unit", owner: "t", of: "P", values: { slot: "A-1" } } as never);
+  v.put({ id: "K1", kind: "order", level: "pick", owner: "t", values: { pickUnit: { $link: "U1" } } });
+  v.put({ id: "K2", kind: "order", level: "pick", owner: "t", values: { pickUnit: { $link: "U2" } } });
+  const p = v.project("walk");
+  assert.deepEqual(p.records, ["K2", "K1"], "sorted by the unit's slot");
+  // A link step answers a list (a link may be many): one value each here.
+  assert.deepEqual(p.rows.map((r) => [r.title, r.slot]), [[["Jaws"], ["A-1"]], [["Jaws"], ["B-2"]]]);
+  assert.deepEqual(p.counts.slot, { "A-1": 1, "B-2": 1 });
+});

@@ -65,7 +65,7 @@ view: dvds
 | `partition` | what a caller must stand in to a record to be served its row: `administered`, `controlled`, `owned`, `relation <name>` (chapter 14.10), `linked <facet>` (the caller is whom the record's link facet names: a notice addressed to them, an invitation naming them), or `none` for every row | `controlled` above `member`; `none` otherwise |
 | `of` | for a view inside a page: how the page's record narrows the selection, as a condition over `context` (`work is context.work and not id is context.id`) | none |
 | `pin` · `hide` | curation: records shown first, in this order · records never shown | none |
-| `order` | keys to sort by, in priority order; `after` means newest or largest first, `before` the reverse | ID |
+| `order` | keys to sort by, in priority order; `after` means newest or largest first, `before` the reverse | ID An order key MAY be an address that reads through a link (revision 34, erratum: `order: pickUnit.filedSlot`); the first value it reads is the key, and a record it reads nothing for sorts as empty |
 | `page` | records per page | 24 |
 | `shape` | the shape every record takes; several for several outputs (`card, feed`) | required |
 | `filters` | the filters shoppers can pick from (12.3) | none |

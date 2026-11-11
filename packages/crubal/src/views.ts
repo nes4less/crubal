@@ -546,7 +546,8 @@ export class Views {
    */
   private linked(r: Record, link: string): Record[] {
     const f = this.dict.facets.get(link);
-    if (!f || f.type !== "link" || !f.to || !(this.dict.kinds.has(f.to) || this.dict.classes.has(f.to))) return [];
+    // A link to a kind, a class, or (revision 34, erratum) a level of a kind: `lineUnit&unit` names a level of item.
+    if (!f || f.type !== "link" || !f.to || !(this.dict.kinds.has(f.to) || this.dict.classes.has(f.to) || this.dict.levels.has(f.to))) return [];
     const v = this.effective(r)[link];
     const items = v === undefined ? [] : Array.isArray(v) ? v : [v];
     return items.flatMap((x) => {
@@ -668,10 +669,21 @@ export class Views {
 
   /** The values of the view's order keys as text, and the pin position: what an index orders rows by (12.7). */
   sortOf(v: View, r: Record): { sort: string[]; pin?: number } {
-    const vals = this.effective(r);
-    const sort = v.order.map((o) => plainText((vals[o.key] ?? "") as Json));
+    const sort = v.order.map((o) => this.orderText(r, o.key));
     const at = v.pin.indexOf(r.id);
     return at >= 0 ? { sort, pin: at + 1 } : { sort };
+  }
+
+  /**
+   * An order key's text on a record: the record's own value, or (revision 34, erratum) the first value an address
+   * reads, so a view may sort by what a link reaches (`pickUnit.filedSlot`: the walking order).
+   */
+  private orderText(r: Record, key: string): string {
+    const own = this.effective(r)[key];
+    if (own !== undefined) return plainText(own as Json);
+    if (!/[.:[]/.test(key)) return "";
+    const v = this.valuesAt(r, key)[0];
+    return v === undefined ? "" : plainText(v);
   }
 
   /** The buckets a record falls into, per filter of the view (12.6): what an index counts from. */
@@ -808,8 +820,8 @@ export class Views {
     rows = rows.filter(fills);
     const cmp = (a: Record, b: Record) => {
       for (const o of v.order) {
-        const x = plainText((this.effective(a)[o.key] ?? "") as Json);
-        const y = plainText((this.effective(b)[o.key] ?? "") as Json);
+        const x = this.orderText(a, o.key);
+        const y = this.orderText(b, o.key);
         if (x !== y) return (x < y ? -1 : 1) * (o.dir === "after" ? -1 : 1);
       }
       return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
