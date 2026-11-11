@@ -125,7 +125,7 @@ export type Lane = {
  * with where its record comes from. Which it is, the check decides by the name: a lane's name is a lane
  * stop, a form contract's name a block; `act` says lane, `of` says block.
  */
-export type FlowStop = { name: string; act?: string; of?: string; line: number };
+export type FlowStop = { name: string; act?: string; of?: string; /** Revision 36: values a block's form opens with, set and locked. */ with?: { facet: string; value: string }[]; line: number };
 
 /**
  * A flow (12.11): an objective's line of stops, declared by the package whose lanes and forms it walks,
@@ -398,9 +398,17 @@ function readFlow(node: Node): Flow {
       for (const st of c.children) {
         const text = st.text.trim();
         if (!text) continue;
-        const m = text.match(/^([a-z][\w-]*)(?:\s+->\s+([a-z][\w-]*)|\s+of\s+([a-z][\w-]*))?$/);
-        if (!m) throw new CrubalError(`a stop is "<lane> -> <act>", "<lane>", or "<form> of <level>", not ${text}`, st.line);
-        f.stops.push({ name: m[1] as string, ...(m[2] ? { act: m[2] } : {}), ...(m[3] ? { of: m[3] } : {}), line: st.line });
+        const m = text.match(/^([a-z][\w-]*)(?:\s+->\s+([a-z][\w-]*)|\s+of\s+([a-z][\w-]*)(?:\s+with\s+(.+))?)?$/);
+        if (!m) throw new CrubalError(`a stop is "<lane> -> <act>", "<lane>", or "<form> of <level>" (with "<facet> = <value>, …" after it, or not), not ${text}`, st.line);
+        // Revision 36: `with`, the values a block's form opens with, set and locked.
+        const locks = (m[4] ?? "").split(",").map((s) => s.trim()).filter(Boolean).map((pair) => {
+          const w = pair.match(/^([a-z][\w:-]*)\s*=\s*(\S(?:.*\S)?)$/);
+          if (!w) throw new CrubalError(`a stop's with is "<facet> = <value>", not ${pair}`, st.line);
+          return { facet: w[1] as string, value: w[2] as string };
+        });
+        if (m[4] !== undefined && !locks.length) throw new CrubalError(`the stop ${m[1]} says with and names no value`, st.line);
+        if (new Set(locks.map((l) => l.facet)).size !== locks.length) throw new CrubalError(`the stop ${m[1]} locks a facet twice`, st.line);
+        f.stops.push({ name: m[1] as string, ...(m[2] ? { act: m[2] } : {}), ...(m[3] ? { of: m[3] } : {}), ...(locks.length ? { with: locks } : {}), line: st.line });
       }
     } else throw new CrubalError(`a flow has label, utility, follow, serves, context, replaces, stops and done, not ${c.key}`, c.line);
   }
@@ -683,6 +691,10 @@ function checkFlowList(flows: Flow[], env: FlowEnv): void {
       if (!isLane && !isForm) throw new CrubalError(`${where}'s stop ${st.name} is neither a lane nor a form ${here}`, st.line);
       if (st.act !== undefined && acts && !acts.has(st.act)) throw new CrubalError(`${where}'s stop ${st.name} -> ${st.act}: ${st.act} isn't an act of ${f.utility ?? "its utility"}`, st.line);
       if (st.of !== undefined && !dict.levels.has(st.of) && !dict.kinds.has(st.of) && strict) throw new CrubalError(`${where}'s stop ${st.name} of ${st.of}: ${st.of} isn't a level or kind ${here}`, st.line);
+      for (const w of st.with ?? []) {
+        const facet = dict.facets.get(w.facet.split("::").pop() as string);
+        if (!facet && strict) throw new CrubalError(`${where}'s stop ${st.name} locks ${w.facet}, which isn't a facet ${here}`, st.line);
+      }
     }
     if (f.done) {
       const flt = env.filters.get(f.done.filter);
