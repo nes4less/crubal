@@ -385,7 +385,7 @@ A display (12.9) is `{"display", "label", "describe", "layout", "slots": [{"from
 {name: value}}` under `displays`, its slots in order and its tokens as the words they were written.
 
 A lane (12.10) is `{"lane", "version", "label", "utility", "view" | "serve", "pick": {"filter",
-"value"}, "done": {"filter", "value"} | "viewed", or in their place (revision 34) "step" and "until": [filter…], "group" (revision 32), "band", "house", "serves": [{"as", "items"}], "home":
+"value"}, "done": {"filter", "value"} | "viewed", or in their place (revision 34) "step" and "until": [filter…], (revision 38) "after": [filter…], "group" (revision 32), "band", "house", "serves": [{"as", "items"}], "home":
 {"figure", "word": {"one", "many"} | "…", "press": {"word", "to", "glyph"?}, "chips"}, "card": {"name", "sub",
 "lines", "state", "moment", "figure", "primary", "quiet", "quick": [{"word", "to", "glyph"?}], "opens"}}` under
 `lanes`, `house` as a string like every number.
@@ -495,6 +495,7 @@ lane: ordersToPick /2026-11-05
 | `pick` | `filter = value`: the view's filter pick for what is ahead (the to-dos); absent, with no `step`, the lane is a **list**: every record its view serves, in the view's order (revision 17) |
 | `step` | revision 34, in place of `pick` and `done`: one of the view's `marked` filters (12.3). What is ahead is the filter's `open` bucket, the history its `done` bucket. A lane names a `step` or a `pick`, never both |
 | `until` | revision 34, with a `step`: one or more of the view's `marked` filters; a record marked on any of them waits here no longer, whether or not this lane's step was ever done. Absent, a record waits until the step is done |
+| `after` | revision 38, with a `step`: one or more of the view's `marked` filters; a record waits here only once it is marked on each of them. Absent, a record waits from the moment its view serves it |
 | `done` | `filter = value` for what is done (the history), or `viewed`: a card is done once the person has viewed it; the mark is the person's own, never the place's |
 | `band` | `daily`, `weekly` or `rarely`: how soon it wants attention; `rarely` unless said |
 | `house` | a whole number, governance first (0) and the doing rows after; 8 unless said |
@@ -524,6 +525,16 @@ once, and a step never done holds nothing up: `until` is how a lane says what it
 exists and is not finished. A package MUST be refused at publish when a `step` or an `until` is not a
 `marked` filter of the lane's view, when a lane names a `step` beside a `pick` or a `done`, or an `until`
 without a `step`.
+
+**Entering a step (revision 38).** A step lane as revision 34 has it fits a record that is on its track from
+birth: it waits from the moment it exists. Some records enter a track later (a thing counted only once its
+group's count has begun). A step lane MAY say `after`: one or more of the view's `marked` filters, and a
+record waits in the lane only once it is marked on each. The lane is read as before with one pick more per
+`after`: the index's tally and the view's page under `open` on the step's filter and each `until`'s, and
+under `done` on each `after`'s; its history is the step's `done` as it was. A package MUST be refused at
+publish when an `after` is not a `marked` filter of the lane's view, stands without a `step`, names the
+lane's own step, or names a filter the lane also names as an `until`. A reader that knew revision 37 refuses
+the lane for a setting it does not know (12.8).
 
 A lane without a `pick` or a `step` is a **list** (revision 17): it holds the records of a kind that wait in no state
 (the place's locations, its organizations, its pages), every record its view serves in the view's order.

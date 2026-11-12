@@ -324,6 +324,7 @@ export function laneJson(s: Lane): JsonObject {
   // A step lane (revision 34) travels as its step and its untils; its picks are the step's two buckets, never written.
   if (s.step) o.step = s.step;
   if (s.until?.length) o.until = [...s.until];
+  if (s.after?.length) o.after = [...s.after];
   if (s.pick && !s.step) o.pick = { filter: s.pick.filter, value: s.pick.value };
   if (s.done && !s.step) o.done = s.done === "viewed" ? "viewed" : { filter: s.done.filter, value: s.done.value };
   if (s.group) o.group = s.group;
@@ -680,6 +681,7 @@ function laneText(s: JsonObject): string[] {
   const out = [`lane: ${s.lane} /${s.version}`, ...kv("  ", "label", s.label), ...kv("  ", "utility", s.utility), ...kv("  ", "view", s.view), ...kv("  ", "serve", s.serve)];
   if (typeof s.step === "string") out.push(`  step: ${s.step}`);
   if (Array.isArray(s.until) && s.until.length) out.push(`  until: ${s.until.join(", ")}`);
+  if (Array.isArray(s.after) && s.after.length) out.push(`  after: ${s.after.join(", ")}`);
   if (s.pick !== undefined) out.push(`  pick: ${pickText(s.pick)}`);
   if (s.done !== undefined) out.push(`  done: ${pickText(s.done)}`);
   out.push(...kv("  ", "group", s.group), ...kv("  ", "band", s.band), ...kv("  ", "house", s.house));
