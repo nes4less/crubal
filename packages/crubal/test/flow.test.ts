@@ -210,6 +210,18 @@ test("a flow is refused when its lane stops do not chain, or its done is not its
   assert.deepEqual(flowStamps(fl, withList[0].lanes, () => "orderState").map((x) => x.stop), ["order", "ordersToPick", "ordersToPack"]);
   // The state stops still chain across a list stop.
   refused(`${list}${flow.replace("    ordersToPick -> pick\n    ordersToPack -> pack", "    ordersToPack -> pack\n    ordersAll -> pack\n    ordersToPick -> pick")}`, /gap: ordersToPack is done at orderState = packed, but ordersToPick picks orderState = paid/);
+  // Revision 40: a flow that arranges Elements chains with nothing, in any order; a lane stop with no act is
+  // no Element; the setting is carried in the bundle and printed back.
+  const backwards = flow.replace("    ordersToPick -> pick\n    ordersToPack -> pack", "    ordersToPack -> pack\n    ordersToPick -> pick");
+  refused(backwards, /gap: ordersToPack/);
+  const arranged = backwards.replace("  stops:", "  arrange: elements\n  stops:");
+  assert.notEqual(arranged, backwards, "the fixture has a stops line to stand before");
+  checkPackages(shop(arranged));
+  assert.equal(readPackages(shop(arranged))[0]?.flows[0]?.arrange, "elements");
+  assert.equal(readPackages(shop(flow))[0]?.flows[0]?.arrange, undefined);
+  checkPackages(shop(flow.replace("  stops:", "  arrange: line\n  stops:")));
+  refused(flow.replace("  stops:", "  arrange: loose\n  stops:"), /arrange is line or elements, not loose/);
+  refused(arranged.replace("ordersToPick -> pick", "ordersToPick"), /arranges Elements: its stop ordersToPick names no act/);
   // A block between two lanes leaves the chain as it is; a block after the last lane is fine.
   checkPackages(shop(flow.replace("    ordersToPack -> pack", "    order of order\n    ordersToPack -> pack")));
   checkPackages(shop(flow.replace("    ordersToPack -> pack", "    ordersToPack -> pack\n    order of order")));
@@ -231,8 +243,13 @@ test("a flow's context and replaces are read, carried, printed back, and checked
   assert.match(text, /^  context: order$/m);
   assert.match(text, /^  replaces: pickPackShipOld$/m);
   assert.equal(serialize(bundleOf(readBundle(b))), serialize(b));
-  // A flow with neither prints neither.
-  assert.doesNotMatch(printBundle(bundleOf(parsePackage(shop(flow)))), /context:|replaces:/);
+  // Revision 40: `arrange: elements` is carried, printed back and read again the same.
+  const arranged = bundleOf(parsePackage(shop(flow.replace("  stops:", "  arrange: elements\n  stops:"))));
+  assert.equal((arranged.flows as { arrange?: unknown }[])[0]?.arrange, "elements");
+  assert.match(printBundle(arranged), /^  arrange: elements$/m);
+  assert.equal(serialize(bundleOf(readBundle(arranged))), serialize(arranged));
+  // A flow with none of them prints none.
+  assert.doesNotMatch(printBundle(bundleOf(parsePackage(shop(flow)))), /context:|replaces:|arrange:/);
   refused(flow.replace("  follow: queue\n", "  follow: queue\n  context: parcel\n"), /context names parcel, which isn't a kind or level/);
   refused(flow.replace("  follow: queue\n", "  follow: queue\n  replaces: pickPackShip\n"), /replaces itself/);
   assert.throws(() => readPackages(shop(flow.replace("  follow: queue\n", "  follow: queue\n  replaces: Two Words\n"))), /replaces names a flow/);

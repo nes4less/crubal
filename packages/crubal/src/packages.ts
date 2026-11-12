@@ -145,6 +145,9 @@ export type Flow = {
   context: string[];
   /** The flow this one stands in for (revision 23): served where the named flow would have been. */
   replaces?: string;
+  /** Revision 40: `elements`, an arrangement of Elements (each stop a lane with its act) that chains with
+   * nothing; absent, a line whose state stops chain. */
+  arrange?: "elements";
   stops: FlowStop[];
   /** `filter = value`, or (revision 34) a marked filter alone: a record marked on it has left the line. */
   done?: { filter: string; value: string; line: number; mark?: true };
@@ -404,6 +407,9 @@ function readFlow(node: Node): Flow {
     } else if (c.key === "replaces") {
       if (!/^[a-z][\w-]*$/.test(v)) throw new CrubalError(`replaces names a flow, a lower-case word: ${v}`, c.line);
       f.replaces = v;
+    } else if (c.key === "arrange") {
+      if (v !== "elements" && v !== "line") throw new CrubalError(`arrange is line or elements, not ${v}`, c.line);
+      if (v === "elements") f.arrange = "elements";
     } else if (c.key === "done") f.done = /^[\w:-]+$/.test(v) ? { filter: v, value: "done", line: c.line, mark: true } : readPick(v, c.line, "done");
     else if (c.key === "stops") {
       for (const st of c.children) {
@@ -421,7 +427,7 @@ function readFlow(node: Node): Flow {
         if (new Set(locks.map((l) => l.facet)).size !== locks.length) throw new CrubalError(`the stop ${m[1]} locks a facet twice`, st.line);
         f.stops.push({ name: m[1] as string, ...(m[2] ? { act: m[2] } : {}), ...(m[3] ? { of: m[3] } : {}), ...(locks.length ? { with: locks } : {}), line: st.line });
       }
-    } else throw new CrubalError(`a flow has label, utility, follow, serves, context, replaces, stops and done, not ${c.key}`, c.line);
+    } else throw new CrubalError(`a flow has label, utility, follow, serves, context, replaces, arrange, stops and done, not ${c.key}`, c.line);
   }
   if (!f.stops.length) throw new CrubalError(`the flow ${name} has no stops`, node.line);
   return f;
@@ -721,6 +727,13 @@ function checkFlowList(flows: Flow[], env: FlowEnv): void {
     // lanes leaves the chain as it is. A chain with a stop the file-local check could not see waits for the
     // check in force.
     if (deferred) continue;
+    // Elements (revision 40): the flow arranges Elements, each a lane with the act that is its work. They are
+    // joined by what the flow holds (its context), not by a state handed on, so nothing chains, the lanes may be
+    // of different levels, and a done is checked against no lane. A lane stop with no act is no Element.
+    if (f.arrange === "elements") {
+      for (const st of f.stops) if (laneNames.has(st.name) && !st.act) throw new CrubalError(`${where} arranges Elements: its stop ${st.name} names no act, and an Element is a lane with its act (${st.name} -> <act>)`, st.line);
+      continue;
+    }
     const show = (pk: { filter: string; value: string }) => `${pk.filter} = ${pk.value}`;
     const same = (a: { filter: string; value: string }, b: { filter: string; value: string }) => a.filter === b.filter && a.value === b.value;
     let prev: Lane | undefined;

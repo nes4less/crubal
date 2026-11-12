@@ -408,7 +408,8 @@ A package MUST be refused at publish when:
    (revision 32) groups by a filter that isn't its view's or groups a lane the app serves;
 9. a flow names a utility it doesn't declare, a stop that is neither a lane nor a form of the package, an
    act its utility lacks, a level its kinds lack, or a done that is not a declared filter with a real value;
-   or whose lane stops do not chain, done to pick, or whose done is not its last lane's (12.11, revision 22),
+   or whose lane stops do not chain, done to pick, or whose done is not its last lane's (12.11, revision 22;
+   a flow that arranges Elements, revision 40, chains with nothing and is refused only for a lane stop with no act),
    or whose context is not a kind or level of the package, or that replaces itself (revision 23);
 7. a display names no layout, has a slot line that isn't `shapeSlot -> displaySlot`, or fills one of its
    slots twice.
@@ -586,6 +587,7 @@ flow: unitizer /2026-12-20
 | `serves` | whom the line is for, as a lane's `serves` |
 | `context` | kinds of this package the flow holds through its run, asked once when it is walked and kept per person (a station, a location); the app draws them at the head and hands them to every stop's act (revision 23) |
 | `replaces` | a flow this one stands in for (revision 23): where the named flow would have been served, this one is; the named flow returns when this one goes; a flow a place draws from a preset names the preset |
+| `arrange` | `line` (unless said) or `elements` (revision 40): a line's state stops chain; an arrangement of Elements chains with nothing (Elements, below) |
 | `stops` | one line per stop, in walking order: `<lane> -> <act>` is a lane of this package with the act of the utility that moves a card on; `<lane>` alone is a lane whose cards move by their own presses; a list (a lane with no `pick` and no `step`, 12.10) is a stop only as `<lane> -> <act>` (revision 37); `<form> of <level>` is a block, a form of this package making or acting on a record of that level (the record of the stop before, when it has one); a block may end `with <facet> = <value>, …` (revision 36): the values its form opens with, set and locked |
 | `done` | `filter = value`: the state a record leaves the line in: the last lane stop's done, or its pick when that lane holds what is finished (revision 22); or (revision 34) a `marked` filter alone: a record marked on it has left the line |
 
@@ -644,6 +646,31 @@ stops chain across it as across a step stop, a block stop before it stamps nothi
 lane stop is a list has its `done` checked against no lane. A package MUST be refused at publish when a list
 is a stop with no act; the refusal says so. A reader that knew revision 36 refuses such a flow as it refused
 every list stop.
+
+**Elements (revision 40).** Some work is not one record walking a line. An **Element** is a lane with the act
+that is its work: what a touch does there. A count of a container is several of them, on two levels: the
+containers to start, the units expected, the containers to finish, the units not found. Nothing is handed
+from one to the next as a state; they are joined by what the flow holds, its `context` (the container), and a
+person moves among them as the work asks. A flow that says `arrange: elements` is such an arrangement:
+
+```crubal
+flow: count /2026-11-16
+  utility: stock
+  context: container
+  arrange: elements
+  stops:
+    containersToCount -> start
+    unitsExpected -> seen
+    containersCounting -> finish
+    unitsNotFound -> lost
+```
+
+Its stops chain with nothing, stand in any order, and may be lanes of different levels; one lane may be a stop
+of several flows. Each lane stop still stamps as it would anywhere (a state lane's `done`, a step lane's mark,
+a list nothing). A `done`, where one is written, is checked against no lane. A package MUST be refused at
+publish when a lane stop of such a flow names no act, since a lane nobody presses is a list to read and no
+Element; the refusal says so. `arrange: line` is the default and may be written. A reader that knew revision
+39 refuses the setting as it refuses any it does not know.
 
 ## 12.12 Prints
 
