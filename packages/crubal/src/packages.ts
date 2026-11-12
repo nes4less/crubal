@@ -94,6 +94,8 @@ export type Lane = {
   step?: string;
   /** Revision 34: marked filters of the view; a record marked on any waits here no longer. */
   until?: string[];
+  /** Revision 38: marked filters of the view; a record waits here only once marked on each. */
+  after?: string[];
   band: "daily" | "weekly" | "rarely";
   house: number;
   serves: { as: string; items?: string[]; line: number }[];
@@ -351,13 +353,22 @@ function readLane(node: Node): Lane {
       }
       if (!card.name.length) throw new CrubalError(`the lane ${name}'s card names nothing`, c.line);
       s.card = card;
-    } else throw new CrubalError(`a lane has label, utility, view, serve, pick, done, step, until, group, band, house, serves, home and card, not ${c.key}`, c.line);
+    } else if (c.key === "after") {
+      s.after = splitList(v);
+      for (const u of s.after) if (!/^[\w:-]+$/.test(u)) throw new CrubalError(`after names the view's marked filters: ${u}`, c.line);
+      if (!s.after.length) throw new CrubalError("after names the view's marked filters", c.line);
+    } else throw new CrubalError(`a lane has label, utility, view, serve, pick, done, step, until, after, group, band, house, serves, home and card, not ${c.key}`, c.line);
   }
   if (!s.view && !s.serve) throw new CrubalError(`the lane ${name} names no view and no serve`, node.line);
   if (s.view && s.serve) throw new CrubalError(`the lane ${name} names both a view and a serve`, node.line);
   // A step lane (revision 34): the step in place of pick and done, which hold its two buckets from here on.
   if (s.step && (said.has("pick") || said.has("done"))) throw new CrubalError(`the lane ${name} names a step, so it names no pick and no done`, node.line);
   if (s.until && !s.step) throw new CrubalError(`the lane ${name} names an until, so it needs a step`, node.line);
+  if (s.after && !s.step) throw new CrubalError(`the lane ${name} names an after, so it needs a step`, node.line);
+  for (const a of s.after ?? []) {
+    if (a === s.step) throw new CrubalError(`the lane ${name}'s after names its own step, ${a}`, node.line);
+    if (s.until?.includes(a)) throw new CrubalError(`the lane ${name} names ${a} as an after and an until: nothing would wait there`, node.line);
+  }
   if (s.step) {
     s.pick = { filter: s.step, value: "open", line: node.line };
     s.done = { filter: s.step, value: "done", line: node.line };
@@ -595,8 +606,8 @@ function checkLanes(source: string, pkgs: PackageInfo[]): void {
         if (facet?.values && !facet.values.some((x) => x.value === pk.value)) throw new CrubalError(`${where}'s ${what}: ${pk.value} is not a value of ${facet.key}`, pk.line);
       };
       if (s.step) {
-        // Revision 34: the step and every until is a marked filter of the lane's view.
-        for (const [m, what] of [[s.step, "step"], ...(s.until ?? []).map((u) => [u, "until"])] as [string, string][]) {
+        // Revision 34: the step and every until is a marked filter of the lane's view; revision 38: every after too.
+        for (const [m, what] of [[s.step, "step"], ...(s.until ?? []).map((u) => [u, "until"]), ...(s.after ?? []).map((u) => [u, "after"])] as [string, string][]) {
           if (!view.filters.includes(m)) throw new CrubalError(`${where}'s ${what} names ${m}, which isn't a filter of ${view.name}`, s.line);
           if (!views.filters.get(m)?.marked) throw new CrubalError(`${where}'s ${what} names ${m}, which isn't a marked filter (buckets: marked)`, s.line);
         }
