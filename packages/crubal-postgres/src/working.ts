@@ -153,8 +153,11 @@ export function copyWorking(base: State): State {
   const needs = (base.records as WorkingRecords).needs;
   const s = workingState(needs);
   for (const [id, r] of Map.prototype.entries.call(base.records) as Iterable<[string, Record]>) Map.prototype.set.call(s.records, id, r);
-  for (const [k, v] of (base.bindings as WorkingMap<string>).entries()) s.bindings.set(k, v);
-  for (const [k, v] of (base.runs as WorkingMap<JsonObject>).entries()) s.runs.set(k, structuredClone(v));
+  // Copied as the records are, by the plain Map's own walk: a working map's `entries()` notes a wish for the
+  // table whole, so every settle of every write read all of an owner's bindings and runs (found on a bill for
+  // what a database sent out, 2026-11-12: 13.8 million reads of every run in three weeks).
+  for (const [k, v] of Map.prototype.entries.call(base.bindings) as Iterable<[string, string]>) Map.prototype.set.call(s.bindings, k, v);
+  for (const [k, v] of Map.prototype.entries.call(base.runs) as Iterable<[string, JsonObject]>) Map.prototype.set.call(s.runs, k, structuredClone(v));
   for (const [k, v] of base.edges) s.edges.set(k, structuredClone(v));
   for (const [k, v] of base.instructions) s.instructions.set(k, structuredClone(v));
   for (const [k, v] of base.definitions) s.definitions.set(k, structuredClone(v));

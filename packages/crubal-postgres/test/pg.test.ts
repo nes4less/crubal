@@ -21,7 +21,7 @@ import { readViews, type StreamEntry, Views } from "@cruba/crubal";
 import { connect, testSchema, type Pool } from "../src/db.ts";
 import { publish } from "@cruba/crubal";
 import { borderOptions, PgBorder } from "../src/border.ts";
-import { Needs, WorkingRecords } from "../src/working.ts";
+import { copyWorking, Needs, WorkingRecords, workingState } from "../src/working.ts";
 import { PgStore, QuorumRefused } from "../src/store.ts";
 
 const url = process.env.CRUBAL_PG_URL;
@@ -140,6 +140,23 @@ test("an operation loads only what it touches", { skip: !url }, async () => {
   assert.ok(loaded.includes("U-1") && loaded.includes("P-7"));
   assert.equal((await store.state()).records.get("U-1")?.of, "P-7");
   assert.deepEqual((await store.state()).records.get("U-1")?.values, {}, "the shared title folded up and is read through");
+});
+
+test("a working state is copied without asking for anything: not every run, not every binding", () => {
+  // Every settle copies the base first. The copy walked the working maps by their own `entries()`, which notes
+  // a wish for the table whole, so each write read every run and every binding of its owner (a place with
+  // some hundreds of runs: millions of whole reads in weeks, seen on what the database sent out).
+  const needs = new Needs();
+  const base = workingState(needs);
+  Map.prototype.set.call(base.runs, "R-1", { run: "R-1", state: "done" });
+  Map.prototype.set.call(base.bindings, "isbn:1", "P-1");
+  const copy = copyWorking(base);
+  assert.deepEqual([...needs.pending], []);
+  assert.deepEqual(Map.prototype.get.call(copy.runs, "R-1"), { run: "R-1", state: "done" });
+  assert.equal(Map.prototype.get.call(copy.bindings, "isbn:1"), "P-1");
+  // A run asked for by name is still noted, and still not the table.
+  copy.runs.get("R-2");
+  assert.deepEqual([...needs.pending], ["run:R-2"]);
 });
 
 test("a working set answers a narrow question from what it loaded for it, never by asking for the catalog", () => {
