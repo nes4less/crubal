@@ -58,6 +58,11 @@ export async function publish(client: Client, owner: string, p: Projecting, name
   const aud = audience ?? v.show;
   const version = v.version ?? "";
   const projection = version ? `${name} /${version}` : name;
+  // One publish of a view at a time, held to the transaction's end: two at once each read the stream's head
+  // and numbered their entries from it, and the second to write was refused by the stream's key (a host's
+  // project loop beside a page that publishes the view it is about to draw). The one that waited reads the
+  // marks after the first has cleared them, and publishes what is left, usually nothing.
+  await client.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [JSON.stringify(["publish", owner, name, aud])]);
   // What is marked and whether the view was ever published come first: a view with nothing stale costs
   // two small queries, never a read of every stored row (ME: fifteen views, thousands of rows each, on
   // every write). Stored rows are read in full only for a first or a reset publish; otherwise the marked ones.

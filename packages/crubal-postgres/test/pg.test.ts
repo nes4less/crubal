@@ -165,6 +165,31 @@ test("owners never see each other", { skip: !url }, async () => {
   assert.equal((await b.entries()).length, 1);
 });
 
+test("a view published by several hands at once is published once: the others wait, and find nothing left", { skip: !url }, async () => {
+  const viewsDir = join(corpus, "..", "views");
+  const dict = emptyDictionary();
+  readDefinitions(readFileSync(join(corpus, "..", "reader", "_package.crubal"), "utf8"), dict);
+  readDefinitions(readFileSync(join(corpus, "..", "reader", "_facets.crubal"), "utf8"), dict);
+  const viewText = readFileSync(join(viewsDir, "_views.crubal"), "utf8");
+  readDefinitions(viewText, dict);
+  const set = readViews(viewText);
+  const records = readText(readFileSync(join(viewsDir, "_records.crubal"), "utf8"), dict).records.map((r) => foldRecord(r, dict));
+  const owner = "at-once.example";
+  const own = (r: Record): Record => ({ ...r, owner });
+  const store = new PgStore(pool, owner, { projecting: { dict, views: set } });
+  await store.commit({ migration: "backfill" }, (d) => { for (const r of records) d.records.set(r.id, own(structuredClone(r))); }, "2026-10-15T16:00:00Z");
+  const memory = new Views(dict, set);
+  for (const r of records) memory.put(own(r));
+  // Four publishes of a view never published: before the lock each numbered from the same head and all but
+  // one were refused by the stream's key.
+  const got = await Promise.all([1, 2, 3, 4].map(() => store.project("discs")));
+  const whole = got.filter((g) => g.length);
+  assert.equal(whole.length, 1, `one hand published, the rest found nothing: ${got.map((g) => g.length).join(", ")}`);
+  const expected = memory.stream("discs");
+  assert.ok(same(whole[0] as never, expected));
+  assert.equal(await store.streamHead("discs"), expected.length);
+});
+
 test("projections and the stream match the memory views, rebuilding only stale rows", { skip: !url }, async () => {
   const viewsDir = join(corpus, "..", "views");
   const dict = emptyDictionary();
