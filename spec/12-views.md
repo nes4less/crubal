@@ -575,7 +575,7 @@ flow: unitizer /2026-12-20
 | `serves` | whom the line is for, as a lane's `serves` |
 | `context` | kinds of this package the flow holds through its run, asked once when it is walked and kept per person (a station, a location); the app draws them at the head and hands them to every stop's act (revision 23) |
 | `replaces` | a flow this one stands in for (revision 23): where the named flow would have been served, this one is; the named flow returns when this one goes; a flow a place draws from a preset names the preset |
-| `stops` | one line per stop, in walking order: `<lane> -> <act>` is a lane of this package with the act of the utility that moves a card on; `<lane>` alone is a lane whose cards move by their own presses; `<form> of <level>` is a block, a form of this package making or acting on a record of that level (the record of the stop before, when it has one); a block may end `with <facet> = <value>, …` (revision 36): the values its form opens with, set and locked |
+| `stops` | one line per stop, in walking order: `<lane> -> <act>` is a lane of this package with the act of the utility that moves a card on; `<lane>` alone is a lane whose cards move by their own presses; a list (a lane with no `pick` and no `step`, 12.10) is a stop only as `<lane> -> <act>` (revision 37); `<form> of <level>` is a block, a form of this package making or acting on a record of that level (the record of the stop before, when it has one); a block may end `with <facet> = <value>, …` (revision 36): the values its form opens with, set and locked |
 | `done` | `filter = value`: the state a record leaves the line in: the last lane stop's done, or its pick when that lane holds what is finished (revision 22); or (revision 34) a `marked` filter alone: a record marked on it has left the line |
 
 A package MUST be refused at publish when a flow names a utility it doesn't declare, a stop that is
@@ -609,8 +609,8 @@ own write, under the form's source, and is checked as any value the form keeps (
 rule: the same form opened elsewhere asks the facet as it always did. A reader derives nothing from it.
 
 **The chain (revision 22).** Two lane stops that follow one another chain: the first's `done` is a state
-(not `viewed`) and it is the second's `pick`, filter and value. A lane with no `pick` (a list, 12.10) is no
-stop: it holds no state. A block stop between two lanes leaves the chain as it is: the lanes chain across
+(not `viewed`) and it is the second's `pick`, filter and value. A lane with no `pick` (a list, 12.10) holds
+no state, and is a stop only with an act (list stops, below). A block stop between two lanes leaves the chain as it is: the lanes chain across
 it, and the block stamps the second's pick. The flow's `done` is the last lane stop's `done` when that is a
 state, else its `pick` (an end stop holding what is finished). A package MUST be refused at publish when a
 flow's lane stops do not chain, or its done is not its last lane's; the refusal names the gap. A flow
@@ -624,6 +624,15 @@ stop's stamp is its mark: when the stop's act lands and has not written the mark
 `now` on a date and `yes` on a yes-no; a link mark is never stamped, since the act sets it (the container it
 found or made), and an act that lands without setting it has not done the step. A block stop before a step
 stop stamps nothing. A flow's `done` naming a marked filter alone is checked against no lane.
+
+**List stops (revision 37).** Some work is an open set: every record of a kind may be touched, one at a
+time, and touching it does not take it off the list (a thing moved from one group to another). A list (12.10)
+is a stop of a flow when the stop names an act, `<lane> -> <act>`: the act is the whole of the work, and
+nothing is left behind for the lane to hold. A list stop chains with nothing and stamps nothing: the state
+stops chain across it as across a step stop, a block stop before it stamps nothing, and a flow whose last
+lane stop is a list has its `done` checked against no lane. A package MUST be refused at publish when a list
+is a stop with no act; the refusal says so. A reader that knew revision 36 refuses such a flow as it refused
+every list stop.
 
 ## 12.12 Prints
 

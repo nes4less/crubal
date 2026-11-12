@@ -199,7 +199,17 @@ test("a flow is refused when its lane stops do not chain, or its done is not its
     press: Look -> /orders
 
 `;
-  refused(`${list}${flow.replace("ordersToPack -> pack", "ordersAll")}`, /ordersAll is a list: it holds no state, so it is no stop/);
+  refused(`${list}${flow.replace("ordersToPack -> pack", "ordersAll")}`, /ordersAll is a list: it holds no state, so it is a stop only with an act \(ordersAll -> <act>\)/);
+  // Revision 37: a list is a stop where the stop names its act. It chains with nothing (the state stops chain
+  // across it, the flow's done is its last state lane's) and stamps nothing.
+  const between = flow.replace("    ordersToPack -> pack", "    ordersAll -> pack\n    ordersToPack -> pack");
+  checkPackages(shop(`${list}${between}`));
+  const withList = readPackages(shop(`${list}${between}`));
+  const fl = withList[0]?.flows[0];
+  assert.ok(fl && withList[0]);
+  assert.deepEqual(flowStamps(fl, withList[0].lanes, () => "orderState").map((x) => x.stop), ["order", "ordersToPick", "ordersToPack"]);
+  // The state stops still chain across a list stop.
+  refused(`${list}${flow.replace("    ordersToPick -> pick\n    ordersToPack -> pack", "    ordersToPack -> pack\n    ordersAll -> pack\n    ordersToPick -> pick")}`, /gap: ordersToPack is done at orderState = packed, but ordersToPick picks orderState = paid/);
   // A block between two lanes leaves the chain as it is; a block after the last lane is fine.
   checkPackages(shop(flow.replace("    ordersToPack -> pack", "    order of order\n    ordersToPack -> pack")));
   checkPackages(shop(flow.replace("    ordersToPack -> pack", "    ordersToPack -> pack\n    order of order")));
