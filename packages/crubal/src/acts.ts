@@ -78,6 +78,10 @@ export type ActThen = {
   line: number;
 };
 
+/** Revision 42: what the record in hand must hold (or, with `no`, lack) for the act to land; its own words when
+ * it is refused. */
+export type ActNeed = { facet: string; lacks?: true; words?: string; line: number };
+
 export type Act = {
   name: string;
   version: string;
@@ -90,6 +94,8 @@ export type Act = {
   /** Revision 35: the act may land on fewer than the record holds, where its level declares its quantity. */
   takes?: "share";
   context: string[];
+  /** Revision 42: read before anything else; the first that fails stops the act before any write. */
+  needs?: ActNeed[];
   route?: ActRoute;
   finds: ActFind[];
   counts: ActCount[];
@@ -284,6 +290,15 @@ export function readAct(node: Node): Act {
     else if (c.key === "context") {
       a.context = v.split(",").map((s) => s.trim()).filter(Boolean);
       for (const k of a.context) if (!WORD.test(k)) throw new CrubalError(`context names kinds, lower-case words: ${k}`, c.line);
+    } else if (c.key === "needs") {
+      for (const l of c.children) {
+        const t = l.text.trim();
+        if (!t) continue;
+        const m = t.match(/^(no\s+)?([\w:]+)(?:\s+"([^"]+)")?$/);
+        if (!m) throw new CrubalError(`a need is "<facet>" or "no <facet>", its words in quotes after it or not: ${t}`, l.line);
+        (a.needs ??= []).push({ facet: m[2] as string, ...(m[1] ? { lacks: true as const } : {}), ...(m[3] ? { words: m[3] } : {}), line: l.line });
+      }
+      if (!a.needs?.length) throw new CrubalError(`the act ${name} needs nothing: its lines go beneath needs:`, c.line);
     } else if (c.key === "route") continue;
     else if (c.key === "find") for (const l of c.children) { if (l.text.trim()) { const f = readFind(l.text.trim(), l.line, routes); a.finds.push(f); founds.add(f.name); } }
     else if (c.key === "count") for (const l of c.children) { if (l.text.trim()) { const k = readCount(l.text.trim(), l.line, routes, founds); a.counts.push(k); countNames.add(k.name); } }
@@ -315,7 +330,7 @@ export function readAct(node: Node): Act {
       if (a.tells) throw new CrubalError(`the act ${name} tells twice`, c.line);
       a.tells = { kind: m[1] as string, aspect: m[2] as string, sets: c.children.filter((l) => l.text.trim()).map((l) => readSet(l.text.trim(), l.line, routes)), line: c.line };
       if (!a.tells.sets.length) throw new CrubalError(`the act ${name} tells ${m[1]} and sets nothing: its set lines go beneath tells:`, c.line);
-    } else throw new CrubalError(`an act has utility, replaces, label, describe, on, takes, context, route, find, mint, count, set, then, send, lands and tells, not ${c.key}`, c.line);
+    } else throw new CrubalError(`an act has utility, replaces, label, describe, on, takes, context, needs, route, find, mint, count, set, then, send, lands and tells, not ${c.key}`, c.line);
   }
   if (!a.utility) throw new CrubalError(`the act ${name} names no utility`, node.line);
   if (!a.on) throw new CrubalError(`the act ${name} says no on: the level it acts on`, node.line);
@@ -476,6 +491,7 @@ export function checkActList(acts: Act[], env: ActEnv): void {
         sourceOk(s, "tells with");
       }
     }
+    for (const n of a.needs ?? []) needFacet(n.facet, n.line, "needs");
     for (const t of a.thens) {
       for (const term of t.when ? [t.when.left, t.when.right] : []) {
         if ("ref" in term) refOk(term.ref, t.line);
@@ -689,6 +705,12 @@ export function tellsValuesOf(a: Act, i: ActInput): { ok: true; kind: string; as
 /** The writes an act makes when it lands (15): pure, given what the finds answered or minted. A `first` find
  * that answered nothing stops the act with the reason, before any write. */
 export function actWrites(a: Act, i: ActInput): ActWrites {
+  // Revision 42: what the record in hand must hold or lack, read before anything else.
+  for (const n of a.needs ?? []) {
+    const v = i.record.values[bare(n.facet)];
+    const holds = v !== undefined && v !== null && v !== "" && !(Array.isArray(v) && !v.length);
+    if (holds === !!n.lacks) return { ok: false, why: n.words ?? (n.lacks ? `${bare(n.facet)} is already set` : `${bare(n.facet)} is not set`) };
+  }
   for (const f of a.finds) if (f.take === "first" && !i.found[f.name]?.length) return { ok: false, why: `no ${f.kind} for ${f.name}` };
   const record: JsonObject = {};
   const clear: string[] = [];
@@ -704,13 +726,20 @@ export function actWrites(a: Act, i: ActInput): ActWrites {
   const then: { id: string; values: JsonObject; clear?: string[] }[] = [];
   const sends: { verb: string; words: string }[] = [];
   for (const t of a.thens) {
-    if (t.when) {
-      const l = numberOf(t.when.left, i);
-      const r = numberOf(t.when.right, i);
-      if (l === undefined || r === undefined) continue;
-      const holds = t.when.op === "=" ? l === r : t.when.op === "<" ? l < r : t.when.op === ">" ? l > r : t.when.op === "<=" ? l <= r : l >= r;
-      if (!holds) continue;
-    }
+    const when = t.when;
+    const holdsOn = (on: ActInput): boolean => {
+      if (!when) return true;
+      const l = numberOf(when.left, on);
+      const r = numberOf(when.right, on);
+      if (l === undefined || r === undefined) return false;
+      return when.op === "=" ? l === r : when.op === "<" ? l < r : when.op === ">" ? l > r : when.op === "<=" ? l <= r : l >= r;
+    };
+    // Revision 42: a term that reads a found record the then writes on is read on each of those records, and
+    // the write is made on those where it holds. Any other condition is read once, as it always was.
+    const reads = new Set((when ? [when.left, when.right] : []).flatMap((x) => ("ref" in x && "found" in x.ref ? [x.ref.found] : [])));
+    const each = t.sets.some((s) => reads.has(s.found));
+    let held = each ? false : holdsOn(i);
+    if (!each && !held) continue;
     for (const s of t.sets) {
       // Revision 39: a then's value is a set's: a link, a value copied, the facet cleared.
       const v = s.value;
@@ -728,6 +757,10 @@ export function actWrites(a: Act, i: ActInput): ActWrites {
       } else value = valueOf(v, i);
       const k = bare(s.facet);
       for (const rec of i.found[s.found] ?? []) {
+        if (each) {
+          if (!holdsOn(reads.has(s.found) ? { ...i, found: { ...i.found, [s.found]: [rec] } } : i)) continue;
+          held = true;
+        }
         let have = then.find((x) => x.id === rec.id);
         if (!have) then.push((have = { id: rec.id, values: {} }));
         if ("none" in v) {
@@ -739,7 +772,7 @@ export function actWrites(a: Act, i: ActInput): ActWrites {
         }
       }
     }
-    if (t.send) sends.push({ ...t.send });
+    if (t.send && held) sends.push({ ...t.send });
   }
   // A mark is taken once (15.2, revision 34): a write to a mark that holds a real value stops the act before
   // any write, with the reason; clearing one (`none`) is how an act gives it back.
@@ -817,6 +850,7 @@ export function actJson(a: Act): JsonObject {
     on: a.on,
     ...(a.takes ? { takes: a.takes } : {}),
     ...(a.context.length ? { context: [...a.context] } : {}),
+    ...(a.needs?.length ? { needs: a.needs.map((n): JsonObject => ({ facet: n.facet, ...(n.lacks ? { lacks: true } : {}), ...(n.words ? { words: n.words } : {}) })) } : {}),
     ...(a.route
       ? {
           route: {
@@ -891,6 +925,10 @@ export function actText(a: JsonObject): string[] {
   out.push(`  on: ${a.on}`);
   if (a.takes === "share") out.push("  takes: share");
   if (Array.isArray(a.context) && a.context.length) out.push(`  context: ${(a.context as string[]).join(", ")}`);
+  if (Array.isArray(a.needs) && a.needs.length) {
+    out.push("  needs:");
+    for (const n of a.needs as JsonObject[]) out.push(`    ${n.lacks === true ? "no " : ""}${n.facet}${typeof n.words === "string" ? ` "${n.words}"` : ""}`);
+  }
   if (a.route && typeof a.route === "object") {
     const r = a.route as JsonObject;
     const keep = r.keep as JsonObject | undefined;

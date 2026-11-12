@@ -72,6 +72,7 @@ act: fileByCategory /2026-11-09
 | `on` | the level it acts on: the record in hand |
 | `takes` | revision 35: `share`, where the level's kind declares its quantity (11.2 `shares`): the act may land on fewer than the record holds. The one running it gives a count, all of it when none is given. Fewer **splits** the record (15.2) and the act lands on the share taken |
 | `context` | kinds the act holds beside the record, asked once and kept per person (12.11's `context:`): `context.<kind>` in its lines names the record held, `context.<kind>.<facet>` (revision 26) reads its facet |
+| `needs` | revision 42: one line per need, `<facet>` or `no <facet>`, with its words in quotes after it or not: what the record in hand must hold, or lack, for the act to land. Read before anything else; the first that fails stops the act before any write, with its words (or "`<facet>` is not set", "`<facet>` is already set") as the reason |
 | `route` | revision 26, one line: `<name> -> row of <ref> by <column> over record[, record.<link facet>] [keep <column> by <kind> where <picks>]`: the rows of a compound facet on a record (`context.station.slots`, the station's rack), each row's `<column>` a condition (6.3) read over the record in hand's values laid over the linked record's (`record.of`, the product's); the first row whose condition holds is taken; the last row takes what no row above claimed, its condition unread; with `keep`, a row whose count (the records of the kind the picks admit) is its `<column>` or more is passed over. `<name>.<column>` thereafter reads the row taken; in the count's picks it reads the row being weighed |
 | `of` | a record's parent (1.1), no facet: it stands where a facet may (`record.of`, a route's `over`, a pick's facet `of = record.of`) and the dictionary is never asked for it |
 | `find` | one line per find, `<name> -> first\|all <kind> [where <facet> = <value>, …] [order <facet> [after\|before]]`: the records of a kind the picks admit, in the order said, the first or all; a pick's facet may be a link facet's target's, `<link facet>.<facet>` (revision 26, one hop); a pick's value is a literal, `record.<facet>` (the record in hand's), `context.<kind>` (the context record's id), `context.<kind>.<facet>`, `<found>.<facet>` (an earlier find's), `<found>` alone (its id, revision 26), `caller` (revision 35: the person running the act, as `link caller` is in a set), `record` alone (revision 39: the record in hand, its id, so `of = record` finds the records beneath it and `<link facet> = record` those that link to it; the word itself as a literal is written quoted) or `<route>.<column>` (the row taken) |
@@ -110,6 +111,17 @@ beside its values (`clear` on the found record's writes) and taken off as the re
 reference reads nothing for writes nothing. Where two thens write one facet of one record, the later
 stands, a clear as much as a value.
 
+**A closed set (revision 42).** A set of records fixed when the work starts, with a finish that judges the
+rest, is three acts on the thing that holds the set and needs no word of its own. The start takes a mark on
+it (taken once, so one set is open on a thing at a time) and writes a state on every record it reaches; the
+work between is any act on those records; the finish `needs` the mark, gives it back, and writes its
+judgement on the records its find still answers in the first state; a cancel `needs` the mark, gives it back
+and clears the state. Two things serve it. An act's **`needs`** refuses an act on a record that is not where
+the act expects it, with the act's own words. And a then's condition that reads a found record **the then
+writes on** (`when inside.qty <= 0 set inside.state = none`) is read on each of those records, and the write
+made on those where it holds; its send goes once, when it held on any. A condition that reads nothing the
+then writes on is read once, as before; a term that reads no number holds nowhere.
+
 **A mark is taken once (revision 34).** A facet a `marked` filter names (12.3) is a mark, and holds one value.
 An act whose `set` or `then` would write a mark on a record that already holds a real value for it stops
 before any write, with the reason; the host hands the engine the marks in force, and MUST land an act inside
@@ -142,7 +154,7 @@ leaves to the check of the packages in force together (11.4, at install), which 
 
 ## 15.4 The JSON form
 
-An act is `{"act", "version", "utility", "replaces", "label", "describe", "on", "takes", "context": [...], "route": {"name",
+An act is `{"act", "version", "utility", "replaces", "label", "describe", "on", "takes", "context": [...], "needs": [{"facet", "lacks": true, "words"}] (revision 42), "route": {"name",
 "rows": reference, "by", "over": [reference…], "keep": {"column", "kind", "where": [pick…]}}, "finds": [{"name",
 "take", "kind", "where": [{"facet", "value": {"literal"} | {"caller": true} | {"self": true} (revision 39: the record in hand) | reference}], "order": {"facet", "dir"}, "mint": {"kind",
 "sets": [set…]}}], "counts": [{"name", "kind", "where": [pick…]}], "sets": [{"facet", "source": {"literal"} | {"link"} | {"now": true} | {"caller": true} | {"none": true} | {"next": {"prefix":

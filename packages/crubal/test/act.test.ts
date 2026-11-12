@@ -461,6 +461,54 @@ test("revision 39: a pick names the record in hand; a then stands with no condit
   assert.throws(() => checkPackages(src.replace("inside.filedBox = record.containerLabel", "inside.filedBox = record.nothing")), /nothing/);
 });
 
+const closed = `act: start /2026-11-15
+  utility: bench
+  on: container
+  needs:
+    no filledAt "a count is already open on this box"
+    containerLabel
+  find:
+    inside -> all unit where filedIn = record
+  set:
+    filledAt -> now
+  then:
+    set inside.filedSlot = expected
+    when inside.condition <= 0 set inside.filedSlot = none send notify emptyUnit about record
+`;
+
+test("revision 42: an act needs what the record in hand holds or lacks, refused with its words before any write; a then's condition that reads a record it writes on is read on each", () => {
+  const src = bench(file + label + closed).replace("acts: file, label", "acts: file, label, start");
+  const [info] = readPackages(src);
+  const a = info?.acts.find((x) => x.name === "start") as NonNullable<ReturnType<typeof readPackages>[number]["acts"][number]>;
+  assert.deepEqual(a.needs?.map((n) => [n.facet, !!n.lacks, n.words]), [["filledAt", true, "a count is already open on this box"], ["containerLabel", false, undefined]]);
+  checkPackages(src);
+  const bundle = bundleOf(parsePackage(src));
+  const text = printBundle(bundle);
+  assert.match(text, /^  needs:\n    no filledAt "a count is already open on this box"\n    containerLabel$/m);
+  assert.equal(serialize(bundleOf(parsePackage(text))), serialize(bundle), "the printed text reads back to the same bundle");
+  const units: { id: string; values: { [k: string]: string } }[] = [
+    { id: "U-1", values: { condition: "2" } },
+    { id: "U-2", values: { condition: "0" } },
+    { id: "U-3", values: {} },
+  ];
+  const input = (values: { [k: string]: string }, inside = units) => ({ record: { id: "C-1", values }, context: {}, found: { inside }, now: "N" });
+  const w = actWrites(a, input({ containerLabel: "BIN 001" }));
+  assert.deepEqual(w.ok && w.record, { filledAt: "N" });
+  assert.deepEqual(w.ok && w.then, [
+    { id: "U-1", values: { filedSlot: "expected" } },
+    { id: "U-2", values: {}, clear: ["filedSlot"] },
+    { id: "U-3", values: { filedSlot: "expected" } },
+  ], "read on each: only the unit with none is cleared; one with no value for the term is left as the plain then wrote it");
+  assert.deepEqual(w.ok && w.sends, [{ verb: "notify", words: "emptyUnit about record" }], "the send goes once, since it held on one");
+  const none = actWrites(a, input({ containerLabel: "BIN 001" }, [units[0] as (typeof units)[number]]));
+  assert.deepEqual(none.ok && none.sends, [], "held on none: no send");
+  assert.deepEqual(actWrites(a, input({ containerLabel: "BIN 001", filledAt: "M" })), { ok: false, why: "a count is already open on this box" });
+  assert.deepEqual(actWrites(a, input({})), { ok: false, why: "containerLabel is not set" });
+  // Refused: a need of a facet nothing declares; a need that is no facet's name.
+  assert.throws(() => checkPackages(src.replace("    containerLabel\n  find:", "    nothingHere\n  find:")), /needs nothingHere, which isn't a facet/);
+  assert.throws(() => readPackages(src.replace("    containerLabel\n  find:", "    containerLabel is set\n  find:")), /a need is "<facet>" or "no <facet>"/);
+});
+
 // ─── Revision 31: a kind's follow aspects, an act's tells, the post it lands when followed ───────────────────────────
 
 const feed = (tail: string) => `package: feed /2026-11-12
