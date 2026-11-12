@@ -20,7 +20,7 @@ export type ActRef =
   | { route: string; column: string };
 
 /** What a pick in a find compares a facet with: a literal, or a reference. */
-export type ActPickValue = { literal: string } | { caller: true } | ActRef;
+export type ActPickValue = { literal: string } | { caller: true } | { self: true } | ActRef;
 
 export type ActPick = { facet: string; value: ActPickValue; line: number };
 
@@ -66,9 +66,12 @@ export type ActCount = { name: string; kind: string; where: ActPick[]; line: num
 
 /** A term of a `when`: a reference or a count's name, with an optional number added, or a number. */
 export type ActTerm = { ref: ActRef; plus?: number } | { count: string; plus?: number } | { number: number };
-export type ActThenSet = { found: string; facet: string; value: { literal: string } | { now: true } };
+/** What a then writes on a found record (revision 39: a link, a value copied or the facet cleared, as a set's). */
+export type ActThenValue = { literal: string } | { now: true } | { none: true } | { link: string } | { caller: true } | ActRef;
+export type ActThenSet = { found: string; facet: string; value: ActThenValue };
 export type ActThen = {
-  when: { left: ActTerm; op: "=" | "<" | ">" | "<=" | ">="; right: ActTerm };
+  /** Absent (revision 39): the writes are made whenever the act lands. */
+  when?: { left: ActTerm; op: "=" | "<" | ">" | "<=" | ">="; right: ActTerm };
   sets: ActThenSet[];
   /** Revision 26: a send run only when the condition held. */
   send?: { verb: string; words: string };
@@ -125,6 +128,8 @@ function readPickValue(t: string, line: number, routes: Set<string>, founds: Set
   if (founds.has(t)) return { found: t };
   // Revision 35: the person running the act, as `link caller` is in a set.
   if (t === "caller") return { caller: true };
+  // Revision 39: the record in hand itself, its id (`of = record`, `heldIn = record`).
+  if (t === "record") return { self: true };
   return isRef(t) ? readRef(t, line, "a pick", routes) : { literal: unquote(t) };
 }
 
@@ -224,8 +229,9 @@ function readTerm(t: string, line: number, routes: Set<string>, counts: Set<stri
 
 /** `when box.containerCount + 1 >= box.capacity set box.containerState = full, box.filledAt = now send notify containerFull about context.station` */
 function readThen(text: string, line: number, routes: Set<string>, counts: Set<string>): ActThen {
-  const m = text.match(/^when\s+(.+?)\s*(<=|>=|=|<|>)\s*(.+?)\s+set\s+(.+?)(?:\s+send\s+([a-z][\w-]*)(?:\s+(.*))?)?$/);
-  if (!m) throw new CrubalError(`a then is "when <term> <op> <term> set <found>.<facet> = <value>[, …] [send <verb> <words>]": ${text}`, line);
+  // Revision 39: the condition may be left out (`set box.containerState = open`).
+  const m = text.match(/^(?:when\s+(.+?)\s*(<=|>=|=|<|>)\s*(.+?)\s+)?set\s+(.+?)(?:\s+send\s+([a-z][\w-]*)(?:\s+(.*))?)?$/);
+  if (!m) throw new CrubalError(`a then is "[when <term> <op> <term>] set <found>.<facet> = <value>[, …] [send <verb> <words>]": ${text}`, line);
   const sets = (m[4] as string)
     .split(/,\s*(?=[\w-]+\.\w+\s*=)/)
     .map((s) => s.trim())
@@ -234,10 +240,12 @@ function readThen(text: string, line: number, routes: Set<string>, counts: Set<s
       const sm = s.match(/^([\w-]+)\.(\w+)\s*=\s*(.+)$/);
       if (!sm) throw new CrubalError(`a then's set is "<found>.<facet> = <value>": ${s}`, line);
       const v = (sm[3] as string).trim();
-      return { found: sm[1] as string, facet: sm[2] as string, value: v === "now" ? { now: true } : { literal: unquote(v) } };
+      const link = v.match(/^link\s+([\w-]+)$/);
+      const value: ActThenValue = v === "now" ? { now: true } : v === "none" ? { none: true } : link ? (link[1] === "caller" ? { caller: true } : { link: link[1] as string }) : isRef(v) ? readRef(v, line, "a then", routes) : { literal: unquote(v) };
+      return { found: sm[1] as string, facet: sm[2] as string, value };
     });
   return {
-    when: { left: readTerm((m[1] as string).trim(), line, routes, counts), op: m[2] as ActThen["when"]["op"], right: readTerm((m[3] as string).trim(), line, routes, counts) },
+    ...(m[1] !== undefined ? { when: { left: readTerm((m[1] as string).trim(), line, routes, counts), op: m[2] as NonNullable<ActThen["when"]>["op"], right: readTerm((m[3] as string).trim(), line, routes, counts) } } : {}),
     sets,
     ...(m[5] ? { send: { verb: m[5], words: (m[6] ?? "").trim() } } : {}),
     line,
@@ -392,7 +400,7 @@ export function checkActList(acts: Act[], env: ActEnv): void {
           if (f && f.type !== "link") throw new CrubalError(`${where} ${what} picks through ${head}, which isn't a link`, p.line);
           needFacet(hop, p.line, `${what} picks`);
         }
-        if (!("literal" in p.value) && !("caller" in p.value)) refOk(p.value, p.line, inCount);
+        if (!("literal" in p.value) && !("caller" in p.value) && !("self" in p.value)) refOk(p.value, p.line, inCount);
       }
     };
     if (a.route) {
@@ -469,13 +477,17 @@ export function checkActList(acts: Act[], env: ActEnv): void {
       }
     }
     for (const t of a.thens) {
-      for (const term of [t.when.left, t.when.right]) {
+      for (const term of t.when ? [t.when.left, t.when.right] : []) {
         if ("ref" in term) refOk(term.ref, t.line);
         if ("count" in term && !counted.has(term.count)) throw new CrubalError(`${where} reads ${term.count}, which no count declares`, t.line);
       }
       for (const s of t.sets) {
         if (!found.has(s.found)) throw new CrubalError(`${where} then sets ${s.found}, which no find declares`, t.line);
         needFacet(s.facet, t.line, "then sets");
+        const v = s.value;
+        if ("link" in v) {
+          if (v.link !== "record" && !found.has(v.link) && !a.context.includes(v.link)) throw new CrubalError(`${where} then links ${s.found}.${s.facet} to ${v.link}, which no find or context declares`, t.line);
+        } else if (!("literal" in v) && !("now" in v) && !("none" in v) && !("caller" in v)) refOk(v, t.line);
       }
     }
   }
@@ -518,7 +530,8 @@ export type ActWrites =
       record: JsonObject;
       /** The record's facets a set clears (`none`, revision 29): taken off, since a value is never null. */
       clear: string[];
-      then: { id: string; values: JsonObject }[];
+      /** Each found record's writes; `clear` (revision 39) the facets a then gives back, taken off as the record's are. */
+      then: { id: string; values: JsonObject; clear?: string[] }[];
       sends: { verb: string; words: string }[];
     }
   | { ok: false; why: string };
@@ -561,7 +574,7 @@ export function routeRowsOf(r: ActRoute, i: Pick<ActInput, "record" | "context" 
 export function routeCountPicksOf(r: ActRoute, i: Omit<ActInput, "found" | "now" | "route"> & { found?: ActInput["found"] }, row: JsonObject): { facet: string; value: Json | undefined }[] {
   if (!r.keep) return [];
   const at = { record: i.record, context: i.context, found: i.found ?? {}, route: { index: -1, row } };
-  return r.keep.where.map((p) => ({ facet: p.facet.includes("::") ? p.facet.replace(/^\w+::/, "") : p.facet, value: "literal" in p.value ? p.value.literal : "caller" in p.value ? i.caller : valueOf(p.value, at) }));
+  return r.keep.where.map((p) => ({ facet: p.facet.includes("::") ? p.facet.replace(/^\w+::/, "") : p.facet, value: "literal" in p.value ? p.value.literal : "caller" in p.value ? i.caller : "self" in p.value ? i.record.id : valueOf(p.value, at) }));
 }
 
 export type Routed = { ok: true; index: number; row: JsonObject; why: string } | { ok: false; why: string };
@@ -688,21 +701,44 @@ export function actWrites(a: Act, i: ActInput): ActWrites {
     if (!v.ok) return v;
     if (v.value !== undefined) record[bare(s.facet)] = v.value;
   }
-  const then: { id: string; values: JsonObject }[] = [];
+  const then: { id: string; values: JsonObject; clear?: string[] }[] = [];
   const sends: { verb: string; words: string }[] = [];
   for (const t of a.thens) {
-    const l = numberOf(t.when.left, i);
-    const r = numberOf(t.when.right, i);
-    if (l === undefined || r === undefined) continue;
-    const holds = t.when.op === "=" ? l === r : t.when.op === "<" ? l < r : t.when.op === ">" ? l > r : t.when.op === "<=" ? l <= r : l >= r;
-    if (!holds) continue;
-    for (const s of t.sets)
+    if (t.when) {
+      const l = numberOf(t.when.left, i);
+      const r = numberOf(t.when.right, i);
+      if (l === undefined || r === undefined) continue;
+      const holds = t.when.op === "=" ? l === r : t.when.op === "<" ? l < r : t.when.op === ">" ? l > r : t.when.op === "<=" ? l <= r : l >= r;
+      if (!holds) continue;
+    }
+    for (const s of t.sets) {
+      // Revision 39: a then's value is a set's: a link, a value copied, the facet cleared.
+      const v = s.value;
+      let value: Json | undefined;
+      if ("now" in v) value = i.now;
+      else if ("literal" in v) value = v.literal;
+      else if ("none" in v) value = undefined;
+      else if ("caller" in v) {
+        if (!i.caller) return { ok: false, why: `no caller to link ${s.found}.${s.facet} to` };
+        value = { $link: i.caller };
+      } else if ("link" in v) {
+        const id = v.link === "record" ? i.record.id : (i.found[v.link]?.[0]?.id ?? i.context[v.link]?.id);
+        if (!id) return { ok: false, why: `nothing to link ${s.found}.${s.facet} to: ${v.link}` };
+        value = { $link: id };
+      } else value = valueOf(v, i);
+      const k = bare(s.facet);
       for (const rec of i.found[s.found] ?? []) {
-        const value = "now" in s.value ? i.now : s.value.literal;
-        const have = then.find((x) => x.id === rec.id);
-        if (have) have.values[bare(s.facet)] = value;
-        else then.push({ id: rec.id, values: { [bare(s.facet)]: value } });
+        let have = then.find((x) => x.id === rec.id);
+        if (!have) then.push((have = { id: rec.id, values: {} }));
+        if ("none" in v) {
+          delete have.values[k];
+          have.clear = [...(have.clear ?? []).filter((c) => c !== k), k];
+        } else if (value !== undefined) {
+          have.values[k] = value;
+          if (have.clear) have.clear = have.clear.filter((c) => c !== k);
+        }
       }
+    }
     if (t.send) sends.push({ ...t.send });
   }
   // A mark is taken once (15.2, revision 34): a write to a mark that holds a real value stops the act before
@@ -748,7 +784,7 @@ export function markFacets(filters: Iterable<{ facet: string; marked?: boolean }
  * A pick's facet may be `<link>.<facet>`, carried as written for the host to hop. */
 export function findPicksOf(f: { where: ActPick[] }, i: Omit<ActInput, "found" | "now"> & { found?: ActInput["found"] }): { facet: string; value: Json | undefined }[] {
   const at = { record: i.record, context: i.context, found: i.found ?? {}, ...(i.route ? { route: i.route } : {}) };
-  return f.where.map((p) => ({ facet: p.facet.includes("::") ? p.facet.replace(/^\w+::/, "") : p.facet, value: "literal" in p.value ? p.value.literal : "caller" in p.value ? i.caller : valueOf(p.value, at) }));
+  return f.where.map((p) => ({ facet: p.facet.includes("::") ? p.facet.replace(/^\w+::/, "") : p.facet, value: "literal" in p.value ? p.value.literal : "caller" in p.value ? i.caller : "self" in p.value ? i.record.id : valueOf(p.value, at) }));
 }
 
 // ─── JSON and text ──────────────────────────────────────────────────────────────
@@ -763,7 +799,9 @@ const termText = (t: ActTerm): string => ("number" in t ? String(t.number) : `${
 /** The quoting the text form needs for a literal (2.5): words with a space, a comma or a colon are quoted. */
 const q = (s: string) => (/[\s,:]|^$/.test(s) ? JSON.stringify(s) : s);
 
-const pickJson = (p: ActPick): JsonObject => ({ facet: p.facet, value: "literal" in p.value ? { literal: p.value.literal } : "caller" in p.value ? { caller: true } : refJson(p.value) });
+const pickJson = (p: ActPick): JsonObject => ({ facet: p.facet, value: "literal" in p.value ? { literal: p.value.literal } : "caller" in p.value ? { caller: true } : "self" in p.value ? { self: true } : refJson(p.value) });
+const thenValueJson = (v: ActThenValue): JsonObject =>
+  "literal" in v ? { literal: v.literal } : "now" in v ? { now: true } : "none" in v ? { none: true } : "caller" in v ? { caller: true } : "link" in v ? { link: v.link } : refJson(v);
 const sourceJson = (s: ActSource): JsonObject =>
   "literal" in s ? { literal: s.literal } : "link" in s ? { link: s.link } : "now" in s ? { now: true } : "caller" in s ? { caller: true } : "none" in s ? { none: true } : "owner" in s ? { owner: true } : "run" in s ? { run: true } : "next" in s ? { next: { prefix: "literal" in s.next.prefix ? { literal: s.next.prefix.literal } : refJson(s.next.prefix), in: { kind: s.next.in.kind, facet: s.next.in.facet }, ...(s.next.suffix ? { suffix: refJson(s.next.suffix) } : {}) } } : refJson(s);
 const setJson = (s: ActSet): JsonObject => ({ facet: s.facet, source: sourceJson(s.source) });
@@ -802,8 +840,8 @@ export function actJson(a: Act): JsonObject {
     sets: a.sets.map(setJson),
     thens: a.thens.map(
       (t): JsonObject => ({
-        when: { left: termJson(t.when.left), op: t.when.op, right: termJson(t.when.right) },
-        sets: t.sets.map((s): JsonObject => ({ found: s.found, facet: s.facet, value: "now" in s.value ? { now: true } : { literal: s.value.literal } })),
+        ...(t.when ? { when: { left: termJson(t.when.left), op: t.when.op, right: termJson(t.when.right) } } : {}),
+        sets: t.sets.map((s): JsonObject => ({ found: s.found, facet: s.facet, value: thenValueJson(s.value) })),
         ...(t.send ? { send: { verb: t.send.verb, words: t.send.words } } : {}),
       }),
     ),
@@ -825,7 +863,8 @@ const termOfJson = (o: JsonObject): ActTerm =>
   typeof o.number === "number" ? { number: o.number } : typeof o.count === "string" ? { count: o.count, ...(typeof o.plus === "number" ? { plus: o.plus } : {}) } : { ref: refOfJson(o.ref as JsonObject), ...(typeof o.plus === "number" ? { plus: o.plus } : {}) };
 const pickText = (p: JsonObject): string => {
   const v = p.value as JsonObject;
-  return `${p.facet} = ${typeof v.literal === "string" ? q(v.literal) : v.caller === true ? "caller" : refText(refOfJson(v))}`;
+  // The words `record` and `caller` as literals are printed quoted, so they read back as the words (revision 39).
+  return `${p.facet} = ${typeof v.literal === "string" ? (v.literal === "record" || v.literal === "caller" ? JSON.stringify(v.literal) : q(v.literal)) : v.caller === true ? "caller" : v.self === true ? "record" : refText(refOfJson(v))}`;
 };
 const sourceText = (src: JsonObject): string => {
   if (typeof src.literal === "string") return q(src.literal);
@@ -894,16 +933,16 @@ export function actText(a: JsonObject): string[] {
   if (thens.length) {
     out.push("  then:");
     for (const t of thens) {
-      const w = t.when as JsonObject;
+      const w = t.when as JsonObject | undefined;
       // Revision 25 carried one set as `set`; revision 26 a list as `sets`.
       const one = t.set as JsonObject | undefined;
       const list: JsonObject[] = (t.sets as JsonObject[] | undefined) ?? (one ? [{ found: one.found as string, facet: one.facet as string, value: { literal: String(one.value) } }] : []);
       const words = list.map((s) => {
         const v = s.value as JsonObject;
-        return `${s.found}.${s.facet} = ${v.now === true ? "now" : q(String(v.literal))}`;
+        return `${s.found}.${s.facet} = ${v.now === true ? "now" : v.none === true ? "none" : v.caller === true ? "link caller" : typeof v.link === "string" ? `link ${v.link}` : typeof v.literal === "string" ? (/^(now|none)$|^link\s|^[\w-]+\.[\w:.-]+$/.test(v.literal) ? JSON.stringify(v.literal) : q(v.literal)) : refText(refOfJson(v))}`;
       });
       const send = t.send as JsonObject | undefined;
-      out.push(`    when ${termText(termOfJson(w.left as JsonObject))} ${w.op} ${termText(termOfJson(w.right as JsonObject))} set ${words.join(", ")}${send ? ` send ${send.verb}${send.words ? ` ${send.words}` : ""}` : ""}`);
+      out.push(`    ${w ? `when ${termText(termOfJson(w.left as JsonObject))} ${w.op} ${termText(termOfJson(w.right as JsonObject))} ` : ""}set ${words.join(", ")}${send ? ` send ${send.verb}${send.words ? ` ${send.words}` : ""}` : ""}`);
     }
   }
   if (a.send && typeof a.send === "object") {

@@ -255,7 +255,7 @@ test("revision 26: the route, the mint, the series, the then's several sets and 
   assert.deepEqual(box?.mint?.sets[0]?.source, { next: { prefix: { route: "slot", column: "boxPrefix" }, in: { kind: "container", facet: "containerLabel" }, suffix: { route: "slot", column: "boxSuffix" } } });
   assert.deepEqual(box?.mint?.sets[3]?.source, { context: "station", facet: "stationLocation" });
   assert.deepEqual(a.counts, [{ name: "boxed", kind: "unit", where: [{ facet: "filedIn", value: { found: "box" }, line: a.counts[0]?.line }], line: a.counts[0]?.line }]);
-  assert.deepEqual(a.thens[0]?.when.left, { count: "boxed", plus: 1 });
+  assert.deepEqual(a.thens[0]?.when?.left, { count: "boxed", plus: 1 });
   assert.deepEqual(a.thens[0]?.sets, [
     { found: "box", facet: "containerState", value: { literal: "full" } },
     { found: "box", facet: "filledAt", value: { now: true } },
@@ -393,6 +393,72 @@ test("revision 29: a set links the caller or clears the facet; carried, printed 
   assert.deepEqual(nobody, { ok: false, why: "no caller to link stationOperator to" });
   const left = actWrites(l as NonNullable<typeof l>, { record: station, context: {}, found: {}, now: "x" });
   assert.deepEqual(left.ok && [left.record, left.clear], [{}, ["stationOperator"]]);
+});
+
+// ─── Revision 39: a pick by the record in hand; a then with no condition, a link, a copy, a clear ─────────────────────
+
+const reach = `act: empty /2026-11-15
+  utility: bench
+  on: container
+  context: station
+  find:
+    inside -> all unit where filedIn = record
+    parts -> all unit where of = record
+  count:
+    held -> unit where filedIn = record
+  set:
+    containerState -> open
+  then:
+    set inside.filedIn = none, inside.filedBox = record.containerLabel, inside.filedSlot = context.station.printer
+    when held > 1 set inside.filedAt = now
+act: gather /2026-11-15
+  utility: bench
+  on: container
+  find:
+    loose -> all unit where filedBox = "record"
+  then:
+    set loose.filedIn = link record, loose.filedBox = none
+`;
+
+test("revision 39: a pick names the record in hand; a then stands with no condition and writes a link, a copy or a clear; read, checked, carried, printed and answered", () => {
+  const src = bench(file + label + reach).replace("acts: file, label", "acts: file, label, empty, gather");
+  const [info] = readPackages(src);
+  const e = info?.acts.find((x) => x.name === "empty") as NonNullable<ReturnType<typeof readPackages>[number]["acts"][number]>;
+  const g = info?.acts.find((x) => x.name === "gather") as typeof e;
+  assert.deepEqual(e.finds[0]?.where[0]?.value, { self: true });
+  assert.deepEqual(e.finds[1]?.where[0]?.facet, "of");
+  assert.deepEqual(e.counts[0]?.where[0]?.value, { self: true });
+  assert.equal(e.thens[0]?.when, undefined);
+  assert.deepEqual(e.thens[0]?.sets.map((x) => x.value), [{ none: true }, { record: "containerLabel" }, { context: "station", facet: "printer" }]);
+  assert.deepEqual(g.finds[0]?.where[0]?.value, { literal: "record" }, "the word itself, quoted, is a literal");
+  assert.deepEqual(g.thens[0]?.sets.map((x) => x.value), [{ link: "record" }, { none: true }]);
+  checkPackages(src);
+  const bundle = bundleOf(parsePackage(src));
+  const text = printBundle(bundle);
+  assert.match(text, /^    inside -> all unit where filedIn = record$/m);
+  assert.match(text, /^    set inside\.filedIn = none, inside\.filedBox = record\.containerLabel, inside\.filedSlot = context\.station\.printer$/m);
+  assert.match(text, /^    when held > 1 set inside\.filedAt = now$/m);
+  assert.match(text, /^    set loose\.filedIn = link record, loose\.filedBox = none$/m);
+  assert.match(text, /^    loose -> all unit where filedBox = "record"$/m);
+  assert.equal(serialize(bundleOf(parsePackage(text))), serialize(bundle), "the printed text reads back to the same bundle");
+  const box = { id: "C-1", values: { containerLabel: "BIN 001" } };
+  const station = { id: "T-1", values: { printer: "zebra" } };
+  assert.deepEqual(findPicksOf(e.finds[0] as NonNullable<(typeof e.finds)[number]>, { record: box, context: { station } }), [{ facet: "filedIn", value: "C-1" }]);
+  assert.deepEqual(findPicksOf(e.finds[1] as NonNullable<(typeof e.finds)[number]>, { record: box, context: { station } }), [{ facet: "of", value: "C-1" }]);
+  const units = [{ id: "U-1", values: { filedIn: { $link: "C-1" } } }, { id: "U-2", values: { filedIn: { $link: "C-1" } } }];
+  const w = actWrites(e, { record: box, context: { station }, found: { inside: units, parts: [] }, counts: { held: 2 }, now: "N" });
+  assert.deepEqual(w.ok && w.record, { containerState: "open" });
+  assert.deepEqual(w.ok && w.then, [
+    { id: "U-1", values: { filedBox: "BIN 001", filedSlot: "zebra", filedAt: "N" }, clear: ["filedIn"] },
+    { id: "U-2", values: { filedBox: "BIN 001", filedSlot: "zebra", filedAt: "N" }, clear: ["filedIn"] },
+  ]);
+  const one = actWrites(e, { record: box, context: { station }, found: { inside: [units[0] as (typeof units)[number]], parts: [] }, counts: { held: 1 }, now: "N" });
+  assert.deepEqual(one.ok && one.then, [{ id: "U-1", values: { filedBox: "BIN 001", filedSlot: "zebra" }, clear: ["filedIn"] }], "the conditional then did not hold; the plain one always writes");
+  const got = actWrites(g, { record: box, context: {}, found: { loose: [{ id: "U-9", values: { filedBox: "record" } }] }, now: "N" });
+  assert.deepEqual(got.ok && got.then, [{ id: "U-9", values: { filedIn: { $link: "C-1" } }, clear: ["filedBox"] }]);
+  // Refused: a then's link or reference to what the act never declared.
+  assert.throws(() => checkPackages(src.replace("loose.filedIn = link record", "loose.filedIn = link nobody")), /then links loose\.filedIn to nobody, which no find or context declares/);
+  assert.throws(() => checkPackages(src.replace("inside.filedBox = record.containerLabel", "inside.filedBox = record.nothing")), /nothing/);
 });
 
 // ─── Revision 31: a kind's follow aspects, an act's tells, the post it lands when followed ───────────────────────────
