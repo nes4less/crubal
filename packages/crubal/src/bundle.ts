@@ -12,7 +12,7 @@ import { type ClassDef, type ClassLine, type Dictionary, emptyDictionary, type F
 import { facetJson } from "./dictionary.ts";
 import { type Recipe, readRecipes, type Step } from "./migrate.ts";
 import type { Json, JsonObject } from "./model.ts";
-import { type PackageInfo, readPackages, type Utility, type Lane, type LanePress, type Flow } from "./packages.ts";
+import { type PackageInfo, readPackages, type Utility, type Lane, type LanePress, type Flow, type CasePress, type StopCase } from "./packages.ts";
 import { actJson, actText } from "./acts.ts";
 import { readRules, type Rule } from "./rules.ts";
 import { type Contract, type Keys, readContracts, sha256, keyFor } from "./store.ts";
@@ -309,7 +309,7 @@ export function flowJson(f: Flow): JsonObject {
   if (f.serves.length) o.serves = f.serves.map((x) => ({ as: x.as, ...(x.items ? { items: [...x.items] } : {}) }));
   if (f.context.length) o.context = [...f.context];
   if (f.replaces) o.replaces = f.replaces;
-  o.stops = f.stops.map((st) => ({ name: st.name, ...(st.act ? { act: st.act } : {}), ...(st.of ? { of: st.of } : {}), ...(st.with?.length ? { with: st.with.map((w) => ({ facet: w.facet, value: w.value })) } : {}) }));
+  o.stops = f.stops.map((st) => ({ name: st.name, ...(st.act ? { act: st.act } : {}), ...(st.of ? { of: st.of } : {}), ...(st.with?.length ? { with: st.with.map((w) => ({ facet: w.facet, value: w.value })) } : {}), ...(st.already ? { already: st.already } : {}), ...(st.cases?.length ? { cases: st.cases.map(caseJson) } : {}) }));
   if (f.done) o.done = { filter: f.done.filter, value: f.done.value, ...(f.done.mark ? { mark: true } : {}) };
   return o;
 }
@@ -664,6 +664,26 @@ const pressText = (p: Json | undefined): string | undefined =>
     : undefined;
 const pickText = (p: Json | undefined): string | undefined => (isObj(p) ? (p.mark === true ? String(p.filter) : `${p.filter} = ${String(p.value)}`) : typeof p === "string" ? p : undefined);
 
+const casePressJson = (p: CasePress): JsonObject => ({ word: p.word, runs: p.runs.map((r) => ({ act: r.act, ...(r.utility ? { utility: r.utility } : {}), ...(r.onFound ? { onFound: true } : {}) })) });
+const caseJson = (c: StopCase): JsonObject => ({ kind: c.kind, ...(c.name ? { name: c.name } : {}), answer: c.answer, ...(c.when ? { when: { lane: c.when.lane, facet: c.when.facet } } : {}), yes: casePressJson(c.yes), no: casePressJson(c.no), ...(c.or.length ? { or: c.or.map(casePressJson) } : {}) });
+const casePressText = (p: JsonObject): string => {
+  const runs = (Array.isArray(p.runs) ? (p.runs as JsonObject[]) : []).map((r) => `${typeof r.utility === "string" ? `${r.utility}.` : ""}${r.act}${r.onFound === true ? " on found" : ""}`);
+  return `${p.word}${runs.length ? ` -> ${runs.join(", ")}` : ""}`;
+};
+/** The lines beneath a stop (12.11, revision 41): already, then each case with its presses. */
+function stopCaseText(st: JsonObject): string[] {
+  const out: string[] = [];
+  if (st.already === "ignore") out.push("      already: ignore");
+  for (const c of Array.isArray(st.cases) ? (st.cases as JsonObject[]) : []) {
+    const when = isObj(c.when) ? ` when any ${c.when.lane} where ${c.when.facet} = record` : "";
+    out.push(`      ${c.kind === "flag" ? `flag ${c.name}` : "stranger"}: ${c.answer}${when}`);
+    if (isObj(c.yes)) out.push(`        yes: ${casePressText(c.yes)}`);
+    if (isObj(c.no)) out.push(`        no: ${casePressText(c.no)}`);
+    for (const o of Array.isArray(c.or) ? (c.or as JsonObject[]) : []) out.push(`        or: ${casePressText(o)}`);
+  }
+  return out;
+}
+
 function flowText(f: JsonObject): string[] {
   const out = [`flow: ${f.flow} /${f.version}`, ...kv("  ", "label", f.label), ...kv("  ", "utility", f.utility), ...kv("  ", "follow", f.follow)];
   if (Array.isArray(f.serves)) out.push(`  serves: ${(f.serves as JsonObject[]).map((x) => `${x.as}${Array.isArray(x.items) ? `(${(x.items as string[]).join(", ")})` : ""}`).join(", ")}`);
@@ -671,7 +691,10 @@ function flowText(f: JsonObject): string[] {
   out.push(...kv("  ", "replaces", f.replaces));
   if (Array.isArray(f.stops)) {
     out.push("  stops:");
-    for (const st of f.stops as JsonObject[]) out.push(`    ${st.name}${typeof st.act === "string" ? ` -> ${st.act}` : ""}${typeof st.of === "string" ? ` of ${st.of}` : ""}${Array.isArray(st.with) && st.with.length ? ` with ${(st.with as JsonObject[]).map((w) => `${w.facet} = ${w.value}`).join(", ")}` : ""}`);
+    for (const st of f.stops as JsonObject[]) {
+      out.push(`    ${st.name}${typeof st.act === "string" ? ` -> ${st.act}` : ""}${typeof st.of === "string" ? ` of ${st.of}` : ""}${Array.isArray(st.with) && st.with.length ? ` with ${(st.with as JsonObject[]).map((w) => `${w.facet} = ${w.value}`).join(", ")}` : ""}`);
+      out.push(...stopCaseText(st));
+    }
   }
   if (f.done !== undefined) out.push(`  done: ${pickText(f.done)}`);
   return out;

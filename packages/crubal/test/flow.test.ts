@@ -8,7 +8,7 @@ import { bundleOf, emptyParsed, parsePackage, printBundle, readBundle, readBundl
 import { serialize } from "../src/canonical.ts";
 import { checkPermissions, readAccess } from "../src/access.ts";
 import { emptyDictionary } from "../src/defs.ts";
-import { checkFlowsInForce, checkPackages, flowJoins, flowStamps, readPackages } from "../src/packages.ts";
+import { casePress, checkFlowsInForce, checkPackages, flowJoins, flowStamps, readPackages } from "../src/packages.ts";
 import { publish } from "../src/publish.ts";
 import { CrubalError } from "../src/tree.ts";
 
@@ -336,4 +336,73 @@ test("revision 40: a record passes to a step lane that waits after the step befo
     ],
   );
   assert.deepEqual(flowJoins(stops("unitsExpected"), states as never), [], "one link joins nothing");
+});
+
+// Revision 41: a link's cases.
+const cased = flow.replace(
+  "    ordersToPick -> pick\n",
+  `    ordersToPick -> pick
+      already: ignore
+      stranger: ask
+        yes: Pick it here -> pick
+        no: Put it back
+        or: Hold it -> pack
+      flag packing: no when any ordersToPack where heldFor = record
+        yes: Pack now -> pack on found, pick
+        no: Leave it -> pick
+`,
+);
+const linked = (tail: string) => shop(tail).replace("buyer$\n", "buyer$\nheldFor&order\n");
+
+test("revision 41: a link's cases are read with their answers and presses, carried, printed back, and answered", () => {
+  assert.notEqual(cased, flow);
+  checkPackages(linked(cased));
+  const st = readPackages(linked(cased))[0]?.flows[0]?.stops[1];
+  assert.equal(st?.already, "ignore");
+  assert.deepEqual(st?.cases?.map((c) => `${c.kind}:${c.name ?? ""}:${c.answer}`), ["stranger::ask", "flag:packing:no"]);
+  const [stranger, flag] = st?.cases ?? [];
+  assert.deepEqual(stranger?.yes, { word: "Pick it here", runs: [{ act: "pick" }] });
+  assert.deepEqual(stranger?.no, { word: "Put it back", runs: [] });
+  assert.deepEqual(stranger?.or, [{ word: "Hold it", runs: [{ act: "pack" }] }]);
+  assert.deepEqual(flag?.when, { lane: "ordersToPack", facet: "heldFor" });
+  assert.deepEqual(flag?.yes.runs, [{ act: "pack", onFound: true }, { act: "pick" }]);
+  // Three answers: ask gives no press; yes and no give theirs; a place's own answer stands over the declared one.
+  assert.equal(casePress(stranger as never), undefined);
+  assert.equal(casePress(flag as never)?.word, "Leave it");
+  assert.equal(casePress(flag as never, "yes")?.word, "Pack now");
+  assert.equal(casePress(flag as never, "ask"), undefined);
+  // Carried, printed, read again the same.
+  const b = bundleOf(parsePackage(linked(cased)));
+  const text = printBundle(b);
+  assert.match(text, /^ {6}already: ignore$/m);
+  assert.match(text, /^ {6}stranger: ask$/m);
+  assert.match(text, /^ {8}or: Hold it -> pack$/m);
+  assert.match(text, /^ {6}flag packing: no when any ordersToPack where heldFor = record$/m);
+  assert.match(text, /^ {8}yes: Pack now -> pack on found, pick$/m);
+  assert.equal(serialize(bundleOf(readBundle(b))), serialize(b));
+  // A stop with none prints none.
+  assert.doesNotMatch(printBundle(bundleOf(parsePackage(shop(flow)))), /already:|stranger:|flag /);
+});
+
+test("revision 41: a link's cases are refused when malformed or naming what is not there", () => {
+  const no = (from: string, to: string, why: RegExp) => {
+    const text = cased.replace(from, to);
+    assert.notEqual(text, cased, from);
+    assert.throws(() => checkPackages(linked(text)), (e: unknown) => e instanceof CrubalError && why.test(e.message), from);
+  };
+  no("stranger: ask", "stranger: maybe", /answer is ask, yes or no, not maybe/);
+  no("        no: Put it back\n", "", /the stranger at ordersToPick needs a yes and a no/);
+  no("or: Hold it -> pack", "or: Put it back", /offers one word twice/);
+  no("yes: Pick it here -> pick", "yes: Pick it here -> refund", /the press Pick it here runs refund, which isn't an act of orders/);
+  no("yes: Pick it here -> pick", "yes: Pick it here -> pick on found", /only a flag's press runs an act on found/);
+  no("or: Hold it -> pack", "or: Hold it -> returns.take", /names the utility returns/);
+  no("already: ignore", "already: twice", /already is ignore or stamp, not twice/);
+  no(" when any ordersToPack where heldFor = record", "", /the flag packing says no when/);
+  no("any ordersToPack where", "any ordersToShip where", /ordersToShip isn't a lane/);
+  no("where heldFor = record", "where total = record", /total isn't a link/);
+  no("where heldFor = record", "where heldBy = record", /heldBy isn't a facet/);
+  no("flag packing: no when", "flag packing: no when\n", /beneath a stop stands|says no when/);
+  no("      stranger: ask\n", "      stranger: ask\n        yes: A\n        no: B\n      stranger: ask\n", /has one stranger/);
+  // A stop with no act is no link, and a block has no cases.
+  assert.throws(() => checkPackages(linked(flow.replace("    order of order\n", "    order of order\n      already: ignore\n"))), /names no act, so it has no cases/);
 });
