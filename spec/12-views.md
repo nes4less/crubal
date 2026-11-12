@@ -408,7 +408,8 @@ A package MUST be refused at publish when:
    (revision 32) groups by a filter that isn't its view's or groups a lane the app serves;
 9. a flow names a utility it doesn't declare, a stop that is neither a lane nor a form of the package, an
    act its utility lacks, a level its kinds lack, or a done that is not a declared filter with a real value;
-   or whose lane stops do not chain, done to pick, or whose done is not its last lane's (12.11, revision 22),
+   or whose done is not its last lane's (12.11, revision 22; revision 40: lane stops that do not chain are
+   read as a join that passes nothing, never refused), or a list that is a stop with no act (revision 37),
    or whose context is not a kind or level of the package, or that replaces itself (revision 23);
 7. a display names no layout, has a slot line that isn't `shapeSlot -> displaySlot`, or fills one of its
    slots twice.
@@ -624,7 +625,8 @@ rule: the same form opened elsewhere asks the facet as it always did. A reader d
 no state, and is a stop only with an act (list stops, below). A block stop between two lanes leaves the chain as it is: the lanes chain across
 it, and the block stamps the second's pick. The flow's `done` is the last lane stop's `done` when that is a
 state, else its `pick` (an end stop holding what is finished). A package MUST be refused at publish when a
-flow's lane stops do not chain, or its done is not its last lane's; the refusal names the gap. A flow
+flow's done is not its last lane's. Two lane stops that do not chain were refused as a gap until revision 40
+(links and their joins, below): the join is now read, and a record simply does not pass there. A flow
 arranged from lanes a package already walks between needs nothing more to move its records on.
 
 **Step stops (revision 34).** A stop whose lane names a `step` chains with nothing. Step stops stand in any
@@ -644,6 +646,24 @@ stops chain across it as across a step stop, a block stop before it stamps nothi
 lane stop is a list has its `done` checked against no lane. A package MUST be refused at publish when a list
 is a stop with no act; the refusal says so. A reader that knew revision 36 refuses such a flow as it refused
 every list stop.
+
+**Links and their joins (revision 40).** A lane stop is a **link**: a lane, the records there to act on, and
+the stamp its act leaves. A flow is links in an order, and how two that follow one another join is read from
+them, never declared and never required:
+
+- **A record passes** where the first's `done` is a state and is the second's `pick`, filter and value, or
+  where the second is a step lane that waits `after` the first's step: what the first stamps is what the
+  second holds.
+- **Nothing passes** otherwise. The two stand together by what the flow holds, its `context` (the container a
+  count is of: the containers to start, the units expected, the containers to finish, each a link on its own
+  level), or by their order alone (a routine of unconnected work).
+
+So a flow's links may be lanes of different levels, in any order, and one lane may be a link of several
+flows. A reader gives the joins (`passes` or not, per pair) to whoever draws the flow; what a join that
+passes nothing looks like, and whether it is worth a word to the person arranging it, is the app's. A package
+is no longer refused for two lane stops that do not chain: revision 22's refusal of a gap is withdrawn, and a
+reader that knew revision 39 refuses such a flow where this one carries it. Each link still stamps as it
+would anywhere (the stamps, above). The flow's `done`, where one is written, is still its last lane stop's.
 
 ## 12.12 Prints
 

@@ -8,7 +8,7 @@ import { bundleOf, emptyParsed, parsePackage, printBundle, readBundle, readBundl
 import { serialize } from "../src/canonical.ts";
 import { checkPermissions, readAccess } from "../src/access.ts";
 import { emptyDictionary } from "../src/defs.ts";
-import { checkFlowsInForce, checkPackages, flowStamps, readPackages } from "../src/packages.ts";
+import { checkFlowsInForce, checkPackages, flowJoins, flowStamps, readPackages } from "../src/packages.ts";
 import { publish } from "../src/publish.ts";
 import { CrubalError } from "../src/tree.ts";
 
@@ -184,8 +184,17 @@ test("a flow's stamps are derived from its lanes: a lane stop its done, a block 
   assert.deepEqual(flowStamps(g, tail[0].lanes, () => "orderState").map((x) => x.stop), ["ordersToPick", "ordersToPack"]);
 });
 
-test("a flow is refused when its lane stops do not chain, or its done is not its last lane's, or a stop is a list", () => {
-  refused(flow.replace("    ordersToPick -> pick\n    ordersToPack -> pack", "    ordersToPack -> pack\n    ordersToPick -> pick"), /gap: ordersToPack is done at orderState = packed, but ordersToPick picks orderState = paid/);
+test("a flow's joins are read, never refused (revision 40); it is refused when its done is not its last lane's, or a stop is a list with no act", () => {
+  // Revision 40: two stops whose states do not hand on are no mistake to refuse. The joins say where a record
+  // passes and where it does not; what stands together otherwise is the flow's context or its order.
+  const backwards = flow.replace("    ordersToPick -> pick\n    ordersToPack -> pack", "    ordersToPack -> pack\n    ordersToPick -> pick");
+  assert.notEqual(backwards, flow);
+  const joinsOf = (text: string) => {
+    const [p] = readPackages(shop(text));
+    return flowJoins(p?.flows[0] as never, p?.lanes ?? []).map((j) => `${j.from}>${j.to}:${j.passes}`);
+  };
+  assert.deepEqual(joinsOf(flow), ["ordersToPick>ordersToPack:true"]);
+  assert.deepEqual(joinsOf(backwards), ["ordersToPack>ordersToPick:false"]);
   refused(flow.replace("done: orderState = packed", "done: orderState = shipped"), /done is orderState = shipped, but its last lane ordersToPack leaves a record at orderState = packed/);
   const list = `lane: ordersAll /2026-11-05
   label: Every order
@@ -208,8 +217,6 @@ test("a flow is refused when its lane stops do not chain, or its done is not its
   const fl = withList[0]?.flows[0];
   assert.ok(fl && withList[0]);
   assert.deepEqual(flowStamps(fl, withList[0].lanes, () => "orderState").map((x) => x.stop), ["order", "ordersToPick", "ordersToPack"]);
-  // The state stops still chain across a list stop.
-  refused(`${list}${flow.replace("    ordersToPick -> pick\n    ordersToPack -> pack", "    ordersToPack -> pack\n    ordersAll -> pack\n    ordersToPick -> pick")}`, /gap: ordersToPack is done at orderState = packed, but ordersToPick picks orderState = paid/);
   // A block between two lanes leaves the chain as it is; a block after the last lane is fine.
   checkPackages(shop(flow.replace("    ordersToPack -> pack", "    order of order\n    ordersToPack -> pack")));
   checkPackages(shop(flow.replace("    ordersToPack -> pack", "    ordersToPack -> pack\n    order of order")));
@@ -261,7 +268,7 @@ ${stops}
   done: ${done}
 `;
 
-test("a flow in an extending package may name the lanes, forms, utility and presets it extends; the check in force refuses a gap", () => {
+test("a flow in an extending package may name the lanes, forms, utility and presets it extends; the check in force refuses what a publish would", () => {
   const good = own("    order of order\n    ordersToPick -> pick\n    ordersToPack -> pack");
   // File-local: the extending package alone checks (what it cannot see is deferred).
   checkPackages(good);
@@ -273,9 +280,10 @@ test("a flow in an extending package may name the lanes, forms, utility and pres
   };
   checkFlowsInForce(inForce(good));
   assert.equal(inForce(good).info.flows.map((f) => f.name).join(","), "pickPackShip,myPickPack");
-  // A lane nobody declares, a gap, a utility not in force: refused in force, as a publish would have.
+  // A lane nobody declares, a done that is not the last lane's: refused in force, as a publish would have.
   assert.throws(() => checkFlowsInForce(inForce(own("    ordersToPick -> pick\n    ordersToShip -> ship"))), /ordersToShip isn't a lane in force here/);
-  assert.throws(() => checkFlowsInForce(inForce(own("    ordersToPack -> pack\n    ordersToPick -> pick"))), /has a gap: ordersToPack is done at orderState = packed, but ordersToPick picks orderState = paid/);
+  // Revision 40: stops that hand nothing on are in force as they stand.
+  checkFlowsInForce(inForce(own("    ordersToPack -> pack\n    ordersToPick -> pick", "orderState = picking")));
   assert.throws(() => checkFlowsInForce(inForce(own("    ordersToPick -> pick", "orderState = packed"))), /done is orderState = packed, but its last lane ordersToPick leaves a record at orderState = picking/);
   // A package that extends nothing is still checked whole at publish.
   refused(flow.replace("ordersToPack -> pack", "ordersToShip -> ship"), /ordersToShip isn't a lane/);
@@ -302,3 +310,30 @@ test("a block stop's with (revision 36): the values its form opens with are read
   assert.throws(() => readPackages(shop(flow.replace("ordersToPick -> pick", "ordersToPick -> pick with buyer = a"))), /a stop is/);
 });
 type JsonLike = { [k: string]: unknown };
+
+test("revision 40: a record passes to a step lane that waits after the step before it; a block between two lanes leaves their join; links of different levels pass nothing", () => {
+  const stops = (...names: string[]) => ({ stops: names.map((name) => ({ name })) }) as never;
+  const steps = [
+    { name: "toPull", step: "pulled" },
+    { name: "toPack", step: "packed", after: ["pulled"] },
+    { name: "toShip", step: "shipped" },
+  ];
+  assert.deepEqual(
+    flowJoins(stops("toPull", "toPack", "toShip"), steps).map((j) => j.passes),
+    [true, false],
+    "packed waits after pulled; shipped names no after",
+  );
+  const states = [
+    { name: "boxesToCount", pick: { filter: "counting", value: "open" } },
+    { name: "unitsExpected", pick: { filter: "countState", value: "expected" }, done: { filter: "countState", value: "found" } },
+    { name: "unitsFound", pick: { filter: "countState", value: "found" } },
+  ];
+  assert.deepEqual(
+    flowJoins(stops("boxesToCount", "unitsExpected", "aForm", "unitsFound"), states as never),
+    [
+      { from: "boxesToCount", to: "unitsExpected", at: 1, passes: false },
+      { from: "unitsExpected", to: "unitsFound", at: 3, passes: true },
+    ],
+  );
+  assert.deepEqual(flowJoins(stops("unitsExpected"), states as never), [], "one link joins nothing");
+});
