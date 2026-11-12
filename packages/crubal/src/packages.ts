@@ -145,9 +145,6 @@ export type Flow = {
   context: string[];
   /** The flow this one stands in for (revision 23): served where the named flow would have been. */
   replaces?: string;
-  /** Revision 40: `elements`, an arrangement of Elements (each stop a lane with its act) that chains with
-   * nothing; absent, a line whose state stops chain. */
-  arrange?: "elements";
   stops: FlowStop[];
   /** `filter = value`, or (revision 34) a marked filter alone: a record marked on it has left the line. */
   done?: { filter: string; value: string; line: number; mark?: true };
@@ -182,6 +179,33 @@ export function flowStamps(f: Flow, lanes: Pick<Lane, "name" | "pick" | "done" |
     const pk = l ? (l.done && l.done !== "viewed" ? l.done : undefined) : nextPick(i);
     const facet = pk ? facetOf(pk.filter) : undefined;
     if (pk && facet) out.push({ stop: st.name, at: i, facet, value: pk.value, ...(l?.step ? { mark: true as const } : {}) });
+  });
+  return out;
+}
+
+/** How two lane stops that follow one another join (12.11, revision 40): whether a record passes from the first
+ * to the second. */
+export type FlowJoin = { from: string; to: string; at: number; passes: boolean };
+
+/**
+ * The joins of a flow's lane stops, in order, derived from its lanes: never declared, never published. A record
+ * passes from one stop to the next where the first's `done` is a state and is the second's `pick`, filter and
+ * value, or where the second is a step lane that waits `after` the first's step. A block between two lanes
+ * leaves their join as it is. Where nothing passes, the two stand together by what the flow holds (its
+ * context) or by their order alone, which is the app's to say. Pure.
+ */
+export function flowJoins(f: Pick<Flow, "stops">, lanes: Pick<Lane, "name" | "pick" | "done" | "step" | "after">[]): FlowJoin[] {
+  const out: FlowJoin[] = [];
+  let prev: (typeof lanes)[number] | undefined;
+  f.stops.forEach((st, at) => {
+    const l = lanes.find((x) => x.name === st.name);
+    if (!l) return;
+    if (prev) {
+      const state = !!prev.done && prev.done !== "viewed" && !!l.pick && prev.done.filter === l.pick.filter && prev.done.value === l.pick.value;
+      const step = !!prev.step && !!l.step && (l.after ?? []).includes(prev.step);
+      out.push({ from: prev.name, to: l.name, at, passes: state || step });
+    }
+    prev = l;
   });
   return out;
 }
@@ -407,9 +431,6 @@ function readFlow(node: Node): Flow {
     } else if (c.key === "replaces") {
       if (!/^[a-z][\w-]*$/.test(v)) throw new CrubalError(`replaces names a flow, a lower-case word: ${v}`, c.line);
       f.replaces = v;
-    } else if (c.key === "arrange") {
-      if (v !== "elements" && v !== "line") throw new CrubalError(`arrange is line or elements, not ${v}`, c.line);
-      if (v === "elements") f.arrange = "elements";
     } else if (c.key === "done") f.done = /^[\w:-]+$/.test(v) ? { filter: v, value: "done", line: c.line, mark: true } : readPick(v, c.line, "done");
     else if (c.key === "stops") {
       for (const st of c.children) {
@@ -427,7 +448,7 @@ function readFlow(node: Node): Flow {
         if (new Set(locks.map((l) => l.facet)).size !== locks.length) throw new CrubalError(`the stop ${m[1]} locks a facet twice`, st.line);
         f.stops.push({ name: m[1] as string, ...(m[2] ? { act: m[2] } : {}), ...(m[3] ? { of: m[3] } : {}), ...(locks.length ? { with: locks } : {}), line: st.line });
       }
-    } else throw new CrubalError(`a flow has label, utility, follow, serves, context, replaces, arrange, stops and done, not ${c.key}`, c.line);
+    } else throw new CrubalError(`a flow has label, utility, follow, serves, context, replaces, stops and done, not ${c.key}`, c.line);
   }
   if (!f.stops.length) throw new CrubalError(`the flow ${name} has no stops`, node.line);
   return f;
@@ -721,19 +742,12 @@ function checkFlowList(flows: Flow[], env: FlowEnv): void {
         if (flt && !(flt as { marked?: boolean }).marked) throw new CrubalError(`${where}'s done names ${f.done.filter}, which isn't a marked filter (buckets: marked)`, f.done.line);
       } else if (facet?.values && !facet.values.some((x) => x.value === f.done?.value)) throw new CrubalError(`${where}'s done: ${f.done.value} is not a value of ${facet.key}`, f.done.line);
     }
-    // The chain (12.11, revision 22): consecutive lane stops chain done to pick, a list lane is a stop only with
+    // The chain (12.11, revision 22; revision 40: read, not required): a list lane is a stop only with
     // an act (revision 37), and the
     // flow's done is its last lane's (its pick when that lane holds what is finished). A block between two
     // lanes leaves the chain as it is. A chain with a stop the file-local check could not see waits for the
     // check in force.
     if (deferred) continue;
-    // Elements (revision 40): the flow arranges Elements, each a lane with the act that is its work. They are
-    // joined by what the flow holds (its context), not by a state handed on, so nothing chains, the lanes may be
-    // of different levels, and a done is checked against no lane. A lane stop with no act is no Element.
-    if (f.arrange === "elements") {
-      for (const st of f.stops) if (laneNames.has(st.name) && !st.act) throw new CrubalError(`${where} arranges Elements: its stop ${st.name} names no act, and an Element is a lane with its act (${st.name} -> <act>)`, st.line);
-      continue;
-    }
     const show = (pk: { filter: string; value: string }) => `${pk.filter} = ${pk.value}`;
     const same = (a: { filter: string; value: string }, b: { filter: string; value: string }) => a.filter === b.filter && a.value === b.value;
     let prev: Lane | undefined;
@@ -750,10 +764,9 @@ function checkFlowList(flows: Flow[], env: FlowEnv): void {
         if (!st.act) throw new CrubalError(`${where}'s stop ${l.name} is a list: it holds no state, so it is a stop only with an act (${l.name} -> <act>)`, st.line);
         continue;
       }
-      if (prev) {
-        if (!prev.done || prev.done === "viewed") throw new CrubalError(`${where} has a gap: ${prev.name} is done when viewed, so nothing moves on from it to ${l.name}`, st.line);
-        if (!same(prev.done, l.pick)) throw new CrubalError(`${where} has a gap: ${prev.name} is done at ${show(prev.done)}, but ${l.name} picks ${show(l.pick)}`, st.line);
-      }
+      // Revision 40: how two links join is read, never refused (flowJoins): a record passes where the first's
+      // done is the second's pick; where it is not, the two stand together by what the flow holds, or by their
+      // order alone.
       prev = l;
     }
     if (f.done && prev && last === prev) {

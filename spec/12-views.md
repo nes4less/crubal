@@ -408,8 +408,8 @@ A package MUST be refused at publish when:
    (revision 32) groups by a filter that isn't its view's or groups a lane the app serves;
 9. a flow names a utility it doesn't declare, a stop that is neither a lane nor a form of the package, an
    act its utility lacks, a level its kinds lack, or a done that is not a declared filter with a real value;
-   or whose lane stops do not chain, done to pick, or whose done is not its last lane's (12.11, revision 22;
-   a flow that arranges Elements, revision 40, chains with nothing and is refused only for a lane stop with no act),
+   or whose done is not its last lane's (12.11, revision 22; revision 40: lane stops that do not chain are
+   read as a join that passes nothing, never refused), or a list that is a stop with no act (revision 37),
    or whose context is not a kind or level of the package, or that replaces itself (revision 23);
 7. a display names no layout, has a slot line that isn't `shapeSlot -> displaySlot`, or fills one of its
    slots twice.
@@ -587,7 +587,6 @@ flow: unitizer /2026-12-20
 | `serves` | whom the line is for, as a lane's `serves` |
 | `context` | kinds of this package the flow holds through its run, asked once when it is walked and kept per person (a station, a location); the app draws them at the head and hands them to every stop's act (revision 23) |
 | `replaces` | a flow this one stands in for (revision 23): where the named flow would have been served, this one is; the named flow returns when this one goes; a flow a place draws from a preset names the preset |
-| `arrange` | `line` (unless said) or `elements` (revision 40): a line's state stops chain; an arrangement of Elements chains with nothing (Elements, below) |
 | `stops` | one line per stop, in walking order: `<lane> -> <act>` is a lane of this package with the act of the utility that moves a card on; `<lane>` alone is a lane whose cards move by their own presses; a list (a lane with no `pick` and no `step`, 12.10) is a stop only as `<lane> -> <act>` (revision 37); `<form> of <level>` is a block, a form of this package making or acting on a record of that level (the record of the stop before, when it has one); a block may end `with <facet> = <value>, …` (revision 36): the values its form opens with, set and locked |
 | `done` | `filter = value`: the state a record leaves the line in: the last lane stop's done, or its pick when that lane holds what is finished (revision 22); or (revision 34) a `marked` filter alone: a record marked on it has left the line |
 
@@ -626,7 +625,8 @@ rule: the same form opened elsewhere asks the facet as it always did. A reader d
 no state, and is a stop only with an act (list stops, below). A block stop between two lanes leaves the chain as it is: the lanes chain across
 it, and the block stamps the second's pick. The flow's `done` is the last lane stop's `done` when that is a
 state, else its `pick` (an end stop holding what is finished). A package MUST be refused at publish when a
-flow's lane stops do not chain, or its done is not its last lane's; the refusal names the gap. A flow
+flow's done is not its last lane's. Two lane stops that do not chain were refused as a gap until revision 40
+(links and their joins, below): the join is now read, and a record simply does not pass there. A flow
 arranged from lanes a package already walks between needs nothing more to move its records on.
 
 **Step stops (revision 34).** A stop whose lane names a `step` chains with nothing. Step stops stand in any
@@ -647,30 +647,23 @@ lane stop is a list has its `done` checked against no lane. A package MUST be re
 is a stop with no act; the refusal says so. A reader that knew revision 36 refuses such a flow as it refused
 every list stop.
 
-**Elements (revision 40).** Some work is not one record walking a line. An **Element** is a lane with the act
-that is its work: what a touch does there. A count of a container is several of them, on two levels: the
-containers to start, the units expected, the containers to finish, the units not found. Nothing is handed
-from one to the next as a state; they are joined by what the flow holds, its `context` (the container), and a
-person moves among them as the work asks. A flow that says `arrange: elements` is such an arrangement:
+**Links and their joins (revision 40).** A lane stop is a **link**: a lane, the records there to act on, and
+the stamp its act leaves. A flow is links in an order, and how two that follow one another join is read from
+them, never declared and never required:
 
-```crubal
-flow: count /2026-11-16
-  utility: stock
-  context: container
-  arrange: elements
-  stops:
-    containersToCount -> start
-    unitsExpected -> seen
-    containersCounting -> finish
-    unitsNotFound -> lost
-```
+- **A record passes** where the first's `done` is a state and is the second's `pick`, filter and value, or
+  where the second is a step lane that waits `after` the first's step: what the first stamps is what the
+  second holds.
+- **Nothing passes** otherwise. The two stand together by what the flow holds, its `context` (the container a
+  count is of: the containers to start, the units expected, the containers to finish, each a link on its own
+  level), or by their order alone (a routine of unconnected work).
 
-Its stops chain with nothing, stand in any order, and may be lanes of different levels; one lane may be a stop
-of several flows. Each lane stop still stamps as it would anywhere (a state lane's `done`, a step lane's mark,
-a list nothing). A `done`, where one is written, is checked against no lane. A package MUST be refused at
-publish when a lane stop of such a flow names no act, since a lane nobody presses is a list to read and no
-Element; the refusal says so. `arrange: line` is the default and may be written. A reader that knew revision
-39 refuses the setting as it refuses any it does not know.
+So a flow's links may be lanes of different levels, in any order, and one lane may be a link of several
+flows. A reader gives the joins (`passes` or not, per pair) to whoever draws the flow; what a join that
+passes nothing looks like, and whether it is worth a word to the person arranging it, is the app's. A package
+is no longer refused for two lane stops that do not chain: revision 22's refusal of a gap is withdrawn, and a
+reader that knew revision 39 refuses such a flow where this one carries it. Each link still stamps as it
+would anywhere (the stamps, above). The flow's `done`, where one is written, is still its last lane stop's.
 
 ## 12.12 Prints
 
