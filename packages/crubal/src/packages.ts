@@ -704,7 +704,8 @@ function checkFlowList(flows: Flow[], env: FlowEnv): void {
         if (flt && !(flt as { marked?: boolean }).marked) throw new CrubalError(`${where}'s done names ${f.done.filter}, which isn't a marked filter (buckets: marked)`, f.done.line);
       } else if (facet?.values && !facet.values.some((x) => x.value === f.done?.value)) throw new CrubalError(`${where}'s done: ${f.done.value} is not a value of ${facet.key}`, f.done.line);
     }
-    // The chain (12.11, revision 22): consecutive lane stops chain done to pick, a list lane is no stop, and the
+    // The chain (12.11, revision 22): consecutive lane stops chain done to pick, a list lane is a stop only with
+    // an act (revision 37), and the
     // flow's done is its last lane's (its pick when that lane holds what is finished). A block between two
     // lanes leaves the chain as it is. A chain with a stop the file-local check could not see waits for the
     // check in force.
@@ -719,7 +720,12 @@ function checkFlowList(flows: Flow[], env: FlowEnv): void {
       last = l;
       // A step stop (revision 34) chains with nothing: it may stand anywhere, and the state stops chain across it.
       if (l.step) continue;
-      if (!l.pick) throw new CrubalError(`${where}'s stop ${l.name} is a list: it holds no state, so it is no stop`, st.line);
+      // A list stop (revision 37): a list holds no state, so it is a stop only where the stop names the act that is
+      // its work; like a step stop it chains with nothing, and it stamps nothing.
+      if (!l.pick) {
+        if (!st.act) throw new CrubalError(`${where}'s stop ${l.name} is a list: it holds no state, so it is a stop only with an act (${l.name} -> <act>)`, st.line);
+        continue;
+      }
       if (prev) {
         if (!prev.done || prev.done === "viewed") throw new CrubalError(`${where} has a gap: ${prev.name} is done when viewed, so nothing moves on from it to ${l.name}`, st.line);
         if (!same(prev.done, l.pick)) throw new CrubalError(`${where} has a gap: ${prev.name} is done at ${show(prev.done)}, but ${l.name} picks ${show(l.pick)}`, st.line);
