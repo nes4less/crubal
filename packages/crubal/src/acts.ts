@@ -294,8 +294,8 @@ export function readAct(node: Node): Act {
       for (const l of c.children) {
         const t = l.text.trim();
         if (!t) continue;
-        const m = t.match(/^(no\s+)?([\w:]+)(?:\s+"([^"]+)")?$/);
-        if (!m) throw new CrubalError(`a need is "<facet>" or "no <facet>", its words in quotes after it or not: ${t}`, l.line);
+        const m = t.match(/^(no\s+)?([\w:]+(?:\.\w+)?)(?:\s+"([^"]+)")?$/);
+        if (!m) throw new CrubalError(`a need is "<facet>" or "no <facet>" (the facet the record's own, or "<link facet>.<facet>", the linked record's), its words in quotes after it or not: ${t}`, l.line);
         (a.needs ??= []).push({ facet: m[2] as string, ...(m[1] ? { lacks: true as const } : {}), ...(m[3] ? { words: m[3] } : {}), line: l.line });
       }
       if (!a.needs?.length) throw new CrubalError(`the act ${name} needs nothing: its lines go beneath needs:`, c.line);
@@ -491,7 +491,7 @@ export function checkActList(acts: Act[], env: ActEnv): void {
         sourceOk(s, "tells with");
       }
     }
-    for (const n of a.needs ?? []) needFacet(n.facet, n.line, "needs");
+    for (const n of a.needs ?? []) for (const part of n.facet.split(".")) needFacet(part, n.line, "needs");
     for (const t of a.thens) {
       for (const term of t.when ? [t.when.left, t.when.right] : []) {
         if ("ref" in term) refOk(term.ref, t.line);
@@ -707,9 +707,11 @@ export function tellsValuesOf(a: Act, i: ActInput): { ok: true; kind: string; as
 export function actWrites(a: Act, i: ActInput): ActWrites {
   // Revision 42: what the record in hand must hold or lack, read before anything else.
   for (const n of a.needs ?? []) {
-    const v = i.record.values[bare(n.facet)];
+    // One hop: `<link facet>.<facet>` reads the record the record in hand links to, as the host handed it.
+    const [first = "", second] = n.facet.split(".");
+    const v = second === undefined ? i.record.values[bare(first)] : i.linked?.[bare(first)]?.values[second];
     const holds = v !== undefined && v !== null && v !== "" && !(Array.isArray(v) && !v.length);
-    if (holds === !!n.lacks) return { ok: false, why: n.words ?? (n.lacks ? `${bare(n.facet)} is already set` : `${bare(n.facet)} is not set`) };
+    if (holds === !!n.lacks) return { ok: false, why: n.words ?? (n.lacks ? `${second ?? bare(first)} is already set` : `${second ?? bare(first)} is not set`) };
   }
   for (const f of a.finds) if (f.take === "first" && !i.found[f.name]?.length) return { ok: false, why: `no ${f.kind} for ${f.name}` };
   const record: JsonObject = {};

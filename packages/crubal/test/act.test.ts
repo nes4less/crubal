@@ -504,6 +504,12 @@ test("revision 42: an act needs what the record in hand holds or lacks, refused 
   assert.deepEqual(none.ok && none.sends, [], "held on none: no send");
   assert.deepEqual(actWrites(a, input({ containerLabel: "BIN 001", filledAt: "M" })), { ok: false, why: "a count is already open on this box" });
   assert.deepEqual(actWrites(a, input({})), { ok: false, why: "containerLabel is not set" });
+  // One hop: a need of the record the record in hand links to, as the host handed it.
+  const hop = readPackages(src.replace("    containerLabel\n  find:", "    containerStation.printer \"this box's station has no printer\"\n  find:"))[0]?.acts.find((x) => x.name === "start") as typeof a;
+  const at = (linked: { [k: string]: { id: string; values: { [k: string]: string } } }) => actWrites(hop, { ...input({}), linked });
+  assert.equal(at({ containerStation: { id: "T-1", values: { printer: "zebra" } } }).ok, true);
+  assert.deepEqual(at({ containerStation: { id: "T-1", values: {} } }), { ok: false, why: "this box's station has no printer" });
+  assert.deepEqual(at({}), { ok: false, why: "this box's station has no printer" }, "linked to nothing: it holds nothing");
   // Refused: a need of a facet nothing declares; a need that is no facet's name.
   assert.throws(() => checkPackages(src.replace("    containerLabel\n  find:", "    nothingHere\n  find:")), /needs nothingHere, which isn't a facet/);
   assert.throws(() => readPackages(src.replace("    containerLabel\n  find:", "    containerLabel is set\n  find:")), /a need is "<facet>" or "no <facet>"/);

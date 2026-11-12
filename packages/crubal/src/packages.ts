@@ -161,6 +161,9 @@ export type Flow = {
   context: string[];
   /** The flow this one stands in for (revision 23): served where the named flow would have been. */
   replaces?: string;
+  /** Revision 42: the flow is a closed set: the stop that starts it, the stop whose list is the rest, the stop
+   * that finishes it, and the act that cancels it or none. */
+  closed?: { start: string; rest: string; finish: string; cancel?: string; line: number };
   stops: FlowStop[];
   /** `filter = value`, or (revision 34) a marked filter alone: a record marked on it has left the line. */
   done?: { filter: string; value: string; line: number; mark?: true };
@@ -447,6 +450,10 @@ function readFlow(node: Node): Flow {
     } else if (c.key === "replaces") {
       if (!/^[a-z][\w-]*$/.test(v)) throw new CrubalError(`replaces names a flow, a lower-case word: ${v}`, c.line);
       f.replaces = v;
+    } else if (c.key === "closed") {
+      const m = v.match(/^([a-z][\w-]*)\s+to\s+([a-z][\w-]*)\s+over\s+([a-z][\w-]*)(?:\s+cancel\s+([a-z][\w-]*))?$/);
+      if (!m) throw new CrubalError(`closed is "<start stop> to <finish stop> over <rest stop>", with "cancel <act>" after it or not: ${v}`, c.line);
+      f.closed = { start: m[1] as string, finish: m[2] as string, rest: m[3] as string, ...(m[4] ? { cancel: m[4] } : {}), line: c.line };
     } else if (c.key === "done") f.done = /^[\w:-]+$/.test(v) ? { filter: v, value: "done", line: c.line, mark: true } : readPick(v, c.line, "done");
     else if (c.key === "stops") {
       for (const st of c.children) {
@@ -465,7 +472,7 @@ function readFlow(node: Node): Flow {
         const cased = readStopCases(st, m[1] as string, !!m[2]);
         f.stops.push({ name: m[1] as string, ...(m[2] ? { act: m[2] } : {}), ...(m[3] ? { of: m[3] } : {}), ...(locks.length ? { with: locks } : {}), ...cased, line: st.line });
       }
-    } else throw new CrubalError(`a flow has label, utility, follow, serves, context, replaces, stops and done, not ${c.key}`, c.line);
+    } else throw new CrubalError(`a flow has label, utility, follow, serves, context, replaces, closed, stops and done, not ${c.key}`, c.line);
   }
   if (!f.stops.length) throw new CrubalError(`the flow ${name} has no stops`, node.line);
   return f;
@@ -797,6 +804,18 @@ function checkFlowList(flows: Flow[], env: FlowEnv): void {
     // Revision 23: the context is kinds (or levels) in force; a flow never replaces itself.
     for (const k of f.context) if (!dict.kinds.has(k) && !dict.levels.has(k) && strict) throw new CrubalError(`${where}'s context names ${k}, which isn't a kind or level ${here}`, f.line);
     if (f.replaces === f.name) throw new CrubalError(`${where} replaces itself`, f.line);
+    // Revision 42: a closed set names three of the flow's own lane stops, each with an act but the rest's (which
+    // may have none), the start before the finish; its cancel is an act of the flow's utility.
+    if (f.closed) {
+      const cl = f.closed;
+      const at = (n: string) => f.stops.findIndex((x) => x.name === n && x.of === undefined);
+      for (const [word, n] of [["starts at", cl.start], ["finishes at", cl.finish], ["is over", cl.rest]] as const)
+        if (at(n) < 0) throw new CrubalError(`${where} is closed and ${word} ${n}, which isn't a lane stop of it`, cl.line);
+      if (new Set([cl.start, cl.finish, cl.rest]).size < 3) throw new CrubalError(`${where} is closed: its start, its finish and its rest are three stops`, cl.line);
+      if (at(cl.start) > at(cl.finish)) throw new CrubalError(`${where} is closed and finishes at ${cl.finish} before it starts at ${cl.start}`, cl.line);
+      for (const n of [cl.start, cl.finish]) if (f.stops[at(n)]?.act === undefined) throw new CrubalError(`${where} is closed and its stop ${n} names no act: a start and a finish are each a stamp`, cl.line);
+      if (cl.cancel && acts && !acts.has(cl.cancel)) throw new CrubalError(`${where} is closed and cancels by ${cl.cancel}, which isn't an act of ${f.utility ?? "its utility"}`, cl.line);
+    }
     let deferred = false;
     for (const st of f.stops) {
       const isLane = laneNames.has(st.name);

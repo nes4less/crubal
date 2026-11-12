@@ -665,6 +665,15 @@ is no longer refused for two lane stops that do not chain: revision 22's refusal
 reader that knew revision 39 refuses such a flow where this one carries it. Each link still stamps as it
 would anywhere (the stamps, above). The flow's `done`, where one is written, is still its last lane stop's.
 
+**A closed set (revision 42).** A flow whose list is fixed at its start and judged at its finish says so:
+`closed: <start stop> to <finish stop> over <rest stop>`, with `cancel <act>` after it or not. The start and
+the finish are lane stops of the flow, each with an act (a stamp); the rest is the lane stop whose list is
+what the finish judges; the three are different stops and the start stands before the finish; the cancel is
+an act of the flow's utility. A package MUST be refused otherwise. The engine reads, checks, carries and
+prints it and does nothing more: what the start takes and the finish judges is the acts' own (15.2). It is
+there so a reader, a designer or a screen can say what the flow is: that leaving it is not finishing it,
+which list is the rest, and how much of it is left.
+
 **A link's cases (revision 41).** A record touched at a link is usually stamped. A link may say what else it
 knows, on lines beneath its stop, so that what a touch can do there is read from the flow and never lives in
 an app alone:
