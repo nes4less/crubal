@@ -127,7 +127,23 @@ export type Lane = {
  * with where its record comes from. Which it is, the check decides by the name: a lane's name is a lane
  * stop, a form contract's name a block; `act` says lane, `of` says block.
  */
-export type FlowStop = { name: string; act?: string; of?: string; /** Revision 36: values a block's form opens with, set and locked. */ with?: { facet: string; value: string }[]; line: number };
+/** One press a case offers (12.11, revision 41): its word, and the acts it runs in order, each on the record in
+ * hand or (a flag's `on found`) on the records its `when` found; none runs nothing. */
+export type CasePress = { word: string; runs: { act: string; utility?: string; onFound?: true }[] };
+
+/**
+ * A case at a link (12.11, revision 41): a record touched there that is not simply stamped. A `stranger` is of
+ * the lane's level and not on the lane as the flow's context narrows it; a `flag` is on a named lane's list by a
+ * link to it. Each is a question with presses and one of three answers: ask, or yes or no without asking.
+ */
+export type StopCase = { kind: "stranger" | "flag"; name?: string; answer: "ask" | "yes" | "no"; when?: { lane: string; facet: string }; yes: CasePress; no: CasePress; or: CasePress[]; line: number };
+
+/** The press a case runs without asking, by its answer or the one given; undefined asks. Pure. */
+export function casePress(c: Pick<StopCase, "answer" | "yes" | "no">, answer: StopCase["answer"] = c.answer): CasePress | undefined {
+  return answer === "yes" ? c.yes : answer === "no" ? c.no : undefined;
+}
+
+export type FlowStop = { name: string; act?: string; of?: string; /** Revision 41: a record that already carries the stamp is passed over, nothing written. */ already?: "ignore"; /** Revision 41: the cases the link knows beside "stamp it". */ cases?: StopCase[]; /** Revision 36: values a block's form opens with, set and locked. */ with?: { facet: string; value: string }[]; line: number };
 
 /**
  * A flow (12.11): an objective's line of stops, declared by the package whose lanes and forms it walks,
@@ -446,12 +462,77 @@ function readFlow(node: Node): Flow {
         });
         if (m[4] !== undefined && !locks.length) throw new CrubalError(`the stop ${m[1]} says with and names no value`, st.line);
         if (new Set(locks.map((l) => l.facet)).size !== locks.length) throw new CrubalError(`the stop ${m[1]} locks a facet twice`, st.line);
-        f.stops.push({ name: m[1] as string, ...(m[2] ? { act: m[2] } : {}), ...(m[3] ? { of: m[3] } : {}), ...(locks.length ? { with: locks } : {}), line: st.line });
+        const cased = readStopCases(st, m[1] as string, !!m[2]);
+        f.stops.push({ name: m[1] as string, ...(m[2] ? { act: m[2] } : {}), ...(m[3] ? { of: m[3] } : {}), ...(locks.length ? { with: locks } : {}), ...cased, line: st.line });
       }
     } else throw new CrubalError(`a flow has label, utility, follow, serves, context, replaces, stops and done, not ${c.key}`, c.line);
   }
   if (!f.stops.length) throw new CrubalError(`the flow ${name} has no stops`, node.line);
   return f;
+}
+
+/** A case's press: `<Word>` alone, or `<Word> -> <act>[ on found], …`, an act of the flow's utility or `<utility>.<act>`. */
+function readCasePress(text: string, line: number, flag: boolean): CasePress {
+  const m = text.match(/^([^>]*?\S)(?:\s+->\s+(.+))?$/);
+  if (!m || /->/.test(m[1] as string)) throw new CrubalError(`a case's press is "<word>" or "<word> -> <act>, …", not ${text}`, line);
+  const runs = (m[2] ?? "").split(",").map((x) => x.trim()).filter(Boolean).map((r) => {
+    const a = r.match(/^(?:([a-z][\w-]*)\.)?([a-z][\w-]*)(\s+on\s+found)?$/);
+    if (!a) throw new CrubalError(`a case's press runs "<act>" or "<utility>.<act>" (a flag's may end "on found"), not ${r}`, line);
+    if (a[3] && !flag) throw new CrubalError(`only a flag's press runs an act on found: ${r}`, line);
+    return { act: a[2] as string, ...(a[1] ? { utility: a[1] } : {}), ...(a[3] ? { onFound: true as const } : {}) };
+  });
+  if (m[2] !== undefined && !runs.length) throw new CrubalError(`the press ${m[1]} names no act after its arrow`, line);
+  return { word: m[1] as string, runs };
+}
+
+/** The lines beneath a stop (revision 41): `already: ignore`, `stranger: <answer>`, `flag <name>: <answer> when any <lane> where <facet> = record`, each case with its presses beneath. */
+function readStopCases(st: Node, stop: string, link: boolean): { already?: "ignore"; cases?: StopCase[] } {
+  const out: { already?: "ignore"; cases?: StopCase[] } = {};
+  for (const c of st.children) {
+    const text = c.text.trim();
+    if (!text) continue;
+    if (!link) throw new CrubalError(`the stop ${stop} names no act, so it has no cases: a case is a link's ("<lane> -> <act>")`, c.line);
+    const al = text.match(/^already:\s*(\S+)$/);
+    if (al) {
+      if (al[1] !== "ignore" && al[1] !== "stamp") throw new CrubalError(`already is ignore or stamp, not ${al[1]}`, c.line);
+      if (al[1] === "ignore") out.already = "ignore";
+      continue;
+    }
+    const m = text.match(/^(?:(stranger)|flag\s+([a-z][\w-]*)):\s*(\S+)(?:\s+when\s+any\s+([a-z][\w-]*)\s+where\s+([a-z][\w:-]*)\s*=\s*record)?$/);
+    if (!m) throw new CrubalError(`beneath a stop stands "already: ignore", "stranger: <answer>" or "flag <name>: <answer> when any <lane> where <facet> = record", not ${text}`, c.line);
+    const answer = m[3] as string;
+    if (answer !== "ask" && answer !== "yes" && answer !== "no") throw new CrubalError(`a case's answer is ask, yes or no, not ${answer}`, c.line);
+    const flag = !m[1];
+    if (flag && !m[4]) throw new CrubalError(`the flag ${m[2]} says no when: "when any <lane> where <facet> = record"`, c.line);
+    if (!flag && m[4]) throw new CrubalError("a stranger has no when: it is a record the lane does not hold", c.line);
+    let yes: CasePress | undefined;
+    let no: CasePress | undefined;
+    const or: CasePress[] = [];
+    for (const pr of c.children) {
+      const t = pr.text.trim();
+      if (!t) continue;
+      const k = t.match(/^(yes|no|or):\s*(.+)$/);
+      if (!k) throw new CrubalError(`a case's lines are "yes: <press>", "no: <press>" and "or: <press>", not ${t}`, pr.line);
+      const press = readCasePress(k[2] as string, pr.line, flag);
+      if (k[1] === "yes") {
+        if (yes) throw new CrubalError("a case has one yes", pr.line);
+        yes = press;
+      } else if (k[1] === "no") {
+        if (no) throw new CrubalError("a case has one no", pr.line);
+        no = press;
+      } else or.push(press);
+    }
+    const what = flag ? `the flag ${m[2]}` : "the stranger";
+    if (!yes || !no) throw new CrubalError(`${what} at ${stop} needs a yes and a no: every question has three answers (ask, yes, no)`, c.line);
+    const words = [yes, no, ...or].map((x) => x.word);
+    if (new Set(words).size !== words.length) throw new CrubalError(`${what} at ${stop} offers one word twice`, c.line);
+    const made: StopCase = { kind: flag ? "flag" : "stranger", ...(flag ? { name: m[2] as string, when: { lane: m[4] as string, facet: m[5] as string } } : {}), answer, yes, no, or, line: c.line };
+    out.cases ??= [];
+    if (!flag && out.cases.some((x) => x.kind === "stranger")) throw new CrubalError(`the stop ${stop} has one stranger`, c.line);
+    if (flag && out.cases.some((x) => x.name === made.name)) throw new CrubalError(`the stop ${stop} names the flag ${made.name} twice`, c.line);
+    out.cases.push(made);
+  }
+  return out;
 }
 
 /** Split a file into its packages, keeping line numbers true. */
@@ -732,6 +813,26 @@ function checkFlowList(flows: Flow[], env: FlowEnv): void {
       for (const w of st.with ?? []) {
         const facet = dict.facets.get(w.facet.split("::").pop() as string);
         if (!facet && strict) throw new CrubalError(`${where}'s stop ${st.name} locks ${w.facet}, which isn't a facet ${here}`, st.line);
+      }
+      // Revision 41: a case's flag names a lane and a link facet to the stop's records; its presses name acts of
+      // the flow's utility, or another utility's by its name. What this file cannot see waits for the check in force.
+      for (const cs of st.cases ?? []) {
+        const what = `${where}'s stop ${st.name}, ${cs.kind === "flag" ? `the flag ${cs.name}` : "the stranger"}`;
+        if (cs.when) {
+          if (!laneNames.has(cs.when.lane) && strict) throw new CrubalError(`${what}: ${cs.when.lane} isn't a lane ${here}`, cs.line);
+          const facet = dict.facets.get(cs.when.facet.split("::").pop() as string);
+          if (!facet && strict) throw new CrubalError(`${what}: ${cs.when.facet} isn't a facet ${here}`, cs.line);
+          if (facet && facet.type !== "link") throw new CrubalError(`${what}: ${cs.when.facet} isn't a link, so no record is reached by it`, cs.line);
+        }
+        for (const pr of [cs.yes, cs.no, ...cs.or])
+          for (const r of pr.runs) {
+            const u = r.utility ? env.utilities.find((x) => x.name === r.utility) : utility;
+            if (r.utility && !u) {
+              if (strict) throw new CrubalError(`${what}: the press ${pr.word} names the utility ${r.utility}, which ${lacks}`, cs.line);
+              continue;
+            }
+            if (u && !u.acts.some((a) => a.name === r.act)) throw new CrubalError(`${what}: the press ${pr.word} runs ${r.act}, which isn't an act of ${u.name}`, cs.line);
+          }
       }
     }
     if (f.done) {

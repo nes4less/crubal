@@ -665,6 +665,46 @@ is no longer refused for two lane stops that do not chain: revision 22's refusal
 reader that knew revision 39 refuses such a flow where this one carries it. Each link still stamps as it
 would anywhere (the stamps, above). The flow's `done`, where one is written, is still its last lane stop's.
 
+**A link's cases (revision 41).** A record touched at a link is usually stamped. A link may say what else it
+knows, on lines beneath its stop, so that what a touch can do there is read from the flow and never lives in
+an app alone:
+
+```crubal
+  stops:
+    unitsExpected -> seen
+      already: ignore
+      stranger: ask
+        yes: Re-file here -> transfer
+        no: Put back
+        or: Quarantine -> quarantine
+      flag pick: ask when any picksToPull where pickUnit = record
+        yes: Pull now -> orders.pull on found, seen
+        no: Leave it -> seen
+```
+
+- **`already: ignore`**: a record that already carries what the link's act would write is passed over with a
+  word, and nothing is written. `already: stamp` (unless said) stamps it again.
+- **`stranger: <answer>`**: a record of the lane's level that is not on the lane as the flow's `context`
+  narrows it (a unit of another container, at a count of this one). One per stop.
+- **`flag <name>: <answer> when any <lane> where <facet> = record`**: the record is the target of a link
+  facet carried by a record on the named lane (a pick waiting to be pulled that names this unit). Several per
+  stop, each with its name; they are asked in the order written, after the stranger.
+
+Each case is a **question with three answers**: `ask` (the person is asked), `yes` or `no` (answered without
+asking). The word written is the default; a place MAY keep its own answer per case, and the app reads it
+over the declared one. Beneath a case stand its presses: one `yes:`, one `no:`, and any number of `or:`,
+each `<word>` or `<word> -> <act>[, <act>…]`. An act is the flow's utility's, or another utility's as
+`<utility>.<act>`; it runs on the record in hand, or, in a flag's press, `on found`: on each record the
+flag's `when` found. The acts run in order and the first refusal stops them. A press with no act does
+nothing: the record is left as it was. A case whose press does not name the link's own act does not stamp.
+
+The engine reads, checks, carries and prints the cases; the app finds which case a touch meets, asks or
+answers, and runs the presses. A package MUST be refused at publish when a stop with no act carries a case,
+an answer is not `ask`, `yes` or `no`, a case lacks its `yes` or its `no` or offers one word twice, a stop
+has two strangers or names a flag twice, a press names an act its utility lacks or a utility not in force,
+a stranger's press says `on found`, or a flag's `when` names what is not a lane or a
+facet that is not a link. A reader that knew revision 40 refuses the lines beneath a stop.
+
 ## 12.12 Prints
 
 A **print** is a label design: how a record of a class or kind prints on a piece of stock. It is a member a
