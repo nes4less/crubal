@@ -406,3 +406,46 @@ test("revision 41: a link's cases are refused when malformed or naming what is n
   // A stop with no act is no link, and a block has no cases.
   assert.throws(() => checkPackages(linked(flow.replace("    order of order\n", "    order of order\n      already: ignore\n"))), /names no act, so it has no cases/);
 });
+
+// Revision 42: a closed set.
+const third = `lane: ordersToShip /2026-11-05
+  label: Orders to ship
+  utility: orders
+  view: desk
+  pick: orderState = packed
+  band: daily
+  house: 7
+  serves: owner
+  home:
+    figure: count
+    press: Ship -> /orders
+  card:
+    name: buyer
+    primary: Ship -> ship
+
+`;
+const closedFlow = flow
+  .replace("  stops:\n", "  closed: ordersToPick to ordersToShip over ordersToPack cancel pack\n  stops:\n")
+  .replace("    ordersToPack -> pack\n", "    ordersToPack -> pack\n    ordersToShip -> ship\n");
+
+test("revision 42: a flow says it is a closed set: its start, its finish, its rest and its cancel; read, checked, carried and printed back", () => {
+  assert.notEqual(closedFlow, flow);
+  const src = shop(third + closedFlow);
+  checkPackages(src);
+  const cl = readPackages(src)[0]?.flows[0]?.closed;
+  assert.deepEqual([cl?.start, cl?.finish, cl?.rest, cl?.cancel], ["ordersToPick", "ordersToShip", "ordersToPack", "pack"]);
+  const bundle = bundleOf(parsePackage(src));
+  assert.match(printBundle(bundle), /^  closed: ordersToPick to ordersToShip over ordersToPack cancel pack$/m);
+  assert.equal(serialize(bundleOf(readBundle(bundle))), serialize(bundle));
+  const no = (from: string, to: string, why: RegExp) => {
+    const text = closedFlow.replace(from, to);
+    assert.notEqual(text, closedFlow, from);
+    assert.throws(() => checkPackages(shop(third + text)), (e: unknown) => e instanceof CrubalError && why.test(e.message), from);
+  };
+  no("closed: ordersToPick to", "closed: nowhere to", /starts at nowhere, which isn't a lane stop of it/);
+  no("over ordersToPack", "over ordersToPick", /are three stops/);
+  no("closed: ordersToPick to ordersToShip", "closed: ordersToShip to ordersToPick", /finishes at ordersToPick before it starts at ordersToShip/);
+  no("cancel pack", "cancel burn", /cancels by burn, which isn't an act of orders/);
+  no("closed: ordersToPick to ordersToShip over ordersToPack cancel pack", "closed: ordersToPick", /closed is "<start stop> to <finish stop> over <rest stop>"/);
+  no("    ordersToShip -> ship\n", "    ordersToShip\n", /its stop ordersToShip names no act/);
+});

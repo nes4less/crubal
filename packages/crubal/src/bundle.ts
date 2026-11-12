@@ -309,6 +309,7 @@ export function flowJson(f: Flow): JsonObject {
   if (f.serves.length) o.serves = f.serves.map((x) => ({ as: x.as, ...(x.items ? { items: [...x.items] } : {}) }));
   if (f.context.length) o.context = [...f.context];
   if (f.replaces) o.replaces = f.replaces;
+  if (f.closed) o.closed = { start: f.closed.start, finish: f.closed.finish, rest: f.closed.rest, ...(f.closed.cancel ? { cancel: f.closed.cancel } : {}) };
   o.stops = f.stops.map((st) => ({ name: st.name, ...(st.act ? { act: st.act } : {}), ...(st.of ? { of: st.of } : {}), ...(st.with?.length ? { with: st.with.map((w) => ({ facet: w.facet, value: w.value })) } : {}), ...(st.already ? { already: st.already } : {}), ...(st.cases?.length ? { cases: st.cases.map(caseJson) } : {}) }));
   if (f.done) o.done = { filter: f.done.filter, value: f.done.value, ...(f.done.mark ? { mark: true } : {}) };
   return o;
@@ -689,6 +690,10 @@ function flowText(f: JsonObject): string[] {
   if (Array.isArray(f.serves)) out.push(`  serves: ${(f.serves as JsonObject[]).map((x) => `${x.as}${Array.isArray(x.items) ? `(${(x.items as string[]).join(", ")})` : ""}`).join(", ")}`);
   if (Array.isArray(f.context) && f.context.length) out.push(`  context: ${(f.context as string[]).join(", ")}`);
   out.push(...kv("  ", "replaces", f.replaces));
+  if (f.closed && typeof f.closed === "object") {
+    const cl = f.closed as JsonObject;
+    out.push(`  closed: ${cl.start} to ${cl.finish} over ${cl.rest}${typeof cl.cancel === "string" ? ` cancel ${cl.cancel}` : ""}`);
+  }
   if (Array.isArray(f.stops)) {
     out.push("  stops:");
     for (const st of f.stops as JsonObject[]) {
