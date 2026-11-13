@@ -286,7 +286,7 @@ function readTerm(t: string, line: number, routes: Set<string>, counts: Set<stri
 }
 
 /** `given.count != record.qty and record.qty > 0` (revision 45: `!=`, and comparisons joined by `and`). */
-function readWhen(text: string, line: number, routes: Set<string>, counts: Set<string>): ActWhen {
+export function readWhen(text: string, line: number, routes: Set<string> = new Set(), counts: Set<string> = new Set()): ActWhen {
   const conds = text.split(/\s+and\s+/).map((c): ActCond => {
     // Revision 47: `has <ref>`, `no <ref>`.
     const h = c.trim().match(/^(has|no)\s+(\S+)$/);
@@ -465,7 +465,7 @@ export type ActEnv = {
 const bare = (facet: string) => facet.replace(/^\w+::/, "");
 
 /** Every term a `when` reads, its `and`s among them. */
-const termsOf = (w: ActWhen | undefined): ActTerm[] => (w ? [w, ...(w.and ?? [])].flatMap((c): ActTerm[] => ("has" in c ? [{ ref: c.has }] : [c.left, c.right])) : []);
+export const termsOf = (w: ActWhen | undefined): ActTerm[] => (w ? [w, ...(w.and ?? [])].flatMap((c): ActTerm[] => ("has" in c ? [{ ref: c.has }] : [c.left, c.right])) : []);
 
 /** `of` is a record's parent (1.1), no facet: it may stand where a facet may (a pick's facet, `record.of`, a
  * route's `over`) and the dictionary is never asked for it. */
@@ -556,6 +556,8 @@ export function checkActList(acts: Act[], env: ActEnv): void {
         picksOk(r.keep.where, "'s count", true);
       }
     }
+    // Revision 48: a make's name may stand where a link's target does.
+    const makeNames = new Set((a.makes ?? []).map((m) => m.name));
     const sumOk = (sum: ActSum, line: number) => {
       for (const o of [sum.left, sum.right]) if (!("number" in o)) refOk(o, line);
     };
@@ -563,7 +565,7 @@ export function checkActList(acts: Act[], env: ActEnv): void {
       needFacet(s.facet, s.line, doing);
       const src = s.source;
       if ("link" in src) {
-        if (src.link !== "record" && !found.has(src.link) && !a.context.includes(src.link)) throw new CrubalError(`${where} links ${s.facet} to ${src.link}, which no find or context declares`, s.line);
+        if (src.link !== "record" && !found.has(src.link) && !a.context.includes(src.link) && !makeNames.has(src.link)) throw new CrubalError(`${where} links ${s.facet} to ${src.link}, which no find or context declares`, s.line);
       } else if ("next" in src) {
         if (!("literal" in src.next.prefix)) refOk(src.next.prefix, s.line);
         if (src.next.suffix) refOk(src.next.suffix, s.line);
@@ -652,7 +654,7 @@ export function checkActList(acts: Act[], env: ActEnv): void {
         needFacet(s.facet, t.line, "then sets");
         const v = s.value;
         if ("link" in v) {
-          if (v.link !== "record" && !found.has(v.link) && !a.context.includes(v.link)) throw new CrubalError(`${where} then links ${s.found}.${s.facet} to ${v.link}, which no find or context declares`, t.line);
+          if (v.link !== "record" && !found.has(v.link) && !a.context.includes(v.link) && !makeNames.has(v.link)) throw new CrubalError(`${where} then links ${s.found}.${s.facet} to ${v.link}, which no find or context declares`, t.line);
         } else if ("sum" in v) sumOk(v.sum, t.line);
         else if (!("literal" in v) && !("now" in v) && !("none" in v) && !("caller" in v) && !("person" in v)) refOk(v, t.line);
       }
@@ -691,6 +693,8 @@ export type ActInput = {
   given?: { [name: string]: Json };
   /** Revision 44: the facets, so a given its facet refuses stops the act before any write. */
   facetOf?: (key: string) => Facet | undefined;
+  /** Revision 48: the names of the act's makes, which a link may name; `actWrites` fills it. */
+  made?: string[];
   /** The facets that are marks (revision 34): those a marked filter in force names. A mark is taken once. */
   marks?: string[];
 };
@@ -730,35 +734,52 @@ const valueOf = (r: ActRef, i: Pick<ActInput, "record" | "context" | "found" | "
   return r.facet ? facetOf(i.found[r.found]?.[0], r.facet) : i.found[r.found]?.[0]?.id;
 };
 
-const numberOf = (t: ActTerm, i: ActInput): number | undefined => {
-  if ("number" in t) return t.number;
+/** Revision 48: a value as an amount: a number, or money or a quantity with what it is of (1.4). */
+type Amount = { n: number; of?: { money: string } | { qty: string }; places: number };
+const amountOf = (v: Json | undefined): Amount | undefined => {
+  const o = v && typeof v === "object" && !Array.isArray(v) ? (v as JsonObject) : undefined;
+  const raw = o ? ("$money" in o ? o.$money : "$qty" in o ? o.$qty : undefined) : v;
+  const text = typeof raw === "number" ? String(raw) : typeof raw === "string" ? raw.trim() : "";
+  if (text === "" || !Number.isFinite(Number(text))) return undefined;
+  const places = (text.split(".")[1] ?? "").length;
+  return { n: Number(text), places, ...(o && "$money" in o ? { of: { money: String(o.currency ?? "") } } : o && "$qty" in o ? { of: { qty: String(o.unit ?? "") } } : {}) };
+};
+const sameOf = (a: Amount["of"], b: Amount["of"]): boolean => !a || !b || JSON.stringify(a) === JSON.stringify(b);
+
+const termAmount = (t: ActTerm, i: ActInput): Amount | undefined => {
+  if ("number" in t) return { n: t.number, places: 0 };
   if ("count" in t) {
     const c = i.counts?.[t.count];
-    return c === undefined ? undefined : c + (t.plus ?? 0);
+    return c === undefined ? undefined : { n: c + (t.plus ?? 0), places: 0 };
   }
-  const v = valueOf(t.ref, i);
-  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : Number.NaN;
-  return Number.isFinite(n) ? n + (t.plus ?? 0) : undefined;
+  const a = amountOf(valueOf(t.ref, i));
+  return a ? { ...a, n: a.n + (t.plus ?? 0) } : undefined;
 };
+const numberOf = (t: ActTerm, i: ActInput): number | undefined => termAmount(t, i)?.n;
 
 /** Revision 45: a sum's value. A reference that holds nothing reads as 0; one that holds no number refuses. */
-const sumValue = (sum: ActSum, i: ActInput): { ok: true; value: string } | { ok: false; why: string } => {
-  const read = (o: ActOperand): number | string => {
-    if ("number" in o) return o.number;
+const sumValue = (sum: ActSum, i: ActInput): { ok: true; value: Json } | { ok: false; why: string } => {
+  const read = (o: ActOperand): Amount | string => {
+    if ("number" in o) return { n: o.number, places: (String(o.number).split(".")[1] ?? "").length };
     const v = valueOf(o, i);
-    if (v === undefined || v === null || v === "") return 0;
-    const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : Number.NaN;
-    return Number.isFinite(n) ? n : `${refText(o)} holds no number to ${sum.op === "+" ? "add" : "take from"}`;
+    if (v === undefined || v === null || v === "") return { n: 0, places: 0 };
+    return amountOf(v) ?? `${refText(o)} holds no number to ${sum.op === "+" ? "add" : "take from"}`;
   };
   const l = read(sum.left);
   if (typeof l === "string") return { ok: false, why: l };
   const r = read(sum.right);
   if (typeof r === "string") return { ok: false, why: r };
-  return { ok: true, value: String(Number((sum.op === "+" ? l + r : l - r).toFixed(6))) };
+  // Revision 48: money and quantities keep what they are of; two that differ are not summed.
+  if (!sameOf(l.of, r.of)) return { ok: false, why: `${"number" in sum.left ? sum.left.number : refText(sum.left)} and ${"number" in sum.right ? sum.right.number : refText(sum.right)} are not of one currency or unit` };
+  const n = sum.op === "+" ? l.n + r.n : l.n - r.n;
+  const of = l.of ?? r.of;
+  if (!of) return { ok: true, value: String(Number(n.toFixed(6))) };
+  const amount = n.toFixed(Math.min(6, Math.max(l.places, r.places)));
+  return { ok: true, value: "money" in of ? { $money: amount, currency: of.money } : { $qty: amount, unit: of.qty } };
 };
 
 /** Whether a `when` holds as the input stands: every comparison of it. A term that reads no number holds nowhere. */
-const whenHolds = (when: ActWhen | undefined, on: ActInput): boolean => {
+export const whenHolds = (when: ActWhen | undefined, on: ActInput): boolean => {
   if (!when) return true;
   return [when, ...(when.and ?? [])].every((c) => {
     if ("has" in c) {
@@ -766,9 +787,12 @@ const whenHolds = (when: ActWhen | undefined, on: ActInput): boolean => {
       const holds = v !== undefined && v !== null && v !== "" && !(Array.isArray(v) && !v.length);
       return holds !== !!c.lacks;
     }
-    const l = numberOf(c.left, on);
-    const r = numberOf(c.right, on);
-    if (l === undefined || r === undefined) return false;
+    const la = termAmount(c.left, on);
+    const ra = termAmount(c.right, on);
+    // Revision 48: money against money of another currency, or a quantity of another unit, holds nowhere.
+    if (!la || !ra || !sameOf(la.of, ra.of)) return false;
+    const l = la.n;
+    const r = ra.n;
     return c.op === "=" ? l === r : c.op === "!=" ? l !== r : c.op === "<" ? l < r : c.op === ">" ? l > r : c.op === "<=" ? l <= r : l >= r;
   });
 };
@@ -864,6 +888,8 @@ const sourceValue = (s: ActSet, i: ActInput): { ok: true; value: Json | undefine
   }
   if ("link" in src) {
     const id = src.link === "record" ? i.record.id : (i.found[src.link]?.[0]?.id ?? i.context[src.link]?.id);
+    // Revision 48: a link to a record the act makes is carried as `{$made: <name>}` for the host to resolve.
+    if (!id && i.made?.includes(src.link)) return { ok: true, value: { $made: src.link } };
     if (!id) return { ok: false, why: `nothing to link ${s.facet} to: ${src.link}` };
     return { ok: true, value: { $link: id } };
   }
@@ -962,6 +988,7 @@ export function actWrites(a: Act, i: ActInput): ActWrites {
     i = { ...i, given: g.values };
   }
   for (const f of a.finds) if (f.take === "first" && !i.found[f.name]?.length) return { ok: false, why: `no ${f.kind} for ${f.name}` };
+  if (a.makes?.length) i = { ...i, made: a.makes.map((m) => m.name) };
   const record: JsonObject = {};
   const clear: string[] = [];
   for (const s of a.sets) {
@@ -1014,8 +1041,8 @@ export function actWrites(a: Act, i: ActInput): ActWrites {
         value = i.caller;
       } else if ("link" in v) {
         const id = v.link === "record" ? i.record.id : (i.found[v.link]?.[0]?.id ?? i.context[v.link]?.id);
-        if (!id) return { ok: false, why: `nothing to link ${s.found}.${s.facet} to: ${v.link}` };
-        value = { $link: id };
+        if (!id && !i.made?.includes(v.link)) return { ok: false, why: `nothing to link ${s.found}.${s.facet} to: ${v.link}` };
+        value = id ? { $link: id } : { $made: v.link };
       } else if ("sum" in v) {
         const n = sumValue(v.sum, i);
         if (!n.ok) return n;
@@ -1075,6 +1102,16 @@ export function actWrites(a: Act, i: ActInput): ActWrites {
     }
     makes.push({ name: m.name, kind: m.kind, values });
   }
+  // Revision 48: a link to a make that was not made (its `when` did not hold) writes nothing.
+  if (a.makes?.length) {
+    const was = new Set(makes.map((m) => m.name));
+    const sweep = (values: JsonObject) => {
+      for (const [k, v] of Object.entries(values)) if (v && typeof v === "object" && !Array.isArray(v) && typeof (v as JsonObject).$made === "string" && !was.has(String((v as JsonObject).$made))) delete values[k];
+    };
+    sweep(record);
+    for (const t of then) sweep(t.values);
+    for (const m of makes) sweep(m.values);
+  }
   // Revision 47: the acts run once this one has landed, each read as the record in hand stood.
   const also: { utility?: string; act: string; id: string }[] = [];
   for (const x of a.also ?? []) {
@@ -1129,7 +1166,7 @@ const refText = (r: ActRef): string =>
 const operandJson = (o: ActOperand): JsonObject => ("number" in o ? { number: o.number } : refJson(o));
 const sumJson = (x: ActSum): JsonObject => ({ sum: { left: operandJson(x.left), op: x.op, right: operandJson(x.right) } });
 const condJson = (c: ActCond): JsonObject => ("has" in c ? { has: refJson(c.has), ...(c.lacks ? { lacks: true } : {}) } : { left: termJson(c.left), op: c.op, right: termJson(c.right) });
-const whenJson = (w: ActWhen): JsonObject => ({ ...condJson(w), ...(w.and?.length ? { and: w.and.map(condJson) } : {}) });
+export const whenJson = (w: ActWhen): JsonObject => ({ ...condJson(w), ...(w.and?.length ? { and: w.and.map(condJson) } : {}) });
 const termJson = (t: ActTerm): JsonObject => ("number" in t ? { number: t.number } : "count" in t ? { count: t.count, ...(t.plus !== undefined ? { plus: t.plus } : {}) } : { ref: refJson(t.ref), ...(t.plus !== undefined ? { plus: t.plus } : {}) });
 const termText = (t: ActTerm): string => ("number" in t ? String(t.number) : `${"count" in t ? t.count : refText(t.ref)}${t.plus !== undefined ? ` + ${t.plus}` : ""}`);
 
@@ -1212,7 +1249,7 @@ const pickText = (p: JsonObject): string => {
 };
 const operandText = (o: JsonObject): string => (typeof o.number === "number" ? String(o.number) : refText(refOfJson(o)));
 const sumText = (x: JsonObject): string => `${operandText(x.left as JsonObject)} ${x.op} ${operandText(x.right as JsonObject)}`;
-const whenText = (w: JsonObject): string =>
+export const whenText = (w: JsonObject): string =>
   [w, ...((w.and as JsonObject[] | undefined) ?? [])].map((c) => c.has && typeof c.has === "object" ? `${c.lacks === true ? "no" : "has"} ${refText(refOfJson(c.has as JsonObject))}` : `${termText(termOfJson(c.left as JsonObject))} ${c.op} ${termText(termOfJson(c.right as JsonObject))}`).join(" and ");
 const sourceText = (src: JsonObject): string => {
   if (typeof src.literal === "string") return src.literal === "caller" ? JSON.stringify(src.literal) : q(src.literal);

@@ -182,6 +182,18 @@ written; the host runs each as the same person, **after** this act's entry, each
 own entry. One that is refused is said and undoes nothing; an act run this way runs its own `also`, and the
 host MUST stop a chain that returns to an act and record it has already run.
 
+**A link to what the act makes, and amounts (revision 48).** A make's name may stand where a link's target
+does, `link <make>`, in a set, a then's value or another make's set: so the record in hand, a record found or
+a second record made can point at the one just made (the two sides of a split each naming the other's
+movement). The engine cannot know the id, which is the host's: `actWrites` carries such a link as
+`{"$made": "<name>"}` in the values it answers, and the host MUST write the made record's link in its place,
+in the act's own entry. Where the make was not made (its `when` did not hold) the write is left out. And a
+sum or a `when` reads **amounts** as they are written (1.4): money (`{"$money", "currency"}`) and quantities
+(`{"$qty", "unit"}`) beside plain numbers. A sum keeps what its sides are of and the decimal places of the
+longer; a plain number beside money or a quantity takes its currency or unit; two currencies or two units are
+not summed, and the act stops before any write with the reason. A `when` over two currencies or two units
+holds nowhere.
+
 **A closed set (revision 42).** A set of records fixed when the work starts, with a finish that judges the
 rest, is three acts on the thing that holds the set and needs no word of its own. The start takes a mark on
 it (taken once, so one set is open on a thing at a time) and writes a state on every record it reaches; the
@@ -216,7 +228,7 @@ among its acts nor lists the act it `replaces`; replaces itself; is `on` no leve
 routes over no compound facet, by a column the compound lacks, or over a link facet the level lacks; finds, counts
 or mints a kind the package lacks; counts under a name a find, route or count already bears; picks, orders by, sets, mints or reads a facet the package lacks (a route's
 column the compound's); names a find, route, count or context it did not declare (a then's link and its references among them, revision 39); sets one facet twice; finds one name
-twice; (revision 44) is given one name twice, is given a value as a facet the package lacks, opens a given from what is not the record's or a context record's, reads `given.<name>` it was not given, or names a find `given`; (revision 45) makes a kind the package lacks, makes under a name a find, route, count or make already bears (or `given` or `record`), makes and sets one facet twice, makes and sets nothing, or names a find `record`; (revision 47) archives or restores what is neither the record in hand nor a find, runs an act also on what is neither, also runs an act that a utility the package declares does not list, or also runs itself on the record in hand; mints a find that takes `all`; lands when the send reports and sends nothing; takes anything but `share`, or takes a share on a level whose kind declares no quantity for it (revision 35); or, revision 31, tells a kind the
+twice; (revision 44) is given one name twice, is given a value as a facet the package lacks, opens a given from what is not the record's or a context record's, reads `given.<name>` it was not given, or names a find `given`; (revision 45) makes a kind the package lacks, makes under a name a find, route, count or make already bears (or `given` or `record`), makes and sets one facet twice, makes and sets nothing, or names a find `record`; (revision 47) archives or restores what is neither the record in hand nor a find, runs an act also on what is neither, also runs an act that a utility the package declares does not list, or also runs itself on the record in hand; (revision 48: a link's target may be a make's name) mints a find that takes `all`; lands when the send reports and sends nothing; takes anything but `share`, or takes a share on a level whose kind declares no quantity for it (revision 35); or, revision 31, tells a kind the
 package lacks, tells as an aspect no kind declares under `follow:`, tells with no set lines, or tells and sets one
 facet twice. In force (11.4, at install) the aspect is the exception: a telling whose aspect no kind in force
 declares is **inert**, never a refusal, since nobody can follow by an aspect nobody declares and the kind that
@@ -231,7 +243,7 @@ An act is `{"act", "version", "utility", "replaces", "label", "describe", "on", 
 "take", "kind", "where": [{"facet", "value": {"literal"} | {"caller": true} | {"self": true} (revision 39: the record in hand) | reference}], "order": {"facet", "dir"}, "mint": {"kind",
 "sets": [set…]}}], "counts": [{"name", "kind", "where": [pick…]}], "sets": [{"facet", "source": {"literal"} | {"link"} | {"now": true} | {"caller": true} | {"none": true} | {"next": {"prefix":
 reference | {"literal"}, "in": {"kind", "facet"}, "suffix": reference}} | {"owner": true} | {"run": true} | (revision 46) {"person": true} | (revision 45) {"sum": {"left", "op": "+" | "-", "right"}} (each side `{"number"}` or a reference) | reference}], "thens": [{"when": {"left", "op", "right"} (a term `{"ref", "plus"} | {"count", "plus"} | {"number"}`),
-"sets": [{"found", "facet", "value": {"literal"} | {"now": true} | (revision 39) {"none": true} | {"link"} | {"caller": true} | reference}], "send": {"verb", "words"}}] (`when` absent from revision 39 where the then has no condition; revision 45: a `when` may carry `"and": [{"left", "op", "right"}…]`, its op may be `"!="`, a then's value may be `{"sum"}` or (revision 46) `{"person": true}`, and a then's `found` may be `"record"`, the record in hand), (revision 45) "makes": [{"name", "kind", "when", "sets": [set…]}], (revision 47: a comparison may be `{"has": reference, "lacks": true}`; a then may carry `"stand": {"to": "archived" | "active", "on", "reason"}` with empty `sets`) "also": [{"utility", "act", "on", "when"}], "send": {"verb",
+"sets": [{"found", "facet", "value": {"literal"} | {"now": true} | (revision 39) {"none": true} | {"link"} | {"caller": true} | reference}], "send": {"verb", "words"}}] (`when` absent from revision 39 where the then has no condition; revision 45: a `when` may carry `"and": [{"left", "op", "right"}…]`, its op may be `"!="`, a then's value may be `{"sum"}` or (revision 46) `{"person": true}`, and a then's `found` may be `"record"`, the record in hand), (revision 45) "makes": [{"name", "kind", "when", "sets": [set…]}], (revision 47: a comparison may be `{"has": reference, "lacks": true}`; a then may carry `"stand": {"to": "archived" | "active", "on", "reason"}` with empty `sets`) "also": [{"utility", "act", "on", "when"}], (revision 48: a link set's `link` may be a make's name) "send": {"verb",
 "words"}, "lands", "tells": {"kind", "aspect", "sets": [set…]}}` under `acts` (`tells` from revision 31; a link set's `link` may be `record`); a reference is `{"record"} | {"context"} | {"context", "facet"} | {"found"} | {"found",
 "facet"} | {"route", "column"} | (revision 44) {"given"}`; a pick's facet may be `"<link>.<facet>"`. An act holds no value on any record:
 retiring one is a safe change (10.5). A reader that doesn't know the act carries it unchanged (13.5).

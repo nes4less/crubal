@@ -13,7 +13,7 @@ import { facetJson } from "./dictionary.ts";
 import { type Recipe, readRecipes, type Step } from "./migrate.ts";
 import type { Json, JsonObject } from "./model.ts";
 import { type PackageInfo, readPackages, type Utility, type Lane, type LanePress, type Flow, type CasePress, type StopCase } from "./packages.ts";
-import { actJson, actText } from "./acts.ts";
+import { actJson, actText, whenJson, whenText } from "./acts.ts";
 import { readRules, type Rule } from "./rules.ts";
 import { type Contract, type Keys, readContracts, sha256, keyFor } from "./store.ts";
 import { type Display, emptyViewSet, type Filter, type Print, readViews, type Shape, VIEW_SET_KEYS, type View, type ViewSet } from "./views.ts";
@@ -310,7 +310,7 @@ export function flowJson(f: Flow): JsonObject {
   if (f.context.length) o.context = [...f.context];
   if (f.replaces) o.replaces = f.replaces;
   if (f.closed) o.closed = { start: f.closed.start, finish: f.closed.finish, rest: f.closed.rest, ...(f.closed.cancel ? { cancel: f.closed.cancel } : {}) };
-  o.stops = f.stops.map((st) => ({ name: st.name, ...(st.act ? { act: st.act } : {}), ...(st.of ? { of: st.of } : {}), ...(st.with?.length ? { with: st.with.map((w) => ({ facet: w.facet, value: w.value })) } : {}), ...(st.already ? { already: st.already } : {}), ...(st.cases?.length ? { cases: st.cases.map(caseJson) } : {}) }));
+  o.stops = f.stops.map((st) => ({ name: st.name, ...(st.act ? { act: st.act } : {}), ...(st.of ? { of: st.of } : {}), ...(st.with?.length ? { with: st.with.map((w) => ({ facet: w.facet, value: w.value })) } : {}), ...(st.already ? { already: st.already } : {}), ...(st.cases?.length ? { cases: st.cases.map(caseJson) } : {}), ...(st.asks?.length ? { asks: st.asks.map((q): JsonObject => ({ name: q.name, ...(q.utility ? { utility: q.utility } : {}), act: q.act, when: whenJson(q.when), ...(q.open !== undefined ? { open: q.open } : {}), ...(q.words ? { words: q.words } : {}) })) } : {}), ...(st.offers?.length ? { offers: st.offers.map((o): JsonObject => ({ ...(o.utility ? { utility: o.utility } : {}), act: o.act })) } : {}) }));
   if (f.done) o.done = { filter: f.done.filter, value: f.done.value, ...(f.done.mark ? { mark: true } : {}) };
   return o;
 }
@@ -682,6 +682,11 @@ function stopCaseText(st: JsonObject): string[] {
     if (isObj(c.no)) out.push(`        no: ${casePressText(c.no)}`);
     for (const o of Array.isArray(c.or) ? (c.or as JsonObject[]) : []) out.push(`        or: ${casePressText(o)}`);
   }
+  // Revision 48: the questions the link asks, and those it offers.
+  for (const q of Array.isArray(st.asks) ? (st.asks as JsonObject[]) : [])
+    out.push(`      asks ${q.name}: ${typeof q.utility === "string" ? `${q.utility}.` : ""}${q.act} when ${isObj(q.when) ? whenText(q.when) : ""}${typeof q.open === "string" ? ` open ${q.open}` : ""}${typeof q.words === "string" ? ` "${q.words}"` : ""}`);
+  const offers = Array.isArray(st.offers) ? (st.offers as JsonObject[]) : [];
+  if (offers.length) out.push(`      offers: ${offers.map((o) => `${typeof o.utility === "string" ? `${o.utility}.` : ""}${o.act}`).join(", ")}`);
   return out;
 }
 

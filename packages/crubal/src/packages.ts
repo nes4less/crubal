@@ -8,7 +8,7 @@ import { readContracts } from "./store.ts";
 import { type Permissions, readAccess } from "./access.ts";
 import { readViews } from "./views.ts";
 import { CrubalError, type Node, readTree } from "./tree.ts";
-import { type Act, checkActList, readAct } from "./acts.ts";
+import { type Act, type ActWhen, checkActList, readAct, readWhen, termsOf } from "./acts.ts";
 
 export type PackageInfo = {
   name: string;
@@ -143,7 +143,11 @@ export function casePress(c: Pick<StopCase, "answer" | "yes" | "no">, answer: St
   return answer === "yes" ? c.yes : answer === "no" ? c.no : undefined;
 }
 
-export type FlowStop = { name: string; act?: string; of?: string; /** Revision 41: a record that already carries the stamp is passed over, nothing written. */ already?: "ignore"; /** Revision 41: the cases the link knows beside "stamp it". */ cases?: StopCase[]; /** Revision 36: values a block's form opens with, set and locked. */ with?: { facet: string; value: string }[]; line: number };
+/** Revision 48: an act whose question a touch at the link asks. `asks`: where its `when` holds on the record
+ * touched, the record is not stamped; the act's givens are asked (with these words, opened on `open` when said)
+ * and the act run with the answer. */
+export type StopAsk = { name: string; act: string; utility?: string; when: ActWhen; open?: string; words?: string; line: number };
+export type FlowStop = { name: string; act?: string; of?: string; /** Revision 48: the questions the link asks in place of its stamp. */ asks?: StopAsk[]; /** Revision 48: acts whose question stays at hand once the link's own act has landed. */ offers?: { act: string; utility?: string }[]; /** Revision 41: a record that already carries the stamp is passed over, nothing written. */ already?: "ignore"; /** Revision 41: the cases the link knows beside "stamp it". */ cases?: StopCase[]; /** Revision 36: values a block's form opens with, set and locked. */ with?: { facet: string; value: string }[]; line: number };
 
 /**
  * A flow (12.11): an objective's line of stops, declared by the package whose lanes and forms it walks,
@@ -493,8 +497,8 @@ function readCasePress(text: string, line: number, flag: boolean): CasePress {
 }
 
 /** The lines beneath a stop (revision 41): `already: ignore`, `stranger: <answer>`, `flag <name>: <answer> when any <lane> where <facet> = record`, each case with its presses beneath. */
-function readStopCases(st: Node, stop: string, link: boolean): { already?: "ignore"; cases?: StopCase[] } {
-  const out: { already?: "ignore"; cases?: StopCase[] } = {};
+function readStopCases(st: Node, stop: string, link: boolean): { already?: "ignore"; cases?: StopCase[]; asks?: StopAsk[]; offers?: { act: string; utility?: string }[] } {
+  const out: { already?: "ignore"; cases?: StopCase[]; asks?: StopAsk[]; offers?: { act: string; utility?: string }[] } = {};
   for (const c of st.children) {
     const text = c.text.trim();
     if (!text) continue;
@@ -503,6 +507,24 @@ function readStopCases(st: Node, stop: string, link: boolean): { already?: "igno
     if (al) {
       if (al[1] !== "ignore" && al[1] !== "stamp") throw new CrubalError(`already is ignore or stamp, not ${al[1]}`, c.line);
       if (al[1] === "ignore") out.already = "ignore";
+      continue;
+    }
+    // Revision 48: `asks <name>: [<utility>.]<act> when <when> [open <value>] ["words"]` and `offers: <act>[, …]`.
+    const ak = text.match(/^asks\s+([a-z][\w-]*):\s*(?:([a-z][\w-]*)\.)?([a-z][\w-]*)\s+when\s+(.+?)(?:\s+open\s+([^\s"]+))?(?:\s+"([^"]+)")?$/);
+    if (ak) {
+      if (out.asks?.some((x) => x.name === ak[1])) throw new CrubalError(`the stop ${stop} asks ${ak[1]} twice`, c.line);
+      (out.asks ??= []).push({ name: ak[1] as string, ...(ak[2] ? { utility: ak[2] } : {}), act: ak[3] as string, when: readWhen(ak[4] as string, c.line), ...(ak[5] ? { open: ak[5] } : {}), ...(ak[6] ? { words: ak[6] } : {}), line: c.line });
+      continue;
+    }
+    const of = text.match(/^offers:\s*(.+)$/);
+    if (of) {
+      if (out.offers) throw new CrubalError(`the stop ${stop} says offers twice`, c.line);
+      out.offers = (of[1] as string).split(",").map((x) => x.trim()).filter(Boolean).map((x) => {
+        const o = x.match(/^(?:([a-z][\w-]*)\.)?([a-z][\w-]*)$/);
+        if (!o) throw new CrubalError(`offers names acts, "<act>" or "<utility>.<act>": ${x}`, c.line);
+        return { ...(o[1] ? { utility: o[1] } : {}), act: o[2] as string };
+      });
+      if (!out.offers.length) throw new CrubalError(`the stop ${stop} offers nothing`, c.line);
       continue;
     }
     const m = text.match(/^(?:(stranger)|flag\s+([a-z][\w-]*)):\s*(\S+)(?:\s+when\s+any\s+([a-z][\w-]*)\s+where\s+([a-z][\w:-]*)\s*=\s*record)?$/);
@@ -832,6 +854,20 @@ function checkFlowList(flows: Flow[], env: FlowEnv): void {
       for (const w of st.with ?? []) {
         const facet = dict.facets.get(w.facet.split("::").pop() as string);
         if (!facet && strict) throw new CrubalError(`${where}'s stop ${st.name} locks ${w.facet}, which isn't a facet ${here}`, st.line);
+      }
+      // Revision 48: an ask's and an offer's act is the flow's utility's or a named one's; an ask's when reads
+      // the record touched alone.
+      for (const q of [...(st.asks ?? []).map((x) => ({ ...x, what: `asks ${x.name}` })), ...(st.offers ?? []).map((x) => ({ ...x, what: "offers", line: st.line, when: undefined as ActWhen | undefined }))]) {
+        const what = `${where}'s stop ${st.name} ${q.what}`;
+        const u = q.utility ? env.utilities.find((x) => x.name === q.utility) : utility;
+        if (q.utility && !u && strict) throw new CrubalError(`${what}: the utility ${q.utility} ${lacks}`, q.line);
+        if (u && !u.acts.some((x) => x.name === q.act)) throw new CrubalError(`${what}: ${q.act} isn't among ${u.name}'s acts`, q.line);
+        for (const t of termsOf(q.when)) {
+          if ("count" in t) throw new CrubalError(`${what}: a link's when reads the record touched, not a count`, q.line);
+          if (!("ref" in t)) continue;
+          if (!("record" in t.ref) || !t.ref.record) throw new CrubalError(`${what}: a link's when reads record.<facet>, the record touched`, q.line);
+          if (!dict.facets.get(t.ref.record.split("::").pop() as string) && strict) throw new CrubalError(`${what}: ${t.ref.record} isn't a facet ${here}`, q.line);
+        }
       }
       // Revision 41: a case's flag names a lane and a link facet to the stop's records; its presses name acts of
       // the flow's utility, or another utility's by its name. What this file cannot see waits for the check in force.

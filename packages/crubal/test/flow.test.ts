@@ -408,6 +408,42 @@ test("revision 41: a link's cases are refused when malformed or naming what is n
 });
 
 // Revision 42: a closed set.
+// Revision 48: the questions a link asks and offers.
+const asking = flow.replace(
+  "    ordersToPick -> pick\n",
+  `    ordersToPick -> pick
+      asks many: pack when record.lineCount > 1 "How many did you pick?"
+      asks none: pack when record.lineCount <= 0 and no record.buyer open 1
+      offers: pack
+`,
+);
+const counted = (tail: string) => shop(tail).replace("buyer$\n", "buyer$\nlineCount#\n");
+
+test("revision 48: a link says the questions it asks in place of its stamp, each an act's under a when over the record touched, and the acts it offers; read, carried, printed back; refused when malformed or naming what is not there", () => {
+  assert.notEqual(asking, flow);
+  checkPackages(counted(asking));
+  const st = readPackages(counted(asking))[0]?.flows[0]?.stops[1];
+  assert.deepEqual(st?.asks?.map((q) => [q.name, q.act, q.open, q.words, q.when.and?.length]), [["many", "pack", undefined, "How many did you pick?", undefined], ["none", "pack", "1", undefined, 1]]);
+  assert.deepEqual(st?.offers, [{ act: "pack" }]);
+  const b = bundleOf(parsePackage(counted(asking)));
+  const text = printBundle(b);
+  assert.match(text, /^ {6}asks many: pack when record\.lineCount > 1 "How many did you pick\?"$/m);
+  assert.match(text, /^ {6}asks none: pack when record\.lineCount <= 0 and no record\.buyer open 1$/m);
+  assert.match(text, /^ {6}offers: pack$/m);
+  assert.equal(serialize(bundleOf(readBundle(b))), serialize(b));
+  assert.doesNotMatch(printBundle(bundleOf(parsePackage(shop(flow)))), /asks |offers:/);
+  const no = (from: string, to: string, why: RegExp) => {
+    const t = asking.replace(from, to);
+    assert.notEqual(t, asking, from);
+    assert.throws(() => checkPackages(counted(t)), (e: unknown) => e instanceof CrubalError && why.test(e.message), from);
+  };
+  no("asks none: pack", "asks many: pack", /asks many twice/);
+  no("asks many: pack when", "asks many: refund when", /asks many: refund isn't among orders's acts/);
+  no("offers: pack", "offers: refund", /offers: refund isn't among orders's acts/);
+  no("record.lineCount > 1", "record.nope > 1", /record\.nope isn't a facet|nope isn't a facet/);
+  no("record.lineCount > 1", "context.order.lineCount > 1", /a link's when reads record\.<facet>/);
+});
+
 const third = `lane: ordersToShip /2026-11-05
   label: Orders to ship
   utility: orders

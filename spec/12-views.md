@@ -707,6 +707,32 @@ each `<word>` or `<word> -> <act>[, <act>…]`. An act is the flow's utility's, 
 flag's `when` found. The acts run in order and the first refusal stops them. A press with no act does
 nothing: the record is left as it was. A case whose press does not name the link's own act does not stamp.
 
+**The questions a link asks (revision 48).** An act may be given a value by the person pressing it (15.1,
+revision 44). A link says when a touch asks for one, so "one is just seen, several are counted" is read from
+the flow and not from an app:
+
+```crubal
+    unitsExpected -> seen
+      asks count: tally when record.qty > 1 "How many are there?"
+      asks reUp: tally when record.qty <= 0 open 1 "None on hand. How many are there?"
+      offers: tally
+```
+
+- **`asks <name>: <act> when <when> [open <value>] ["words"]`**: where the `when` holds on the record
+  touched, the record is **not** stamped. The app asks for what the act is given, with these words when said
+  (else the given's own), opened on `open` when said (else on the given's `from`), and runs the act with the
+  answer. The asks are read in the order written, after the stranger and the flags, and the first that holds
+  is asked. The `when` is an act's (15.1) and reads only `record.<facet>`, the record touched.
+- **`offers: <act>[, <act>…]`**: once the link's own act has landed on a record, these acts' questions stay
+  at hand for it, opened as they open, so a person who sees more than was expected says so without a second
+  touch. Nothing is asked.
+
+An act is the flow's utility's, or another's as `<utility>.<act>`. An ask does not stamp: what its act writes
+is its own. A package MUST be refused at publish when a stop asks one name twice, says `offers` twice or
+offers nothing, an ask or an offer names an act its utility lacks or a utility not in force, or an ask's
+`when` reads anything but `record.<facet>` or a facet the package lacks. In the JSON form a stop carries
+`"asks": [{"name", "utility", "act", "when", "open", "words"}]` and `"offers": [{"utility", "act"}]`.
+
 The engine reads, checks, carries and prints the cases; the app finds which case a touch meets, asks or
 answers, and runs the presses. A package MUST be refused at publish when a stop with no act carries a case,
 an answer is not `ask`, `yes` or `no`, a case lacks its `yes` or its `no` or offers one word twice, a stop
