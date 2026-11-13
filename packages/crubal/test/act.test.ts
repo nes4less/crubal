@@ -576,6 +576,73 @@ test("revision 44: an act says what it is given, each typed by a facet; the ques
 
 // ─── Revision 31: a kind's follow aspects, an act's tells, the post it lands when followed ───────────────────────────
 
+const computes = `act: recount /2026-11-16
+  utility: bench
+  label: Count
+  on: container
+  given:
+    count as containerCapacity "How many are there?" from record.containerCapacity
+  make:
+    moved -> unit when given.count != record.containerCapacity and record.containerCapacity > 0
+      filedIn -> link record
+      filedSlot -> given.count - record.containerCapacity
+      filedBox -> counted
+    again -> unit when record.containerCapacity <= 0 and given.count > 0
+      filedIn -> link record
+      filedSlot -> given.count
+      filedBox -> "made again"
+  set:
+    containerCapacity -> given.count
+  then:
+    when given.count != record.containerCapacity set record.containerSlot = record.containerSlot + 1
+`;
+
+test("revision 45: a set or a then adds or takes one number from another; a when says `!=` and joins comparisons with `and`; a then writes on the record in hand; an act makes records when it lands, each under its own when; read, checked, carried, printed back; refused where a name is taken or a facet unknown", () => {
+  const src = bench(file + label + computes).replace("acts: file, label", "acts: file, label, recount");
+  const [info] = readPackages(src);
+  const a = info?.acts.find((x) => x.name === "recount") as NonNullable<ReturnType<typeof readPackages>[number]["acts"][number]>;
+  assert.deepEqual(a.makes?.map((m) => [m.name, m.kind, m.when?.op, m.when?.and?.length, m.sets.length]), [["moved", "unit", "!=", 1, 3], ["again", "unit", "<=", 1, 3]]);
+  assert.deepEqual(a.makes?.[0]?.sets[1]?.source, { sum: { left: { given: "count" }, op: "-", right: { record: "containerCapacity" } } });
+  assert.deepEqual(a.thens[0]?.sets[0], { found: "record", facet: "containerSlot", value: { sum: { left: { record: "containerSlot" }, op: "+", right: { number: 1 } } } });
+  checkPackages(src);
+  const bundle = bundleOf(parsePackage(src));
+  const text = printBundle(bundle);
+  assert.match(text, /^  make:\n    moved -> unit when given\.count != record\.containerCapacity and record\.containerCapacity > 0\n      filedIn -> link record\n      filedSlot -> given\.count - record\.containerCapacity\n      filedBox -> counted$/m);
+  assert.match(text, /^    when given\.count != record\.containerCapacity set record\.containerSlot = record\.containerSlot \+ 1$/m);
+  assert.equal(serialize(bundleOf(parsePackage(text))), serialize(bundle), "the printed text reads back to the same bundle");
+  const at = (capacity: string | undefined, slot?: string) => ({ record: { id: "C-1", values: { ...(capacity === undefined ? {} : { containerCapacity: capacity }), ...(slot ? { containerSlot: slot } : {}) } } as ActRecord, context: {}, found: {}, now: "N" });
+  // Three expected, two counted: one made, the difference signed, read as the record stood; the counter raised from nothing.
+  assert.deepEqual(actWrites(a, { ...at("3"), given: { count: "2" } }), {
+    ok: true,
+    record: { containerCapacity: "2", containerSlot: "1" },
+    clear: [],
+    then: [],
+    makes: [{ name: "moved", kind: "unit", values: { filedIn: { $link: "C-1" }, filedSlot: "-1", filedBox: "counted" } }],
+    sends: [],
+  });
+  // The same count: the quantity is written as it was, nothing is made and the counter stands.
+  const same = actWrites(a, { ...at("3", "4"), given: { count: "3" } });
+  assert.deepEqual(same.ok && [same.record, same.makes], [{ containerCapacity: "3" }, []]);
+  // None on hand and some found: the other make, and the counter one more than it held.
+  const again = actWrites(a, { ...at("0", "4"), given: { count: "5" } });
+  assert.deepEqual(again.ok && [again.record, again.makes], [{ containerCapacity: "5", containerSlot: "5" }, [{ name: "again", kind: "unit", values: { filedIn: { $link: "C-1" }, filedSlot: "5", filedBox: "made again" } }]]);
+  // A term of a when that reads no number holds nowhere: nothing made where the record holds no count.
+  const bareBox = actWrites(a, { ...at(undefined), given: { count: "5" } });
+  assert.deepEqual(bareBox.ok && bareBox.makes, []);
+  // A sum over what is no number refuses the act before any write.
+  assert.deepEqual(actWrites(a, { ...at("3", "A"), given: { count: "2" } }), { ok: false, why: "record.containerSlot holds no number to add" });
+  // A literal that reads like a sum is written quoted and stays words.
+  const lit = readPackages(bench(file + label + computes.replace("filedBox -> counted", 'filedBox -> "record.x - 1"')).replace("acts: file, label", "acts: file, label, recount"))[0]?.acts.find((x) => x.name === "recount");
+  assert.deepEqual(lit?.makes?.[0]?.sets[2]?.source, { literal: "record.x - 1" });
+  const no = (from: string, to: string, why: RegExp) => assert.throws(() => checkPackages(bench(file + label + computes.replace(from, to)).replace("acts: file, label", "acts: file, label, recount")), (e: unknown) => e instanceof CrubalError && why.test(e.message), String(why));
+  no("again -> unit", "moved -> unit", /makes moved, a name already taken/);
+  no("moved -> unit when", "moved -> gizmo when", /makes gizmo, which isn't a kind/);
+  no("filedSlot -> given.count - record.containerCapacity", "filedSlot -> given.count - record.nope", /reads nope, which isn't a facet/);
+  no("filedSlot -> given.count\n", "filedSlot -> given.other\n", /reads given\.other, which its given lacks/);
+  no("set record.containerSlot = record.containerSlot + 1", "set record.nope = 1", /then sets nope, which isn't a facet/);
+  no('      filedBox -> "made again"\n', '      filedBox -> "made again"\n      filedBox -> twice\n', /make again sets filedBox twice/);
+});
+
 const feed = (tail: string) => `package: feed /2026-11-12
   owner: shop.example
   crubal: 2

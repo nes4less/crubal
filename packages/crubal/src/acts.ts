@@ -33,7 +33,12 @@ export type ActSeries = { prefix: ActRef | { literal: string }; in: { kind: stri
 
 /** What a set writes: a literal, a link to a found or context record, a reference's value, the moment, or the
  * next in a series. */
-export type ActSource = { literal: string } | { link: string } | { now: true } | { caller: true } | { none: true } | { owner: true } | { run: true } | { next: ActSeries } | ActRef;
+export type ActSource = { literal: string } | { link: string } | { now: true } | { caller: true } | { none: true } | { owner: true } | { run: true } | { next: ActSeries } | { sum: ActSum } | ActRef;
+
+/** Revision 45: one number added to or taken from another, each a reference or a number (`given.count - record.qty`,
+ * `record.movedCount + 1`). A reference that holds nothing reads as 0; one that holds no number refuses the act. */
+export type ActOperand = { number: number } | ActRef;
+export type ActSum = { left: ActOperand; op: "+" | "-"; right: ActOperand };
 
 export type ActSet = { facet: string; source: ActSource; line: number };
 
@@ -70,11 +75,18 @@ export type ActCount = { name: string; kind: string; where: ActPick[]; line: num
 /** A term of a `when`: a reference or a count's name, with an optional number added, or a number. */
 export type ActTerm = { ref: ActRef; plus?: number } | { count: string; plus?: number } | { number: number };
 /** What a then writes on a found record (revision 39: a link, a value copied or the facet cleared, as a set's). */
-export type ActThenValue = { literal: string } | { now: true } | { none: true } | { link: string } | { caller: true } | ActRef;
+export type ActThenValue = { literal: string } | { now: true } | { none: true } | { link: string } | { caller: true } | { sum: ActSum } | ActRef;
+/** One comparison of a `when`. */
+export type ActCond = { left: ActTerm; op: "=" | "!=" | "<" | ">" | "<=" | ">="; right: ActTerm };
+/** A `when`: its first comparison, and (revision 45) those joined to it by `and`, all of which must hold. */
+export type ActWhen = ActCond & { and?: ActCond[] };
+/** Revision 45: a record the act makes when it lands, whatever its finds answered: `<name> -> <kind> [when …]`,
+ * its set lines beneath as a mint's. */
+export type ActMake = { name: string; kind: string; when?: ActWhen; sets: ActSet[]; line: number };
 export type ActThenSet = { found: string; facet: string; value: ActThenValue };
 export type ActThen = {
   /** Absent (revision 39): the writes are made whenever the act lands. */
-  when?: { left: ActTerm; op: "=" | "<" | ">" | "<=" | ">="; right: ActTerm };
+  when?: ActWhen;
   sets: ActThenSet[];
   /** Revision 26: a send run only when the condition held. */
   send?: { verb: string; words: string };
@@ -111,6 +123,8 @@ export type Act = {
   counts: ActCount[];
   sets: ActSet[];
   thens: ActThen[];
+  /** Revision 45: the records the act makes when it lands. */
+  makes?: ActMake[];
   /** A transport verb the app provides and the words after it, carried unchanged. */
   send?: { verb: string; words: string };
   /** When the act counts as landed: at once, or when its send reports. */
@@ -201,6 +215,18 @@ function readRoute(text: string, line: number): ActRoute {
   };
 }
 
+/** Revision 45: `<ref|number> + <ref|number>` or `-`, at least one a reference; anything else is not a sum. */
+function readSum(t: string, line: number, routes: Set<string>): ActSum | undefined {
+  const m = t.match(/^(\S+)\s+([+-])\s+(\S+)$/);
+  if (!m) return undefined;
+  const num = (x: string) => /^\d+(?:\.\d+)?$/.test(x);
+  const a = m[1] as string;
+  const b = m[3] as string;
+  if (!(num(a) || isRef(a)) || !(num(b) || isRef(b)) || (num(a) && num(b))) return undefined;
+  const operand = (x: string): ActOperand => (num(x) ? { number: Number(x) } : readRef(x, line, "a sum", routes));
+  return { left: operand(a), op: m[2] as "+" | "-", right: operand(b) };
+}
+
 /** `filedIn -> link box`, `filedBox -> box.containerLabel`, `filedAt -> now`, `note -> "words"`,
  * `containerLabel -> next slot.boxPrefix in container.containerLabel, slot.boxSuffix` */
 function readSet(text: string, line: number, routes: Set<string>): ActSet {
@@ -231,6 +257,8 @@ function readSet(text: string, line: number, routes: Set<string>): ActSet {
       line,
     };
   }
+  const sum = readSum(src, line, routes);
+  if (sum) return { facet, source: { sum }, line };
   if (isRef(src)) return { facet, source: readRef(src, line, "a set", routes), line };
   return { facet, source: { literal: unquote(src) }, line };
 }
@@ -246,12 +274,23 @@ function readTerm(t: string, line: number, routes: Set<string>, counts: Set<stri
   return { ref: readRef(word, line, "a when", routes), ...plus };
 }
 
+/** `given.count != record.qty and record.qty > 0` (revision 45: `!=`, and comparisons joined by `and`). */
+function readWhen(text: string, line: number, routes: Set<string>, counts: Set<string>): ActWhen {
+  const conds = text.split(/\s+and\s+/).map((c): ActCond => {
+    const m = c.trim().match(/^(.+?)\s*(<=|>=|!=|=|<|>)\s*(.+)$/);
+    if (!m) throw new CrubalError(`a when is "<term> <op> <term>", joined by "and": ${c.trim()}`, line);
+    return { left: readTerm((m[1] as string).trim(), line, routes, counts), op: m[2] as ActCond["op"], right: readTerm((m[3] as string).trim(), line, routes, counts) };
+  });
+  const [first, ...rest] = conds as [ActCond, ...ActCond[]];
+  return { ...first, ...(rest.length ? { and: rest } : {}) };
+}
+
 /** `when box.containerCount + 1 >= box.capacity set box.containerState = full, box.filledAt = now send notify containerFull about context.station` */
 function readThen(text: string, line: number, routes: Set<string>, counts: Set<string>): ActThen {
   // Revision 39: the condition may be left out (`set box.containerState = open`).
-  const m = text.match(/^(?:when\s+(.+?)\s*(<=|>=|=|<|>)\s*(.+?)\s+)?set\s+(.+?)(?:\s+send\s+([a-z][\w-]*)(?:\s+(.*))?)?$/);
-  if (!m) throw new CrubalError(`a then is "[when <term> <op> <term>] set <found>.<facet> = <value>[, …] [send <verb> <words>]": ${text}`, line);
-  const sets = (m[4] as string)
+  const m = text.match(/^(?:when\s+(.+?)\s+)?set\s+(.+?)(?:\s+send\s+([a-z][\w-]*)(?:\s+(.*))?)?$/);
+  if (!m) throw new CrubalError(`a then is "[when <term> <op> <term> [and …]] set <found>.<facet> = <value>[, …] [send <verb> <words>]": ${text}`, line);
+  const sets = (m[2] as string)
     .split(/,\s*(?=[\w-]+\.\w+\s*=)/)
     .map((s) => s.trim())
     .filter(Boolean)
@@ -260,13 +299,14 @@ function readThen(text: string, line: number, routes: Set<string>, counts: Set<s
       if (!sm) throw new CrubalError(`a then's set is "<found>.<facet> = <value>": ${s}`, line);
       const v = (sm[3] as string).trim();
       const link = v.match(/^link\s+([\w-]+)$/);
-      const value: ActThenValue = v === "now" ? { now: true } : v === "none" ? { none: true } : link ? (link[1] === "caller" ? { caller: true } : { link: link[1] as string }) : isRef(v) ? readRef(v, line, "a then", routes) : { literal: unquote(v) };
+      const sum = readSum(v, line, routes);
+      const value: ActThenValue = v === "now" ? { now: true } : v === "none" ? { none: true } : link ? (link[1] === "caller" ? { caller: true } : { link: link[1] as string }) : sum ? { sum } : isRef(v) ? readRef(v, line, "a then", routes) : { literal: unquote(v) };
       return { found: sm[1] as string, facet: sm[2] as string, value };
     });
   return {
-    ...(m[1] !== undefined ? { when: { left: readTerm((m[1] as string).trim(), line, routes, counts), op: m[2] as NonNullable<ActThen["when"]>["op"], right: readTerm((m[3] as string).trim(), line, routes, counts) } } : {}),
+    ...(m[1] !== undefined ? { when: readWhen(m[1] as string, line, routes, counts) } : {}),
     sets,
-    ...(m[5] ? { send: { verb: m[5], words: (m[6] ?? "").trim() } } : {}),
+    ...(m[3] ? { send: { verb: m[3], words: (m[4] ?? "").trim() } } : {}),
     line,
   };
 }
@@ -337,6 +377,17 @@ export function readAct(node: Node): Act {
         f.mint = { kind: m[2] as string, sets: l.children.filter((s) => s.text.trim()).map((s) => readSet(s.text.trim(), s.line, routes)), line: l.line };
         if (!f.mint.sets.length) throw new CrubalError(`the mint ${m[1]} sets nothing: its set lines go beneath it`, l.line);
       }
+    } else if (c.key === "make") {
+      // Revision 45: `<name> -> <kind> [when …]`, its set lines beneath: a record made when the act lands.
+      for (const l of c.children) {
+        if (!l.text.trim()) continue;
+        const m = l.text.trim().match(/^([\w-]+)\s*->\s*([\w-]+)(?:\s+when\s+(.+))?$/);
+        if (!m || !WORD.test(m[1] as string)) throw new CrubalError(`a make is "<name> -> <kind> [when <term> <op> <term> [and …]]", its set lines beneath: ${l.text.trim()}`, l.line);
+        const make: ActMake = { name: m[1] as string, kind: m[2] as string, ...(m[3] ? { when: readWhen(m[3], l.line, routes, countNames) } : {}), sets: l.children.filter((x) => x.text.trim()).map((x) => readSet(x.text.trim(), x.line, routes)), line: l.line };
+        if (!make.sets.length) throw new CrubalError(`the make ${make.name} sets nothing: its set lines go beneath it`, l.line);
+        (a.makes ??= []).push(make);
+      }
+      if (!a.makes?.length) throw new CrubalError(`the act ${name} makes nothing: its lines go beneath make:`, c.line);
     } else if (c.key === "set") for (const l of c.children) { if (l.text.trim()) a.sets.push(readSet(l.text.trim(), l.line, routes)); }
     else if (c.key === "then") for (const l of c.children) { if (l.text.trim()) a.thens.push(readThen(l.text.trim(), l.line, routes, countNames)); }
     else if (c.key === "send") {
@@ -353,7 +404,7 @@ export function readAct(node: Node): Act {
       if (a.tells) throw new CrubalError(`the act ${name} tells twice`, c.line);
       a.tells = { kind: m[1] as string, aspect: m[2] as string, sets: c.children.filter((l) => l.text.trim()).map((l) => readSet(l.text.trim(), l.line, routes)), line: c.line };
       if (!a.tells.sets.length) throw new CrubalError(`the act ${name} tells ${m[1]} and sets nothing: its set lines go beneath tells:`, c.line);
-    } else throw new CrubalError(`an act has utility, replaces, label, describe, on, takes, context, needs, given, route, find, mint, count, set, then, send, lands and tells, not ${c.key}`, c.line);
+    } else throw new CrubalError(`an act has utility, replaces, label, describe, on, takes, context, needs, given, route, find, mint, count, make, set, then, send, lands and tells, not ${c.key}`, c.line);
   }
   if (!a.utility) throw new CrubalError(`the act ${name} names no utility`, node.line);
   if (!a.on) throw new CrubalError(`the act ${name} says no on: the level it acts on`, node.line);
@@ -384,6 +435,9 @@ export type ActEnv = {
 };
 
 const bare = (facet: string) => facet.replace(/^\w+::/, "");
+
+/** Every term a `when` reads, its `and`s among them. */
+const termsOf = (w: ActWhen | undefined): ActTerm[] => (w ? [w, ...(w.and ?? [])].flatMap((c) => [c.left, c.right]) : []);
 
 /** `of` is a record's parent (1.1), no facet: it may stand where a facet may (a pick's facet, `record.of`, a
  * route's `over`) and the dictionary is never asked for it. */
@@ -474,6 +528,9 @@ export function checkActList(acts: Act[], env: ActEnv): void {
         picksOk(r.keep.where, "'s count", true);
       }
     }
+    const sumOk = (sum: ActSum, line: number) => {
+      for (const o of [sum.left, sum.right]) if (!("number" in o)) refOk(o, line);
+    };
     const sourceOk = (s: ActSet, doing: string) => {
       needFacet(s.facet, s.line, doing);
       const src = s.source;
@@ -484,11 +541,13 @@ export function checkActList(acts: Act[], env: ActEnv): void {
         if (src.next.suffix) refOk(src.next.suffix, s.line);
         if (!env.kinds.has(src.next.in.kind) && !env.levels.has(src.next.in.kind) && strict) throw new CrubalError(`${where} numbers ${s.facet} in ${src.next.in.kind}, which isn't a kind ${here}`, s.line);
         needFacet(src.next.in.facet, s.line, "numbers by");
-      } else if (!("literal" in src) && !("now" in src) && !("caller" in src) && !("none" in src) && !("owner" in src) && !("run" in src)) refOk(src, s.line);
+      } else if ("sum" in src) sumOk(src.sum, s.line);
+      else if (!("literal" in src) && !("now" in src) && !("caller" in src) && !("none" in src) && !("owner" in src) && !("run" in src)) refOk(src, s.line);
     };
     for (const f of a.finds) {
       if (found.has(f.name)) throw new CrubalError(`${where} finds ${f.name} twice`, f.line);
       if (f.name === "given") throw new CrubalError(`${where} finds given, the word for what an act is given`, f.line);
+      if (f.name === "record") throw new CrubalError(`${where} finds record, the word for the record in hand`, f.line);
       if (f.name === routeName) throw new CrubalError(`${where} finds ${f.name}, its route's name`, f.line);
       if (!env.kinds.has(f.kind) && !env.levels.has(f.kind) && strict) throw new CrubalError(`${where} finds ${f.kind}, which isn't a kind ${here}`, f.line);
       picksOk(f.where, `'s find ${f.name}`);
@@ -529,18 +588,36 @@ export function checkActList(acts: Act[], env: ActEnv): void {
       }
     }
     for (const n of a.needs ?? []) for (const part of n.facet.split(".")) needFacet(part, n.line, "needs");
-    for (const t of a.thens) {
-      for (const term of t.when ? [t.when.left, t.when.right] : []) {
-        if ("ref" in term) refOk(term.ref, t.line);
-        if ("count" in term && !counted.has(term.count)) throw new CrubalError(`${where} reads ${term.count}, which no count declares`, t.line);
+    const whenOk = (w: ActWhen | undefined, line: number) => {
+      for (const term of termsOf(w)) {
+        if ("ref" in term) refOk(term.ref, line);
+        if ("count" in term && !counted.has(term.count)) throw new CrubalError(`${where} reads ${term.count}, which no count declares`, line);
       }
+    };
+    const made = new Set<string>();
+    for (const m of a.makes ?? []) {
+      if (made.has(m.name) || found.has(m.name) || counted.has(m.name) || m.name === routeName || m.name === "given" || m.name === "record") throw new CrubalError(`${where} makes ${m.name}, a name already taken`, m.line);
+      made.add(m.name);
+      if (!env.kinds.has(m.kind) && !env.levels.has(m.kind) && strict) throw new CrubalError(`${where} makes ${m.kind}, which isn't a kind ${here}`, m.line);
+      whenOk(m.when, m.line);
+      const set = new Set<string>();
+      for (const s of m.sets) {
+        if (set.has(s.facet)) throw new CrubalError(`${where}'s make ${m.name} sets ${s.facet} twice`, s.line);
+        set.add(s.facet);
+        sourceOk(s, "makes with");
+      }
+    }
+    for (const t of a.thens) {
+      whenOk(t.when, t.line);
       for (const s of t.sets) {
-        if (!found.has(s.found)) throw new CrubalError(`${where} then sets ${s.found}, which no find declares`, t.line);
+        // Revision 45: a then may write on the record in hand, `record.<facet>`.
+        if (s.found !== "record" && !found.has(s.found)) throw new CrubalError(`${where} then sets ${s.found}, which no find declares`, t.line);
         needFacet(s.facet, t.line, "then sets");
         const v = s.value;
         if ("link" in v) {
           if (v.link !== "record" && !found.has(v.link) && !a.context.includes(v.link)) throw new CrubalError(`${where} then links ${s.found}.${s.facet} to ${v.link}, which no find or context declares`, t.line);
-        } else if (!("literal" in v) && !("now" in v) && !("none" in v) && !("caller" in v)) refOk(v, t.line);
+        } else if ("sum" in v) sumOk(v.sum, t.line);
+        else if (!("literal" in v) && !("now" in v) && !("none" in v) && !("caller" in v)) refOk(v, t.line);
       }
     }
   }
@@ -589,6 +666,9 @@ export type ActWrites =
       clear: string[];
       /** Each found record's writes; `clear` (revision 39) the facets a then gives back, taken off as the record's are. */
       then: { id: string; values: JsonObject; clear?: string[] }[];
+      /** Revision 45: the records to make, in the order written, for the host to make in the act's own entry;
+       * present where the act declares a make. */
+      makes?: { name: string; kind: string; values: JsonObject }[];
       sends: { verb: string; words: string }[];
     }
   | { ok: false; why: string };
@@ -617,6 +697,33 @@ const numberOf = (t: ActTerm, i: ActInput): number | undefined => {
   const v = valueOf(t.ref, i);
   const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : Number.NaN;
   return Number.isFinite(n) ? n + (t.plus ?? 0) : undefined;
+};
+
+/** Revision 45: a sum's value. A reference that holds nothing reads as 0; one that holds no number refuses. */
+const sumValue = (sum: ActSum, i: ActInput): { ok: true; value: string } | { ok: false; why: string } => {
+  const read = (o: ActOperand): number | string => {
+    if ("number" in o) return o.number;
+    const v = valueOf(o, i);
+    if (v === undefined || v === null || v === "") return 0;
+    const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : Number.NaN;
+    return Number.isFinite(n) ? n : `${refText(o)} holds no number to ${sum.op === "+" ? "add" : "take from"}`;
+  };
+  const l = read(sum.left);
+  if (typeof l === "string") return { ok: false, why: l };
+  const r = read(sum.right);
+  if (typeof r === "string") return { ok: false, why: r };
+  return { ok: true, value: String(Number((sum.op === "+" ? l + r : l - r).toFixed(6))) };
+};
+
+/** Whether a `when` holds as the input stands: every comparison of it. A term that reads no number holds nowhere. */
+const whenHolds = (when: ActWhen | undefined, on: ActInput): boolean => {
+  if (!when) return true;
+  return [when, ...(when.and ?? [])].every((c) => {
+    const l = numberOf(c.left, on);
+    const r = numberOf(c.right, on);
+    if (l === undefined || r === undefined) return false;
+    return c.op === "=" ? l === r : c.op === "!=" ? l !== r : c.op === "<" ? l < r : c.op === ">" ? l > r : c.op === "<=" ? l <= r : l >= r;
+  });
 };
 
 const asWords = (v: Json | undefined): string => (v === undefined || v === null ? "" : typeof v === "object" ? (typeof (v as JsonObject).$link === "string" ? String((v as JsonObject).$link) : JSON.stringify(v)) : String(v));
@@ -709,6 +816,7 @@ const sourceValue = (s: ActSet, i: ActInput): { ok: true; value: Json | undefine
     if (!id) return { ok: false, why: `nothing to link ${s.facet} to: ${src.link}` };
     return { ok: true, value: { $link: id } };
   }
+  if ("sum" in src) return sumValue(src.sum, i);
   if ("next" in src) {
     const prefix = ("literal" in src.next.prefix ? src.next.prefix.literal : asWords(valueOf(src.next.prefix, i))).trim();
     if (!prefix) return { ok: false, why: `no prefix to number ${s.facet} by` };
@@ -818,16 +926,10 @@ export function actWrites(a: Act, i: ActInput): ActWrites {
   const sends: { verb: string; words: string }[] = [];
   for (const t of a.thens) {
     const when = t.when;
-    const holdsOn = (on: ActInput): boolean => {
-      if (!when) return true;
-      const l = numberOf(when.left, on);
-      const r = numberOf(when.right, on);
-      if (l === undefined || r === undefined) return false;
-      return when.op === "=" ? l === r : when.op === "<" ? l < r : when.op === ">" ? l > r : when.op === "<=" ? l <= r : l >= r;
-    };
+    const holdsOn = (on: ActInput): boolean => whenHolds(when, on);
     // Revision 42: a term that reads a found record the then writes on is read on each of those records, and
     // the write is made on those where it holds. Any other condition is read once, as it always was.
-    const reads = new Set((when ? [when.left, when.right] : []).flatMap((x) => ("ref" in x && "found" in x.ref ? [x.ref.found] : [])));
+    const reads = new Set(termsOf(when).flatMap((x) => ("ref" in x && "found" in x.ref ? [x.ref.found] : [])));
     const each = t.sets.some((s) => reads.has(s.found));
     let held = each ? false : holdsOn(i);
     if (!each && !held) continue;
@@ -845,8 +947,24 @@ export function actWrites(a: Act, i: ActInput): ActWrites {
         const id = v.link === "record" ? i.record.id : (i.found[v.link]?.[0]?.id ?? i.context[v.link]?.id);
         if (!id) return { ok: false, why: `nothing to link ${s.found}.${s.facet} to: ${v.link}` };
         value = { $link: id };
+      } else if ("sum" in v) {
+        const n = sumValue(v.sum, i);
+        if (!n.ok) return n;
+        value = n.value;
       } else value = valueOf(v, i);
       const k = bare(s.facet);
+      // Revision 45: `record.<facet>` writes on the record in hand, over what its sets wrote.
+      if (s.found === "record") {
+        if ("none" in v) {
+          delete record[k];
+          if (!clear.includes(k)) clear.push(k);
+        } else if (value !== undefined) {
+          record[k] = value;
+          const at = clear.indexOf(k);
+          if (at >= 0) clear.splice(at, 1);
+        }
+        continue;
+      }
       for (const rec of i.found[s.found] ?? []) {
         if (each) {
           if (!holdsOn(reads.has(s.found) ? { ...i, found: { ...i.found, [s.found]: [rec] } } : i)) continue;
@@ -876,7 +994,19 @@ export function actWrites(a: Act, i: ActInput): ActWrites {
       if (k in t.values && rec && held(rec, k)) return { ok: false, why: `${k} is taken on ${t.id}: a mark is set once` };
     }
   }
-  return { ok: true, record, clear, then, sends };
+  // Revision 45: the records made, each read as the record in hand stood before the act's writes.
+  const makes: { name: string; kind: string; values: JsonObject }[] = [];
+  for (const m of a.makes ?? []) {
+    if (!whenHolds(m.when, i)) continue;
+    const values: JsonObject = {};
+    for (const s of m.sets) {
+      const v = sourceValue(s, i);
+      if (!v.ok) return v;
+      if (v.value !== undefined && v.value !== "") values[bare(s.facet)] = v.value;
+    }
+    makes.push({ name: m.name, kind: m.kind, values });
+  }
+  return { ok: true, record, clear, then, ...(a.makes?.length ? { makes } : {}), sends };
 }
 
 /**
@@ -917,6 +1047,10 @@ const refJson = (r: ActRef): JsonObject =>
   "given" in r ? { given: r.given } : "record" in r ? { record: r.record } : "context" in r ? { context: r.context, ...(r.facet ? { facet: r.facet } : {}) } : "route" in r ? { route: r.route, column: r.column } : { found: r.found, ...(r.facet ? { facet: r.facet } : {}) };
 const refText = (r: ActRef): string =>
   "given" in r ? `given.${r.given}` : "record" in r ? (r.record ? `record.${r.record}` : "record") : "context" in r ? `context.${r.context}${r.facet ? `.${r.facet}` : ""}` : "route" in r ? `${r.route}.${r.column}` : r.facet ? `${r.found}.${r.facet}` : r.found;
+const operandJson = (o: ActOperand): JsonObject => ("number" in o ? { number: o.number } : refJson(o));
+const sumJson = (x: ActSum): JsonObject => ({ sum: { left: operandJson(x.left), op: x.op, right: operandJson(x.right) } });
+const condJson = (c: ActCond): JsonObject => ({ left: termJson(c.left), op: c.op, right: termJson(c.right) });
+const whenJson = (w: ActWhen): JsonObject => ({ ...condJson(w), ...(w.and?.length ? { and: w.and.map(condJson) } : {}) });
 const termJson = (t: ActTerm): JsonObject => ("number" in t ? { number: t.number } : "count" in t ? { count: t.count, ...(t.plus !== undefined ? { plus: t.plus } : {}) } : { ref: refJson(t.ref), ...(t.plus !== undefined ? { plus: t.plus } : {}) });
 const termText = (t: ActTerm): string => ("number" in t ? String(t.number) : `${"count" in t ? t.count : refText(t.ref)}${t.plus !== undefined ? ` + ${t.plus}` : ""}`);
 
@@ -925,9 +1059,9 @@ const q = (s: string) => (/[\s,:]|^$/.test(s) ? JSON.stringify(s) : s);
 
 const pickJson = (p: ActPick): JsonObject => ({ facet: p.facet, value: "literal" in p.value ? { literal: p.value.literal } : "caller" in p.value ? { caller: true } : "self" in p.value ? { self: true } : refJson(p.value) });
 const thenValueJson = (v: ActThenValue): JsonObject =>
-  "literal" in v ? { literal: v.literal } : "now" in v ? { now: true } : "none" in v ? { none: true } : "caller" in v ? { caller: true } : "link" in v ? { link: v.link } : refJson(v);
+  "literal" in v ? { literal: v.literal } : "now" in v ? { now: true } : "none" in v ? { none: true } : "caller" in v ? { caller: true } : "link" in v ? { link: v.link } : "sum" in v ? sumJson(v.sum) : refJson(v);
 const sourceJson = (s: ActSource): JsonObject =>
-  "literal" in s ? { literal: s.literal } : "link" in s ? { link: s.link } : "now" in s ? { now: true } : "caller" in s ? { caller: true } : "none" in s ? { none: true } : "owner" in s ? { owner: true } : "run" in s ? { run: true } : "next" in s ? { next: { prefix: "literal" in s.next.prefix ? { literal: s.next.prefix.literal } : refJson(s.next.prefix), in: { kind: s.next.in.kind, facet: s.next.in.facet }, ...(s.next.suffix ? { suffix: refJson(s.next.suffix) } : {}) } } : refJson(s);
+  "literal" in s ? { literal: s.literal } : "link" in s ? { link: s.link } : "now" in s ? { now: true } : "caller" in s ? { caller: true } : "none" in s ? { none: true } : "owner" in s ? { owner: true } : "run" in s ? { run: true } : "sum" in s ? sumJson(s.sum) : "next" in s ? { next: { prefix: "literal" in s.next.prefix ? { literal: s.next.prefix.literal } : refJson(s.next.prefix), in: { kind: s.next.in.kind, facet: s.next.in.facet }, ...(s.next.suffix ? { suffix: refJson(s.next.suffix) } : {}) } } : refJson(s);
 const setJson = (s: ActSet): JsonObject => ({ facet: s.facet, source: sourceJson(s.source) });
 
 export function actJson(a: Act): JsonObject {
@@ -966,11 +1100,12 @@ export function actJson(a: Act): JsonObject {
     sets: a.sets.map(setJson),
     thens: a.thens.map(
       (t): JsonObject => ({
-        ...(t.when ? { when: { left: termJson(t.when.left), op: t.when.op, right: termJson(t.when.right) } } : {}),
+        ...(t.when ? { when: whenJson(t.when) } : {}),
         sets: t.sets.map((s): JsonObject => ({ found: s.found, facet: s.facet, value: thenValueJson(s.value) })),
         ...(t.send ? { send: { verb: t.send.verb, words: t.send.words } } : {}),
       }),
     ),
+    ...(a.makes?.length ? { makes: a.makes.map((m): JsonObject => ({ name: m.name, kind: m.kind, ...(m.when ? { when: whenJson(m.when) } : {}), sets: m.sets.map(setJson) })) } : {}),
     ...(a.send ? { send: { verb: a.send.verb, words: a.send.words } } : {}),
     lands: a.lands,
     ...(a.tells ? { tells: { kind: a.tells.kind, aspect: a.tells.aspect, sets: a.tells.sets.map(setJson) } } : {}),
@@ -994,8 +1129,13 @@ const pickText = (p: JsonObject): string => {
   // The words `record` and `caller` as literals are printed quoted, so they read back as the words (revision 39).
   return `${p.facet} = ${typeof v.literal === "string" ? (v.literal === "record" || v.literal === "caller" ? JSON.stringify(v.literal) : q(v.literal)) : v.caller === true ? "caller" : v.self === true ? "record" : refText(refOfJson(v))}`;
 };
+const operandText = (o: JsonObject): string => (typeof o.number === "number" ? String(o.number) : refText(refOfJson(o)));
+const sumText = (x: JsonObject): string => `${operandText(x.left as JsonObject)} ${x.op} ${operandText(x.right as JsonObject)}`;
+const whenText = (w: JsonObject): string =>
+  [w, ...((w.and as JsonObject[] | undefined) ?? [])].map((c) => `${termText(termOfJson(c.left as JsonObject))} ${c.op} ${termText(termOfJson(c.right as JsonObject))}`).join(" and ");
 const sourceText = (src: JsonObject): string => {
   if (typeof src.literal === "string") return q(src.literal);
+  if (src.sum && typeof src.sum === "object") return sumText(src.sum as JsonObject);
   if (typeof src.link === "string") return `link ${src.link}`;
   if (src.now === true) return "now";
   if (src.caller === true) return "link caller";
@@ -1075,10 +1215,18 @@ export function actText(a: JsonObject): string[] {
       const list: JsonObject[] = (t.sets as JsonObject[] | undefined) ?? (one ? [{ found: one.found as string, facet: one.facet as string, value: { literal: String(one.value) } }] : []);
       const words = list.map((s) => {
         const v = s.value as JsonObject;
-        return `${s.found}.${s.facet} = ${v.now === true ? "now" : v.none === true ? "none" : v.caller === true ? "link caller" : typeof v.link === "string" ? `link ${v.link}` : typeof v.literal === "string" ? (/^(now|none)$|^link\s|^[\w-]+\.[\w:.-]+$/.test(v.literal) ? JSON.stringify(v.literal) : q(v.literal)) : refText(refOfJson(v))}`;
+        return `${s.found}.${s.facet} = ${v.now === true ? "now" : v.none === true ? "none" : v.caller === true ? "link caller" : typeof v.link === "string" ? `link ${v.link}` : v.sum && typeof v.sum === "object" ? sumText(v.sum as JsonObject) : typeof v.literal === "string" ? (/^(now|none)$|^link\s|^[\w-]+\.[\w:.-]+$/.test(v.literal) ? JSON.stringify(v.literal) : q(v.literal)) : refText(refOfJson(v))}`;
       });
       const send = t.send as JsonObject | undefined;
-      out.push(`    ${w ? `when ${termText(termOfJson(w.left as JsonObject))} ${w.op} ${termText(termOfJson(w.right as JsonObject))} ` : ""}set ${words.join(", ")}${send ? ` send ${send.verb}${send.words ? ` ${send.words}` : ""}` : ""}`);
+      out.push(`    ${w ? `when ${whenText(w)} ` : ""}set ${words.join(", ")}${send ? ` send ${send.verb}${send.words ? ` ${send.words}` : ""}` : ""}`);
+    }
+  }
+  const makes = (a.makes as JsonObject[] | undefined) ?? [];
+  if (makes.length) {
+    out.push("  make:");
+    for (const m of makes) {
+      out.push(`    ${m.name} -> ${m.kind}${m.when && typeof m.when === "object" ? ` when ${whenText(m.when as JsonObject)}` : ""}`);
+      for (const s of (m.sets as JsonObject[] | undefined) ?? []) out.push(`      ${s.facet} -> ${sourceText(s.source as JsonObject)}`);
     }
   }
   if (a.send && typeof a.send === "object") {
