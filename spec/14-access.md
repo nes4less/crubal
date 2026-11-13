@@ -82,6 +82,8 @@ edge: E-71
 | `mode` | `admin`, `control`, `consume`, `view` or `none` (14.4) | required |
 | `on` | the record it is on; it also covers every record `within` it, and on the owner's root every record of the owner (14.2) | required |
 | `grants` | for `control`: the presets and menu items it carries (14.6) | none |
+| `holds` | revision 43: the holder's own lines over the surface, each `see` or `run` of an address, with `no` before it to withhold (14.14) | none |
+| `follows` | revision 43: the preset the edge was handed from, the profile its holder follows; a memory that grants nothing (14.14) | none |
 | `where` | a condition (chapter 6.3) that narrows it further (14.6) | none |
 | `until` | a moment it lapses at, or a date: it lapses at the start of that day, UTC | never |
 | `gate` | `review`: writes under it land as suggestions for review (14.7) | none |
@@ -188,6 +190,9 @@ permissions: facility
   packages is one item with every package's verbs and targets; both are checked when the packages are in
   force together (at install, chapter 11.4), not when one is published alone.
 - **À la carte.** An edge's `grants` may mix presets and single items.
+- **A profile's lines** (revision 43). A preset MAY close its line with `holds:` and the lines over the surface
+  it holds (14.14): `bencher: bench audience: staff holds: see inventory/audit, run inventory/audit`. The
+  authority to write such lines on an edge is the target `surface` of the `grant` verb: `people: grant surface`.
 - **Narrowing only.** An edge's `where` adds conditions; it can never widen an item. A specific grant ("may
   edit price only on units in NM or VG condition") is an item plus a `where`.
 
@@ -287,6 +292,9 @@ release.
 }
 ```
 
+An edge that holds lines over the surface (14.14) adds `"holds": ["see inventory", "no run inventory/audit/containersAuditing"]`
+and, when it was handed from a profile, `"follows": "stockkeeper"`; a preset that holds lines adds `"holds"` the same way.
+
 A gated edge adds `"gate": "review"` and, when it isn't the grantor, `"reviewer"`. A write made by a system acting for a
 person carries `"by": "system:S-2", "for": "person:P-2201"` (14.9). Permissions hold `menu`
 (name → `{"verbs": {"run": ["checkIn"]}, "on": "administered"}`), `presets` (name → `{"items": […],
@@ -307,6 +315,8 @@ A store MUST refuse a write that:
 6. makes a person the owner of a record the package's `ownership` doesn't let a person own;
 7. gives an edge a relation the package doesn't declare (14.6), or an emergency edge that breaks its terms
    (14.13).
+7a. holds a line that is not `see` or `run` of one address, holds lines on a relation-only edge, follows a
+   name that is no preset, or holds lines under a `control` grantor that does not carry `grant surface` (14.14);
 8. lets a system act for a person beyond that person's effective access, without `for`, onward, or under an
    emergency edge (14.9);
 9. grants a platform-hosted caller what its grantor could not grant to anyone (14.5, 14.8).
@@ -373,3 +383,65 @@ other owners' logs when that person deletes themselves. It writes only `until` o
 person, each entry's `by` names the platform's action and the person, and nothing else of the owner's is
 touched. This is the person's right exercised through their host, not the platform's reach: it needs no
 emergency edge and no approval, and the owner sees it in their log like any other write.
+
+## 14.14 The surface (revision 43)
+
+Menu items say what may be done to data. The **surface** is what a package puts in front of people: its
+utilities (11.1), its flows and their stops (12.11), its lanes and their presses (12.10). A place enumerates
+it from the packages in force, and an edge says which of it its holder sees and runs.
+
+**Addresses.** Each node of the surface has an address, its names joined by `/`:
+
+| Node | Address | Example |
+|---|---|---|
+| a utility | its name | `inventory` |
+| a flow (a chain) | under its utility | `inventory/audit` |
+| a flow's stop (a link) | under its flow | `inventory/audit/unitsExpected` |
+| a case's press at a stop | under the stop: the case (`stranger`, or the flag's name), then `yes`, `no`, or `or1`, `or2` in their order | `inventory/audit/unitsExpected/stranger/or1` |
+| a lane | under its utility | `inventory/boxes` |
+| a lane's press that names an act | under its lane, by the act | `inventory/boxes/transfer` |
+
+A flow or a lane that names no utility stands under the place itself, its address opening with `/`
+(`/shelf`). A lane a flow names as a stop is that flow's link and a lane of its own besides, since it is
+worked on its own.
+
+**Lines.** A line is a verb and an address: `see` (the node is shown: a utility in the menu, a flow among
+the workflows, a link's or a lane's list) or `run` (its stamp may be pressed: a link's act, a lane's presses,
+a case's press), with `no` before it to withhold: `see inventory`, `no run inventory/audit/containersAuditing`.
+
+**What a set of lines says.**
+
+- A line covers its address and everything beneath it.
+- **The deepest line decides.** Of the lines of one verb on the way to an address, the one nearest the
+  address is the answer: a `no` beneath stands against a `yes` above, and a `yes` beneath against a `no`
+  above. At the same depth a `no` beats a `yes`.
+- **Running needs seeing.** Where `see` is answered no, `run` is no, whatever a `run` line says.
+- A case's press takes its link's answer until a line names the press itself.
+- **Nothing said is no answer.** The package's word stands: a node is open to those it `serves`, a link to
+  those its flow serves, a press to those its lane serves. Lines are read before that word, never instead of
+  it.
+
+**Who holds lines.**
+
+- **An edge holds a person's own.** `holds:` on an edge is that holder's lines, and they are read from every
+  live edge the holder has on the record (the place's root, unless the surface is asked of a record within
+  it). They are theirs alone: changing them changes one person.
+- **A preset holds a profile's.** `holds:` on a preset (14.6) is the lines of everyone whose edge grants the
+  preset, read wherever the edges' own lines give no answer. An edge's own line always stands before a
+  profile's, at any depth.
+- **`follows` is a memory.** An edge handed from a profile as a copy (its items in `grants`, the profile's
+  lines in `holds`) names the profile in `follows`. It grants nothing and is read by nothing here; it lets
+  whoever changes the profile find the edges handed from it and offer the change on. Whether a profile is
+  followed live (the preset in `grants`) or held as a copy (`follows`) is the granting side's choice, edge by
+  edge.
+- **An owner and an `admin`** hold all of the surface; no line narrows them.
+- A relation-only edge (14.10) holds nothing of the surface.
+
+**Writing lines.** Lines are edge writes like any other (14.3): logged, with a history, lapsing with their
+edge. An `admin` edge and the owner write any; a `control` edge writes them only if it carries
+`grant surface` (14.6), and withholding is granting too. A line that names no node in force is inert, never
+a refusal: a version that retires a link does not break the edges that named it.
+
+**What the engine answers.** Given the packages in force, the nodes with their addresses, labels, acts and
+what each serves; given a caller, a verb and an address, `yes`, `no` or no answer. Showing the surface and
+refusing a press are the mounting app's, which asks before it draws a node or lands an act.

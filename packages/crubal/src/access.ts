@@ -10,6 +10,7 @@ import type { Dictionary } from "./defs.ts";
 import { splitTop } from "./lex.ts";
 import type { Json, JsonObject, Record } from "./model.ts";
 import type { RecordSet } from "./records.ts";
+import { readHold, type SurfaceAnswer, type SurfaceLine, type SurfaceVerb, surfaceAnswer } from "./surface.ts";
 import { CrubalError, type Node, readTree } from "./tree.ts";
 import { shownAudience, type ViewSet } from "./views.ts";
 
@@ -21,7 +22,7 @@ export const VERBS = ["see", "edit", "run", "review", "archive", "merge", "apply
 const rank = (m: string) => (MODES as readonly string[]).indexOf(m);
 
 export type MenuItem = { name: string; verbs: { [verb: string]: string[] }; on?: string; line: number };
-export type Preset = { name: string; items: string[]; audience: string; line: number };
+export type Preset = { name: string; items: string[]; audience: string; /** Revision 43: the lines over the surface the profile holds (14.14). */ holds?: string[]; line: number };
 export type Permissions = {
   name?: string;
   menu: Map<string, MenuItem>;
@@ -39,6 +40,10 @@ export type Edge = {
   mode: Mode;
   on: string;
   grants: string[];
+  /** Revision 43: the person's own lines over the surface (14.14), each `see <address>` or `run <address>`, with `no` before it to withhold. */
+  holds?: string[];
+  /** Revision 43: the preset this edge was handed from, the profile its holder follows; a memory, it grants nothing. */
+  follows?: string;
   where?: string;
   until?: string;
   gate?: string;
@@ -92,12 +97,20 @@ export function readAccess(source: string): { perms: Permissions; edges: Edge[] 
             if (!p.key) continue;
             let text = p.value;
             let audience = "member";
+            // Revision 43: `holds:` closes the line, the profile's lines over the surface (14.14).
+            let holds: string[] | undefined;
+            const hd = text.indexOf(" holds: ");
+            if (hd >= 0) {
+              holds = list(text.slice(hd + 8));
+              for (const h of holds) readHold(h, p.line);
+              text = text.slice(0, hd);
+            }
             const at = text.indexOf(" audience: ");
             if (at >= 0) {
               audience = text.slice(at + 11).trim();
               text = text.slice(0, at);
             }
-            perms.presets.set(p.key, { name: p.key, items: list(text), audience, line: p.line });
+            perms.presets.set(p.key, { name: p.key, items: list(text), audience, ...(holds?.length ? { holds } : {}), line: p.line });
           }
         }
         if (c.key === "relations") {
@@ -144,7 +157,8 @@ function readEdge(n: Node): Edge {
     by: v("by") ?? "",
     line: n.line,
   };
-  for (const k of ["where", "until", "gate", "reviewer"] as const) if (v(k)) e[k] = v(k) as string;
+  for (const k of ["where", "until", "gate", "reviewer", "follows"] as const) if (v(k)) e[k] = v(k) as string;
+  if (v("holds")) e.holds = list(v("holds") as string);
   const em = get("emergency");
   if (em) {
     const o: JsonObject = {};
@@ -303,6 +317,22 @@ export class Access {
     return out;
   }
 
+  /**
+   * What the caller's edges say of the surface (14.14, revision 43): may they see, or run, what stands at an
+   * address. The owner and an admin hold all of it. An edge's own lines are read first, every live edge's
+   * together; where they say nothing, the lines of the presets the edges grant. `undefined` is no answer: the
+   * package's word (what the address `serves`) stands, which the one who mounts the surface reads.
+   */
+  surface(callerId: string, verb: SurfaceVerb, address: string, recordId = "ROOT"): SurfaceAnswer {
+    const eff = this.effective(callerId, recordId);
+    if (eff.mode === "admin") return "yes";
+    const lines = (hs: string[] | undefined): SurfaceLine[] => (hs ?? []).map((h) => readHold(h));
+    const granting = eff.edges.filter((e) => e.mode !== "none");
+    const own = surfaceAnswer(granting.flatMap((e) => lines(e.holds)), verb, address);
+    if (own) return own;
+    return surfaceAnswer(granting.flatMap((e) => e.grants.flatMap((g) => lines(this.perms.presets.get(g)?.holds))), verb, address);
+  }
+
   /** A caller's access to a record from every live edge on it or an ancestor (14.4). */
   effective(callerId: string, recordId: string): Effective {
     if (this.owns(callerId, recordId)) return { mode: "admin", items: new Set(this.perms.menu.keys()), relations: new Set(["owner"]), gated: false, edges: [] };
@@ -409,6 +439,10 @@ export class Access {
       return;
     }
     if (e.grants.length && e.mode !== "control") throw new CrubalError(`${e.edge}: only a control edge carries grants`, e.line);
+    // Revision 43 (14.14): an edge's lines over the surface, and the profile it follows.
+    const holds = (e.holds ?? []).map((h) => readHold(h, e.line));
+    if (holds.length && e.mode === "none") throw new CrubalError(`${e.edge}: a relation holds nothing of the surface`, e.line);
+    if (e.follows && !this.perms.presets.has(e.follows)) throw new CrubalError(`${e.edge}: follows ${e.follows}, which isn't a preset`, e.line);
     const rel = this.perms.relations.get(e.relation);
     if (this.perms.relations.size && !rel) throw new CrubalError(`${e.edge}: the relation ${e.relation} isn't declared`, e.line);
     if (rel?.only && e.mode !== "none") throw new CrubalError(`${e.edge}: ${e.relation} is a relation only, so its mode is none`, e.line);
@@ -428,6 +462,8 @@ export class Access {
         if (!mayGrant(name)) throw new CrubalError(`${e.edge}: ${g.edge} may not grant ${name}`, e.line);
       }
       if (e.mode !== "none" && !e.grants.length && !mayGrant(e.mode)) throw new CrubalError(`${e.edge}: ${g.edge} may not grant ${e.mode}`, e.line);
+      // Lines over the surface are written under an edge that may grant them, `grant surface` (14.14); withholding is granting too.
+      if (holds.length && !mayGrant("surface")) throw new CrubalError(`${e.edge}: ${g.edge} may not grant the surface`, e.line);
     }
   }
 
@@ -491,6 +527,7 @@ export function checkPermissions(perms: Permissions, dict: Dictionary, contracts
           // `flows` (revision 23): the place's workflows as a whole, the designer's gate (`edit flows`).
           ["arrivals", "vocabulary", "migrations", "gated", "unit", "product", "group", "flows"].includes(t);
         if (!known && verb !== "grant") throw new CrubalError(`${item.name}: ${verb} names ${t}, which isn't a facet, class, view, contract or queue`, item.line);
+        if (verb === "grant" && t === "surface") continue; // revision 43: the lines over the surface (14.14)
         if (verb === "grant" && !perms.menu.has(t) && !perms.presets.has(t)) throw new CrubalError(`${item.name}: grant names ${t}, which isn't a menu item or preset`, item.line);
       }
     }

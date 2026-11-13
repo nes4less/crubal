@@ -277,7 +277,7 @@ export function permissionsJson(perms: Permissions): JsonObject | undefined {
   const menu: JsonObject = {};
   for (const m of perms.menu.values()) if (!roleItems.has(m.name)) menu[m.name] = { verbs: Object.fromEntries(Object.entries(m.verbs).map(([v, t]) => [v, [...t]])), ...(m.on ? { on: m.on } : {}) };
   const presets: JsonObject = {};
-  for (const p of perms.presets.values()) if (!roleItems.has(`${p.name}.${Object.keys((perms.menu.get(p.items[0] ?? "") as MenuItem | undefined)?.verbs ?? {})[0]}`) && !p.items.every((i) => roleItems.has(i))) presets[p.name] = { items: [...p.items], audience: p.audience };
+  for (const p of perms.presets.values()) if (!roleItems.has(`${p.name}.${Object.keys((perms.menu.get(p.items[0] ?? "") as MenuItem | undefined)?.verbs ?? {})[0]}`) && !p.items.every((i) => roleItems.has(i))) presets[p.name] = { items: [...p.items], audience: p.audience, ...(p.holds?.length ? { holds: [...p.holds] } : {}) };
   const relations: JsonObject = {};
   for (const [r, v] of perms.relations) relations[r] = v.only ? { only: true } : {};
   if (!perms.name && !Object.keys(menu).length && !Object.keys(relations).length) return undefined;
@@ -616,7 +616,7 @@ function permissionsText(p: JsonObject): string[] {
   const menu = (p.menu ?? {}) as JsonObject;
   if (Object.keys(menu).length) out.push("  menu:", ...Object.entries(menu).map(([name, item]) => { const it = item as JsonObject; const verbs = Object.entries((it.verbs as JsonObject) ?? {}).map(([v, t]) => `${v} ${(t as string[]).join(" ")}`).join(", "); return `    ${name}: ${verbs}${it.on ? ` on: ${it.on}` : ""}`; }));
   const presets = (p.presets ?? {}) as JsonObject;
-  if (Object.keys(presets).length) out.push("  presets:", ...Object.entries(presets).map(([name, pr]) => `    ${name}: ${((pr as JsonObject).items as string[]).join(", ")} audience: ${(pr as JsonObject).audience}`));
+  if (Object.keys(presets).length) out.push("  presets:", ...Object.entries(presets).map(([name, pr]) => `    ${name}: ${((pr as JsonObject).items as string[]).join(", ")} audience: ${(pr as JsonObject).audience}${Array.isArray((pr as JsonObject).holds) && ((pr as JsonObject).holds as string[]).length ? ` holds: ${((pr as JsonObject).holds as string[]).join(", ")}` : ""}`));
   const rel = (p.relations ?? {}) as JsonObject;
   if (Object.keys(rel).length) out.push(`  relations: ${Object.entries(rel).map(([r, v]) => ((v as JsonObject).only === true ? `${r} only` : r)).join(", ")}`);
   return out;

@@ -24,6 +24,7 @@ export { applyEntry, diffWrites, differs, emptyState, Journal, rebuild, redactab
 export { MemoryRecords, type RecordSet } from "./records.ts";
 export { arrive, decide, surviving, type Arrival, type ArrivalStore } from "./arrival.ts";
 export { apply, archive, attach, detach, effective, emptyStore, foldUp, issue, issuersFor, merge, ownedKeys, pending, readInstructionBlocks, unarchive, type Instruction, type Records, type Store } from "./lifecycle.ts";
+export { addressPath, holdText, readHold, SURFACE_VERBS, surfaceAnswer, surfaceOf, type SurfaceAnswer, type SurfaceLine, type SurfaceNode, type SurfaceVerb } from "./surface.ts";
 export { Access, checkPermissions, followersOn, foreign, MODES, readAccess, VERBS, type Edge, type Effective, type MenuItem, type Mode, type Permissions, type Preset } from "./access.ts";
 export { isSchedule, nextTick, readSchedule, ticksDue, type Schedule } from "./schedule.ts";
 export { bundleHash, bundleOf, classJson, classLineJson, contractJson, emptyParsed, filterJson, kindJson, parsePackage, printBundle, readBundle, readBundleInto, readBundleOnto, recipeJson, ruleJson, shapeJson, signBundle, utilityJson, verifyBundle, viewJson, type Parsed, laneJson } from "./bundle.ts";
