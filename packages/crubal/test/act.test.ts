@@ -255,7 +255,7 @@ test("revision 26: the route, the mint, the series, the then's several sets and 
   assert.deepEqual(box?.mint?.sets[0]?.source, { next: { prefix: { route: "slot", column: "boxPrefix" }, in: { kind: "container", facet: "containerLabel" }, suffix: { route: "slot", column: "boxSuffix" } } });
   assert.deepEqual(box?.mint?.sets[3]?.source, { context: "station", facet: "stationLocation" });
   assert.deepEqual(a.counts, [{ name: "boxed", kind: "unit", where: [{ facet: "filedIn", value: { found: "box" }, line: a.counts[0]?.line }], line: a.counts[0]?.line }]);
-  assert.deepEqual(a.thens[0]?.when?.left, { count: "boxed", plus: 1 });
+  assert.deepEqual((a.thens[0]?.when as { left?: unknown } | undefined)?.left, { count: "boxed", plus: 1 });
   assert.deepEqual(a.thens[0]?.sets, [
     { found: "box", facet: "containerState", value: { literal: "full" } },
     { found: "box", facet: "filledAt", value: { now: true } },
@@ -601,7 +601,7 @@ test("revision 45: a set or a then adds or takes one number from another; a when
   const src = bench(file + label + computes).replace("acts: file, label", "acts: file, label, recount");
   const [info] = readPackages(src);
   const a = info?.acts.find((x) => x.name === "recount") as NonNullable<ReturnType<typeof readPackages>[number]["acts"][number]>;
-  assert.deepEqual(a.makes?.map((m) => [m.name, m.kind, m.when?.op, m.when?.and?.length, m.sets.length]), [["moved", "unit", "!=", 1, 3], ["again", "unit", "<=", 1, 3]]);
+  assert.deepEqual(a.makes?.map((m) => [m.name, m.kind, (m.when as { op?: string } | undefined)?.op, m.when?.and?.length, m.sets.length]), [["moved", "unit", "!=", 1, 3], ["again", "unit", "<=", 1, 3]]);
   assert.deepEqual(a.makes?.[0]?.sets[1]?.source, { sum: { left: { given: "count" }, op: "-", right: { record: "containerCapacity" } } });
   assert.deepEqual(a.thens[0]?.sets[0], { found: "record", facet: "containerSlot", value: { sum: { left: { record: "containerSlot" }, op: "+", right: { number: 1 } } } });
   checkPackages(src);
@@ -653,6 +653,63 @@ test("revision 45: a set or a then adds or takes one number from another; a when
   no("filedSlot -> given.count\n", "filedSlot -> given.other\n", /reads given\.other, which its given lacks/);
   no("set record.containerSlot = record.containerSlot + 1", "set record.nope = 1", /then sets nope, which isn't a facet/);
   no('      filedBox -> "made again"\n', '      filedBox -> "made again"\n      filedBox -> twice\n', /make again sets filedBox twice/);
+});
+
+const stands = `act: recount /2026-11-18
+  utility: bench
+  label: Count
+  on: container
+  given:
+    count as containerCapacity "How many are there?" from record.containerCapacity
+  find:
+    inside -> all unit where filedIn = record
+  set:
+    containerCapacity -> given.count
+  then:
+    when given.count > 0 restore record
+    when given.count <= 0 archive record as emptied
+    when no inside.filedSlot archive inside
+    when has inside.filedSlot and given.count > 0 set inside.filedBox = kept
+  also:
+    label on record when has record.containerSlot and given.count > 0
+    bench/file on inside when no inside.filedSlot
+`;
+
+test("revision 47: a then archives or restores the record in hand or the records found; a when says `has` and `no`; an act says the acts run also when it has landed; read, checked, carried, printed back; refused where a name is undeclared, an act is not its utility's, or an act runs itself", () => {
+  const src = bench(file + label + stands).replace("acts: file, label", "acts: file, label, recount");
+  const [info] = readPackages(src);
+  const a = info?.acts.find((x) => x.name === "recount") as NonNullable<ReturnType<typeof readPackages>[number]["acts"][number]>;
+  assert.deepEqual(a.thens.map((t) => t.stand), [{ to: "active", on: "record" }, { to: "archived", on: "record", reason: "emptied" }, { to: "archived", on: "inside" }, undefined]);
+  assert.deepEqual(a.thens[2]?.when, { has: { found: "inside", facet: "filedSlot" }, lacks: true });
+  assert.deepEqual(a.also?.map((x) => [x.utility, x.act, x.on, !!x.when]), [[undefined, "label", "record", true], ["bench", "file", "inside", true]]);
+  checkPackages(src);
+  const bundle = bundleOf(parsePackage(src));
+  const text = printBundle(bundle);
+  assert.match(text, /^    when given\.count > 0 restore record\n    when given\.count <= 0 archive record as emptied\n    when no inside\.filedSlot archive inside\n    when has inside\.filedSlot and given\.count > 0 set inside\.filedBox = kept$/m);
+  assert.match(text, /^  also:\n    label on record when has record\.containerSlot and given\.count > 0\n    bench\/file on inside when no inside\.filedSlot$/m);
+  assert.equal(serialize(bundleOf(parsePackage(text))), serialize(bundle), "the printed text reads back to the same bundle");
+  const box = (slot?: string): ActRecord => ({ id: "C-1", values: { containerCapacity: "3", ...(slot ? { containerSlot: slot } : {}) } });
+  const inside: ActRecord[] = [{ id: "U-1", values: { filedSlot: "New" } }, { id: "U-2", values: {} }];
+  // Some there: the box stands again; a condition on what is found is read on each; the also runs where it holds.
+  const some = actWrites(a, { record: box("New"), context: {}, found: { inside }, now: "N", given: { count: "2" } });
+  assert.deepEqual(some.ok && [some.stands, some.then, some.also], [
+    [{ id: "C-1", to: "active" }, { id: "U-2", to: "archived" }],
+    [{ id: "U-1", values: { filedBox: "kept" } }],
+    [{ act: "label", id: "C-1" }, { utility: "bench", act: "file", id: "U-2" }],
+  ]);
+  // None there: the box is archived with its reason; the record's own also needs a count.
+  const none = actWrites(a, { record: box(), context: {}, found: { inside: [] }, now: "N", given: { count: "0" } });
+  assert.deepEqual(none.ok && [none.stands, none.also], [[{ id: "C-1", to: "archived", reason: "emptied" }], []]);
+  // An act with no standing line and no also answers neither.
+  const plain = readPackages(bench(file + label))[0]?.acts.find((x) => x.name === "label");
+  const pw = plain && actWrites(plain, { record: box(), context: { station: { id: "S-1", values: {} } }, found: {}, now: "N" });
+  assert.ok(pw?.ok && !("stands" in pw) && !("also" in pw));
+  const no = (from: string, to: string, why: RegExp) => assert.throws(() => checkPackages(bench(file + label + stands.replace(from, to)).replace("acts: file, label", "acts: file, label, recount")), (e: unknown) => e instanceof CrubalError && why.test(e.message), String(why));
+  no("archive inside", "archive nobody", /then archives nobody, which no find declares/);
+  no("label on record", "label on nobody", /also runs label on nobody, which no find declares/);
+  no("label on record", "polish on record", /also runs polish, which isn't among bench's acts/);
+  no("label on record", "recount on record", /also runs itself on the record in hand/);
+  no("when no inside.filedSlot archive inside", "when no inside.nope archive inside", /reads nope, which isn't a facet/);
 });
 
 const feed = (tail: string) => `package: feed /2026-11-12
