@@ -712,6 +712,67 @@ test("revision 47: a then archives or restores the record in hand or the records
   no("when no inside.filedSlot archive inside", "when no inside.nope archive inside", /reads nope, which isn't a facet/);
 });
 
+const linking = `act: recount /2026-11-19
+  utility: bench
+  label: Count
+  on: container
+  given:
+    count as containerCapacity
+  find:
+    inside -> all unit where filedIn = record
+  make:
+    note -> unit when given.count > 0
+      filedBox -> made
+      filedIn -> link record
+    echo -> unit when given.count > 1
+      filedIn -> link note
+  set:
+    containerStation -> link note
+  then:
+    set inside.filedIn = link echo
+`;
+
+test("revision 48: a link names a record the act makes, carried as $made for the host to resolve, and writes nothing where it was not made; sums and whens read money and quantities, keeping what they are of and refusing a mix", () => {
+  const src = bench(file + label + linking).replace("acts: file, label", "acts: file, label, recount");
+  checkPackages(src);
+  const a = readPackages(src)[0]?.acts.find((x) => x.name === "recount") as NonNullable<ReturnType<typeof readPackages>[number]["acts"][number]>;
+  const at = { record: { id: "C-1", values: {} } as ActRecord, context: {}, found: { inside: [{ id: "U-1", values: {} }] }, now: "N" };
+  const two = actWrites(a, { ...at, given: { count: "2" } });
+  assert.deepEqual(two.ok && [two.record, two.then, two.makes], [
+    { containerStation: { $made: "note" } },
+    [{ id: "U-1", values: { filedIn: { $made: "echo" } } }],
+    [{ name: "note", kind: "unit", values: { filedBox: "made", filedIn: { $link: "C-1" } } }, { name: "echo", kind: "unit", values: { filedIn: { $made: "note" } } }],
+  ]);
+  // The second was not made: what linked to it writes nothing; the first still stands.
+  const one = actWrites(a, { ...at, given: { count: "1" } });
+  assert.deepEqual(one.ok && [one.record, one.then, one.makes?.map((m) => m.name)], [{ containerStation: { $made: "note" } }, [{ id: "U-1", values: {} }], ["note"]]);
+  const none = actWrites(a, { ...at, given: { count: "0" } });
+  assert.deepEqual(none.ok && [none.record, none.makes], [{}, []]);
+  assert.throws(() => checkPackages(src.replace("containerStation -> link note", "containerStation -> link nobody")), (e: unknown) => e instanceof CrubalError && /links containerStation to nobody/.test(e.message));
+  // Money and quantities.
+  const priced = `act: recount /2026-11-19
+  utility: bench
+  on: container
+  given:
+    price as containerLabel
+  set:
+    containerLabel -> given.price - record.containerLabel
+  then:
+    when given.price != record.containerLabel set record.containerSlot = record.containerLabel + 1
+    when given.price > record.containerCapacity set record.containerState = full
+`;
+  const p = readPackages(bench(file + label + priced).replace("acts: file, label", "acts: file, label, recount"))[0]?.acts.find((x) => x.name === "recount") as typeof a;
+  const usd = (n: string) => ({ $money: n, currency: "USD" });
+  const m = actWrites(p, { record: { id: "C-1", values: { containerLabel: usd("12.50"), containerCapacity: usd("10.00") } }, context: {}, found: {}, now: "N", given: { price: usd("15.00") } });
+  assert.deepEqual(m.ok && m.record, { containerLabel: usd("2.50"), containerSlot: usd("13.50"), containerState: "full" });
+  // The same price: the when over money does not hold. Another currency holds nowhere and is not summed.
+  const same = actWrites(p, { record: { id: "C-1", values: { containerLabel: usd("15.00") } }, context: {}, found: {}, now: "N", given: { price: usd("15.00") } });
+  assert.deepEqual(same.ok && same.record, { containerLabel: usd("0.00") });
+  assert.deepEqual(actWrites(p, { record: { id: "C-1", values: { containerLabel: { $money: "12.50", currency: "EUR" } } }, context: {}, found: {}, now: "N", given: { price: usd("15.00") } }), { ok: false, why: "given.price and record.containerLabel are not of one currency or unit" });
+  const q = actWrites(p, { record: { id: "C-1", values: { containerLabel: { $qty: "2", unit: "kg" } } }, context: {}, found: {}, now: "N", given: { price: "5" } });
+  assert.deepEqual(q.ok && q.record.containerLabel, { $qty: "3", unit: "kg" });
+});
+
 const feed = (tail: string) => `package: feed /2026-11-12
   owner: shop.example
   crubal: 2
