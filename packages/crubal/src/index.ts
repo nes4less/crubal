@@ -20,7 +20,7 @@ export { checkContracts, Exchange, proposalMet, quorumHolds, readRoles, verifyBo
 export { checkActsInForce, checkFlowsInForce, checkPackages, HUES, isHue, readPackages, type Flow, type CasePress, type StopAsk, type FlowJoin, type FlowStamp, type StopCase, casePress, flowJoins, flowStamps, sharesOf, type FlowStop, type Hue, type PackageInfo, type Lane, type LanePress, type Utility } from "./packages.ts";
 export { STANDARD_PACKAGES, standardDefinitions } from "./std-packages.ts";
 export { AUDIENCES, checkViews, emptyViewSet, MARK_DONE, MARK_OPEN, partitionOf, PERIODS, periodOf, readViews, shownAudience, VIEW_SET_KEYS, Views, visibleTo, type Display, type Nested, type Period, type Print, type PrintBox, type PrintElement, type PrintField, type PrintSource, PRINT_PLACE_SLOTS, printSourceFields, type Projection, type ProjectOptions, type Shape, type ShownFor, type StreamEntry, type Sums, type View, type ViewSet } from "./views.ts";
-export { applyEntry, diffWrites, differs, emptyState, Journal, rebuild, redactable, redactableWrite, redactWrite, stateJson, type Draft, type Entry, type State, type Write } from "./log.ts";
+export { applyEntry, diffWrites, differs, emptyState, Journal, rebuild, recordAt, redactable, redactableWrite, redactWrite, stateJson, type Draft, type Entry, type State, type Write } from "./log.ts";
 export { MemoryRecords, type RecordSet } from "./records.ts";
 export { arrive, decide, surviving, type Arrival, type ArrivalStore } from "./arrival.ts";
 export { apply, archive, attach, detach, effective, emptyStore, foldUp, issue, issuersFor, merge, ownedKeys, pending, readInstructionBlocks, unarchive, type Instruction, type Records, type Store } from "./lifecycle.ts";

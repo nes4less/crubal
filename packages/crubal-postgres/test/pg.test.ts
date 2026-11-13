@@ -124,6 +124,49 @@ test("redacting a write holds the chain and the rebuilt state forgets the value"
   assert.equal(verifyChain((await store.entries()) as unknown as JsonObject[]).valid, true);
 });
 
+test("revision 50: one record as it stood at a moment, and when each of its values last changed; by the index where it is whole, by the log where it is not, the same; a log from before is indexed a batch at a time", { skip: !url }, async () => {
+  const owner = "touch.example";
+  const store = new PgStore(pool, owner);
+  const t = (n: number) => `2026-11-20T10:0${n}:00.000Z`;
+  const src = (values: JsonObject) => Object.fromEntries(Object.keys(values).map((k) => [k, { origin: "declared", via: "L-0" }]));
+  const put = (id: string, values: JsonObject, n: number, by: JsonObject = { person: "pat" }) =>
+    store.commit(by, (d) => { d.records.set(id, { ...(d.records.get(id) ?? { id, kind: "item", level: "item", owner }), values, sources: src(values) } as Record); }, t(n));
+  await put("X", { a: "1" }, 1, { migration: "made" });
+  await put("X", { a: "2", b: "5" }, 2);
+  await put("Y", { a: "9" }, 3, { migration: "made" });
+  await put("X", { a: "2" }, 4);
+  // A value written again as it was changes nothing, so its moment stays.
+  await put("Y", { a: "9", c: "1" }, 5);
+  const read = async () => {
+    const now = await store.recordAt("X");
+    assert.deepEqual(now.record?.values, { a: "2" });
+    assert.deepEqual(now.changed, { a: t(2), b: t(4) });
+    assert.deepEqual((await store.recordAt("X", t(3))).record?.values, { a: "2", b: "5" });
+    assert.deepEqual((await store.recordAt("X", t(1))).record?.values, { a: "1" });
+    assert.equal((await store.recordAt("X", "2026-11-20T09:00:00.000Z")).record, undefined, "not yet made");
+    assert.deepEqual((await store.recordAt("Y")).changed, { a: t(3), c: t(5) });
+    assert.equal((await store.recordAt("nobody")).record, undefined);
+  };
+  // A new store's index is whole as its entries land.
+  const whole = await store.indexTouches();
+  assert.equal(whole.through, whole.head);
+  assert.equal(whole.head, 5);
+  await read();
+  // A log from before the index: nothing indexed. The log itself answers the same.
+  await pool.query("delete from log_touches where owner = $1", [owner]);
+  await pool.query("update log_touch_cursors set seq = 0 where owner = $1", [owner]);
+  await read();
+  // An entry landing meanwhile is indexed and leaves the cursor where the batches have reached.
+  await put("Z", { a: "1" }, 6);
+  assert.deepEqual(await store.indexTouches(2), { through: 2, head: 6 });
+  assert.deepEqual(await store.indexTouches(2), { through: 4, head: 6 });
+  assert.deepEqual(await store.indexTouches(2), { through: 6, head: 6 });
+  assert.deepEqual(await store.indexTouches(2), { through: 6, head: 6 });
+  const { rows } = await pool.query("select record, seq from log_touches where owner = $1 order by seq, record", [owner]);
+  assert.deepEqual(rows.map((r: { record: string; seq: string }) => `${r.record}@${r.seq}`), ["X@1", "X@2", "Y@3", "X@4", "Y@5", "Z@6"]);
+  await read();
+});
+
 test("an operation loads only what it touches", { skip: !url }, async () => {
   const dict = emptyDictionary();
   readDefinitions(readFileSync(join(corpus, "..", "reader", "_package.crubal"), "utf8"), dict);
