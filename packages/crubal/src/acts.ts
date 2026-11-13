@@ -33,7 +33,7 @@ export type ActSeries = { prefix: ActRef | { literal: string }; in: { kind: stri
 
 /** What a set writes: a literal, a link to a found or context record, a reference's value, the moment, or the
  * next in a series. */
-export type ActSource = { literal: string } | { link: string } | { now: true } | { caller: true } | { none: true } | { owner: true } | { run: true } | { next: ActSeries } | { sum: ActSum } | ActRef;
+export type ActSource = { literal: string } | { link: string } | { now: true } | { caller: true } | { none: true } | { owner: true } | { run: true } | { person: true } | { next: ActSeries } | { sum: ActSum } | ActRef;
 
 /** Revision 45: one number added to or taken from another, each a reference or a number (`given.count - record.qty`,
  * `record.movedCount + 1`). A reference that holds nothing reads as 0; one that holds no number refuses the act. */
@@ -75,7 +75,7 @@ export type ActCount = { name: string; kind: string; where: ActPick[]; line: num
 /** A term of a `when`: a reference or a count's name, with an optional number added, or a number. */
 export type ActTerm = { ref: ActRef; plus?: number } | { count: string; plus?: number } | { number: number };
 /** What a then writes on a found record (revision 39: a link, a value copied or the facet cleared, as a set's). */
-export type ActThenValue = { literal: string } | { now: true } | { none: true } | { link: string } | { caller: true } | { sum: ActSum } | ActRef;
+export type ActThenValue = { literal: string } | { now: true } | { none: true } | { link: string } | { caller: true } | { person: true } | { sum: ActSum } | ActRef;
 /** One comparison of a `when`. */
 export type ActCond = { left: ActTerm; op: "=" | "!=" | "<" | ">" | "<=" | ">="; right: ActTerm };
 /** A `when`: its first comparison, and (revision 45) those joined to it by `and`, all of which must hold. */
@@ -235,6 +235,8 @@ function readSet(text: string, line: number, routes: Set<string>): ActSet {
   const facet = m[1] as string;
   const src = (m[2] as string).trim();
   if (src === "link caller") return { facet, source: { caller: true }, line };
+  // Revision 46: the person running the act as words (their id), where the facet is text and no link.
+  if (src === "caller") return { facet, source: { person: true }, line };
   // Revision 31: the owner's domain, the act run's id, a link to the record in hand (a told post's sender, run and subject).
   if (src === "owner") return { facet, source: { owner: true }, line };
   if (src === "run") return { facet, source: { run: true }, line };
@@ -300,7 +302,7 @@ function readThen(text: string, line: number, routes: Set<string>, counts: Set<s
       const v = (sm[3] as string).trim();
       const link = v.match(/^link\s+([\w-]+)$/);
       const sum = readSum(v, line, routes);
-      const value: ActThenValue = v === "now" ? { now: true } : v === "none" ? { none: true } : link ? (link[1] === "caller" ? { caller: true } : { link: link[1] as string }) : sum ? { sum } : isRef(v) ? readRef(v, line, "a then", routes) : { literal: unquote(v) };
+      const value: ActThenValue = v === "now" ? { now: true } : v === "none" ? { none: true } : v === "caller" ? { person: true } : link ? (link[1] === "caller" ? { caller: true } : { link: link[1] as string }) : sum ? { sum } : isRef(v) ? readRef(v, line, "a then", routes) : { literal: unquote(v) };
       return { found: sm[1] as string, facet: sm[2] as string, value };
     });
   return {
@@ -542,7 +544,7 @@ export function checkActList(acts: Act[], env: ActEnv): void {
         if (!env.kinds.has(src.next.in.kind) && !env.levels.has(src.next.in.kind) && strict) throw new CrubalError(`${where} numbers ${s.facet} in ${src.next.in.kind}, which isn't a kind ${here}`, s.line);
         needFacet(src.next.in.facet, s.line, "numbers by");
       } else if ("sum" in src) sumOk(src.sum, s.line);
-      else if (!("literal" in src) && !("now" in src) && !("caller" in src) && !("none" in src) && !("owner" in src) && !("run" in src)) refOk(src, s.line);
+      else if (!("literal" in src) && !("now" in src) && !("caller" in src) && !("person" in src) && !("none" in src) && !("owner" in src) && !("run" in src)) refOk(src, s.line);
     };
     for (const f of a.finds) {
       if (found.has(f.name)) throw new CrubalError(`${where} finds ${f.name} twice`, f.line);
@@ -617,7 +619,7 @@ export function checkActList(acts: Act[], env: ActEnv): void {
         if ("link" in v) {
           if (v.link !== "record" && !found.has(v.link) && !a.context.includes(v.link)) throw new CrubalError(`${where} then links ${s.found}.${s.facet} to ${v.link}, which no find or context declares`, t.line);
         } else if ("sum" in v) sumOk(v.sum, t.line);
-        else if (!("literal" in v) && !("now" in v) && !("none" in v) && !("caller" in v)) refOk(v, t.line);
+        else if (!("literal" in v) && !("now" in v) && !("none" in v) && !("caller" in v) && !("person" in v)) refOk(v, t.line);
       }
     }
   }
@@ -803,6 +805,10 @@ const sourceValue = (s: ActSet, i: ActInput): { ok: true; value: Json | undefine
     if (!i.caller) return { ok: false, why: `no caller to link ${s.facet} to` };
     return { ok: true, value: { $link: i.caller } };
   }
+  if ("person" in src) {
+    if (!i.caller) return { ok: false, why: `no caller to set ${s.facet} to` };
+    return { ok: true, value: i.caller };
+  }
   if ("owner" in src) {
     if (!i.owner) return { ok: false, why: `no owner to set ${s.facet} to` };
     return { ok: true, value: i.owner };
@@ -943,6 +949,9 @@ export function actWrites(a: Act, i: ActInput): ActWrites {
       else if ("caller" in v) {
         if (!i.caller) return { ok: false, why: `no caller to link ${s.found}.${s.facet} to` };
         value = { $link: i.caller };
+      } else if ("person" in v) {
+        if (!i.caller) return { ok: false, why: `no caller to set ${s.found}.${s.facet} to` };
+        value = i.caller;
       } else if ("link" in v) {
         const id = v.link === "record" ? i.record.id : (i.found[v.link]?.[0]?.id ?? i.context[v.link]?.id);
         if (!id) return { ok: false, why: `nothing to link ${s.found}.${s.facet} to: ${v.link}` };
@@ -1059,9 +1068,9 @@ const q = (s: string) => (/[\s,:]|^$/.test(s) ? JSON.stringify(s) : s);
 
 const pickJson = (p: ActPick): JsonObject => ({ facet: p.facet, value: "literal" in p.value ? { literal: p.value.literal } : "caller" in p.value ? { caller: true } : "self" in p.value ? { self: true } : refJson(p.value) });
 const thenValueJson = (v: ActThenValue): JsonObject =>
-  "literal" in v ? { literal: v.literal } : "now" in v ? { now: true } : "none" in v ? { none: true } : "caller" in v ? { caller: true } : "link" in v ? { link: v.link } : "sum" in v ? sumJson(v.sum) : refJson(v);
+  "literal" in v ? { literal: v.literal } : "now" in v ? { now: true } : "none" in v ? { none: true } : "caller" in v ? { caller: true } : "person" in v ? { person: true } : "link" in v ? { link: v.link } : "sum" in v ? sumJson(v.sum) : refJson(v);
 const sourceJson = (s: ActSource): JsonObject =>
-  "literal" in s ? { literal: s.literal } : "link" in s ? { link: s.link } : "now" in s ? { now: true } : "caller" in s ? { caller: true } : "none" in s ? { none: true } : "owner" in s ? { owner: true } : "run" in s ? { run: true } : "sum" in s ? sumJson(s.sum) : "next" in s ? { next: { prefix: "literal" in s.next.prefix ? { literal: s.next.prefix.literal } : refJson(s.next.prefix), in: { kind: s.next.in.kind, facet: s.next.in.facet }, ...(s.next.suffix ? { suffix: refJson(s.next.suffix) } : {}) } } : refJson(s);
+  "literal" in s ? { literal: s.literal } : "link" in s ? { link: s.link } : "now" in s ? { now: true } : "caller" in s ? { caller: true } : "person" in s ? { person: true } : "none" in s ? { none: true } : "owner" in s ? { owner: true } : "run" in s ? { run: true } : "sum" in s ? sumJson(s.sum) : "next" in s ? { next: { prefix: "literal" in s.next.prefix ? { literal: s.next.prefix.literal } : refJson(s.next.prefix), in: { kind: s.next.in.kind, facet: s.next.in.facet }, ...(s.next.suffix ? { suffix: refJson(s.next.suffix) } : {}) } } : refJson(s);
 const setJson = (s: ActSet): JsonObject => ({ facet: s.facet, source: sourceJson(s.source) });
 
 export function actJson(a: Act): JsonObject {
@@ -1134,11 +1143,12 @@ const sumText = (x: JsonObject): string => `${operandText(x.left as JsonObject)}
 const whenText = (w: JsonObject): string =>
   [w, ...((w.and as JsonObject[] | undefined) ?? [])].map((c) => `${termText(termOfJson(c.left as JsonObject))} ${c.op} ${termText(termOfJson(c.right as JsonObject))}`).join(" and ");
 const sourceText = (src: JsonObject): string => {
-  if (typeof src.literal === "string") return q(src.literal);
+  if (typeof src.literal === "string") return src.literal === "caller" ? JSON.stringify(src.literal) : q(src.literal);
   if (src.sum && typeof src.sum === "object") return sumText(src.sum as JsonObject);
   if (typeof src.link === "string") return `link ${src.link}`;
   if (src.now === true) return "now";
   if (src.caller === true) return "link caller";
+  if (src.person === true) return "caller";
   if (src.none === true) return "none";
   if (src.owner === true) return "owner";
   if (src.run === true) return "run";
@@ -1215,7 +1225,7 @@ export function actText(a: JsonObject): string[] {
       const list: JsonObject[] = (t.sets as JsonObject[] | undefined) ?? (one ? [{ found: one.found as string, facet: one.facet as string, value: { literal: String(one.value) } }] : []);
       const words = list.map((s) => {
         const v = s.value as JsonObject;
-        return `${s.found}.${s.facet} = ${v.now === true ? "now" : v.none === true ? "none" : v.caller === true ? "link caller" : typeof v.link === "string" ? `link ${v.link}` : v.sum && typeof v.sum === "object" ? sumText(v.sum as JsonObject) : typeof v.literal === "string" ? (/^(now|none)$|^link\s|^[\w-]+\.[\w:.-]+$/.test(v.literal) ? JSON.stringify(v.literal) : q(v.literal)) : refText(refOfJson(v))}`;
+        return `${s.found}.${s.facet} = ${v.now === true ? "now" : v.none === true ? "none" : v.caller === true ? "link caller" : v.person === true ? "caller" : typeof v.link === "string" ? `link ${v.link}` : v.sum && typeof v.sum === "object" ? sumText(v.sum as JsonObject) : typeof v.literal === "string" ? (/^(now|none|caller)$|^link\s|^[\w-]+\.[\w:.-]+$/.test(v.literal) ? JSON.stringify(v.literal) : q(v.literal)) : refText(refOfJson(v))}`;
       });
       const send = t.send as JsonObject | undefined;
       out.push(`    ${w ? `when ${whenText(w)} ` : ""}set ${words.join(", ")}${send ? ` send ${send.verb}${send.words ? ` ${send.words}` : ""}` : ""}`);
