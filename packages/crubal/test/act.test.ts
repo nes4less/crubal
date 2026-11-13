@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { followersOn } from "../src/access.ts";
-import { type ActRecord, actWrites, findPicksOf, mintValuesOf, nextInSeries, routeCountPicksOf, routeOf, tellsValuesOf } from "../src/acts.ts";
+import { type ActRecord, actWrites, findPicksOf, givenOf, mintValuesOf, nextInSeries, routeCountPicksOf, routeOf, tellsValuesOf } from "../src/acts.ts";
 import type { JsonObject } from "../src/model.ts";
 import { bundleOf, parsePackage, printBundle, readBundle } from "../src/bundle.ts";
 import { serialize } from "../src/canonical.ts";
@@ -513,6 +513,58 @@ test("revision 42: an act needs what the record in hand holds or lacks, refused 
   // Refused: a need of a facet nothing declares; a need that is no facet's name.
   assert.throws(() => checkPackages(src.replace("    containerLabel\n  find:", "    nothingHere\n  find:")), /needs nothingHere, which isn't a facet/);
   assert.throws(() => readPackages(src.replace("    containerLabel\n  find:", "    containerLabel is set\n  find:")), /a need is "<facet>" or "no <facet>"/);
+});
+
+const given = `act: reprice /2026-11-15
+  utility: bench
+  label: Reprice
+  on: container
+  given:
+    count as containerCapacity "How many does it hold?" from record.containerCapacity
+    word as containerState default open
+  find:
+    inside -> all unit where filedIn = record
+  set:
+    containerCapacity -> given.count
+    containerState -> given.word
+  then:
+    when given.count > 2 set inside.filedSlot = given.word
+`;
+
+test("revision 44: an act says what it is given, each typed by a facet; the question opens from the record, a default stands in unasked; what is given is read by a set, a then and a when; nothing lands while one is still to ask", () => {
+  const src = bench(file + label + given).replace("acts: file, label", "acts: file, label, reprice");
+  const [info] = readPackages(src);
+  const a = info?.acts.find((x) => x.name === "reprice") as NonNullable<ReturnType<typeof readPackages>[number]["acts"][number]>;
+  assert.deepEqual(a.given?.map((g) => [g.name, g.facet, g.words, g.default]), [["count", "containerCapacity", "How many does it hold?", undefined], ["word", "containerState", undefined, "open"]]);
+  checkPackages(src);
+  const bundle = bundleOf(parsePackage(src));
+  const text = printBundle(bundle);
+  assert.match(text, /^  given:\n    count as containerCapacity "How many does it hold\?" from record\.containerCapacity\n    word as containerState default open$/m);
+  assert.match(text, /^    containerCapacity -> given\.count$/m);
+  assert.match(text, /^    when given\.count > 2 set inside\.filedSlot = given\.word$/m);
+  assert.equal(serialize(bundleOf(parsePackage(text))), serialize(bundle), "the printed text reads back to the same bundle");
+  const box = { id: "C-1", values: { containerCapacity: "6" } };
+  const at = { record: box, context: {} };
+  // Nothing said: the count is still to ask and opens on the record's; the word takes its default.
+  assert.deepEqual(givenOf(a, {}, at), { values: { word: "open" }, asks: ["count"], opens: { count: "6", word: "open" } });
+  assert.deepEqual(givenOf(a, { count: "4", word: "full" }, at), { values: { count: "4", word: "full" }, asks: [], opens: { count: "4", word: "full" } });
+  const units = [{ id: "U-1", values: {} }];
+  const input = (told?: { [k: string]: string }) => ({ ...at, found: { inside: units }, now: "N", ...(told ? { given: told } : {}) });
+  assert.deepEqual(actWrites(a, input()), { ok: false, why: "count is not given" });
+  const w = actWrites(a, input({ count: "4" }));
+  assert.deepEqual(w.ok && w.record, { containerCapacity: "4", containerState: "open" }, "the default stood in for the word");
+  assert.deepEqual(w.ok && w.then, [{ id: "U-1", values: { filedSlot: "open" } }]);
+  const few = actWrites(a, input({ count: "2", word: "full" }));
+  assert.deepEqual(few.ok && few.record, { containerCapacity: "2", containerState: "full" });
+  assert.deepEqual(few.ok && few.then, [], "the when read what was given, and did not hold");
+  // Refused: a given read that was never declared, a facet nothing declares, one name twice, a find named given,
+  // a given that opens from what is not yet found, and a line that is no given.
+  assert.throws(() => checkPackages(src.replace("containerCapacity -> given.count", "containerCapacity -> given.nothing")), /reads given\.nothing, which its given lacks/);
+  assert.throws(() => checkPackages(src.replace("count as containerCapacity", "count as nothingHere")), /is given count as nothingHere, which isn't a facet/);
+  assert.throws(() => readPackages(src.replace("    word as containerState default open", "    count as containerState")), /is given count twice/);
+  assert.throws(() => checkPackages(src.replace(/inside/g, "given").replace("set given.filedSlot = given.word", "set given.filedSlot = open")), /finds given, the word for what an act is given/);
+  assert.throws(() => checkPackages(src.replace("from record.containerCapacity", "from inside.filedSlot")), /opens from inside\.filedSlot/);
+  assert.throws(() => readPackages(src.replace("count as containerCapacity", "count is capacity")), /a given is "<name> as <facet>"/);
 });
 
 // ─── Revision 31: a kind's follow aspects, an act's tells, the post it lands when followed ───────────────────────────
