@@ -402,8 +402,9 @@ it from the packages in force, and an edge says which of it its holder sees and 
 | a lane's press that names an act | under its lane, by the act | `inventory/boxes/transfer` |
 
 A flow or a lane that names no utility stands under the place itself, its address opening with `/`
-(`/shelf`). A lane a flow names as a stop is that flow's link and a lane of its own besides, since it is
-worked on its own.
+(`/shelf`). A lane a flow names as a stop is that flow's link and no node besides (erratum the same day: a
+link is a lane and its stamp, so one line closes it wherever it is worked); its presses other than the
+stop's act stand beneath the link, by the act. A lane in several flows is a link of each.
 
 **Lines.** A line is a verb and an address: `see` (the node is shown: a utility in the menu, a flow among
 the workflows, a link's or a lane's list) or `run` (its stamp may be pressed: a link's act, a lane's presses,
