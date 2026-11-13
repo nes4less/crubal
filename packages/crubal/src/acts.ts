@@ -82,7 +82,7 @@ export type ActThenValue = { literal: string } | { now: true } | { none: true } 
 export type ActCond =
   | { left: ActTerm; op: "=" | "!=" | "<" | ">" | "<=" | ">="; right: ActTerm }
   /** Revision 47: `has <ref>` holds where the reference holds a value; `no <ref>` where it holds none. */
-  | { has: ActRef; lacks?: true };
+  | { has: ActRef; lacks?: true; /** Revision 54: `<ref> is <word>`, `<ref> is not <word>`: the value as written. */ is?: string };
 /** A `when`: its first comparison, and (revision 45) those joined to it by `and`, all of which must hold. */
 export type ActWhen = ActCond & { and?: ActCond[] };
 /** Revision 45: a record the act makes when it lands, whatever its finds answered: `<name> -> <kind> [when …]`,
@@ -299,8 +299,11 @@ export function readWhen(text: string, line: number, routes: Set<string> = new S
     // Revision 47: `has <ref>`, `no <ref>`.
     const h = c.trim().match(/^(has|no)\s+(\S+)$/);
     if (h) return { has: readRef(h[2] as string, line, "a when", routes), ...(h[1] === "no" ? { lacks: true as const } : {}) };
+    // Revision 54: `<ref> is <word>`, `<ref> is not <word>`: a value against a word written here (a choice).
+    const w = c.trim().match(/^(\S+)\s+is\s+(not\s+)?([\w.-]+)$/);
+    if (w) return { has: readRef(w[1] as string, line, "a when", routes), is: w[3] as string, ...(w[2] ? { lacks: true as const } : {}) };
     const m = c.trim().match(/^(.+?)\s*(<=|>=|!=|=|<|>)\s*(.+)$/);
-    if (!m) throw new CrubalError(`a when is "<term> <op> <term>", "has <ref>" or "no <ref>", joined by "and": ${c.trim()}`, line);
+    if (!m) throw new CrubalError(`a when is "<term> <op> <term>", "has <ref>", "no <ref>" or "<ref> is [not] <word>", joined by "and": ${c.trim()}`, line);
     return { left: readTerm((m[1] as string).trim(), line, routes, counts), op: m[2] as "=" | "!=" | "<" | ">" | "<=" | ">=", right: readTerm((m[3] as string).trim(), line, routes, counts) };
   });
   const [first, ...rest] = conds as [ActCond, ...ActCond[]];
@@ -821,6 +824,8 @@ export const whenHolds = (when: ActWhen | undefined, on: ActInput): boolean => {
   return [when, ...(when.and ?? [])].every((c) => {
     if ("has" in c) {
       const v = valueOf(c.has, on);
+      // Revision 54: against a word, the value as written; a value not set is not the word.
+      if (c.is !== undefined) return ((typeof v === "string" || typeof v === "number" ? String(v) : undefined) === c.is) !== !!c.lacks;
       const holds = v !== undefined && v !== null && v !== "" && !(Array.isArray(v) && !v.length);
       return holds !== !!c.lacks;
     }
@@ -1226,7 +1231,7 @@ const refText = (r: ActRef): string =>
   "given" in r ? `given.${r.given}` : "record" in r ? (r.record ? `record.${r.record}` : "record") : "context" in r ? `context.${r.context}${r.facet ? `.${r.facet}` : ""}` : "route" in r ? `${r.route}.${r.column}` : r.facet ? `${r.found}.${r.facet}` : r.found;
 const operandJson = (o: ActOperand): JsonObject => ("number" in o ? { number: o.number } : refJson(o));
 const sumJson = (x: ActSum): JsonObject => ({ sum: { left: operandJson(x.left), op: x.op, right: operandJson(x.right) } });
-const condJson = (c: ActCond): JsonObject => ("has" in c ? { has: refJson(c.has), ...(c.lacks ? { lacks: true } : {}) } : { left: termJson(c.left), op: c.op, right: termJson(c.right) });
+const condJson = (c: ActCond): JsonObject => ("has" in c ? { has: refJson(c.has), ...(c.lacks ? { lacks: true } : {}), ...(c.is !== undefined ? { is: c.is } : {}) } : { left: termJson(c.left), op: c.op, right: termJson(c.right) });
 export const whenJson = (w: ActWhen): JsonObject => ({ ...condJson(w), ...(w.and?.length ? { and: w.and.map(condJson) } : {}) });
 const termJson = (t: ActTerm): JsonObject => ("number" in t ? { number: t.number } : "count" in t ? { count: t.count, ...(t.plus !== undefined ? { plus: t.plus } : {}) } : { ref: refJson(t.ref), ...(t.plus !== undefined ? { plus: t.plus } : {}) });
 const termText = (t: ActTerm): string => ("number" in t ? String(t.number) : `${"count" in t ? t.count : refText(t.ref)}${t.plus !== undefined ? ` + ${t.plus}` : ""}`);
@@ -1313,7 +1318,7 @@ const pickText = (p: JsonObject): string => {
 const operandText = (o: JsonObject): string => (typeof o.number === "number" ? String(o.number) : refText(refOfJson(o)));
 const sumText = (x: JsonObject): string => `${operandText(x.left as JsonObject)} ${x.op} ${operandText(x.right as JsonObject)}`;
 export const whenText = (w: JsonObject): string =>
-  [w, ...((w.and as JsonObject[] | undefined) ?? [])].map((c) => c.has && typeof c.has === "object" ? `${c.lacks === true ? "no" : "has"} ${refText(refOfJson(c.has as JsonObject))}` : `${termText(termOfJson(c.left as JsonObject))} ${c.op} ${termText(termOfJson(c.right as JsonObject))}`).join(" and ");
+  [w, ...((w.and as JsonObject[] | undefined) ?? [])].map((c) => c.has && typeof c.has === "object" ? (typeof c.is === "string" ? `${refText(refOfJson(c.has as JsonObject))} is ${c.lacks === true ? "not " : ""}${c.is}` : `${c.lacks === true ? "no" : "has"} ${refText(refOfJson(c.has as JsonObject))}`) : `${termText(termOfJson(c.left as JsonObject))} ${c.op} ${termText(termOfJson(c.right as JsonObject))}`).join(" and ");
 const sourceText = (src: JsonObject): string => {
   if (typeof src.literal === "string") return src.literal === "caller" ? JSON.stringify(src.literal) : q(src.literal);
   if (src.sum && typeof src.sum === "object") return sumText(src.sum as JsonObject);

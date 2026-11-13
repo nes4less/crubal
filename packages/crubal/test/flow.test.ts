@@ -494,3 +494,21 @@ test("revision 42: a flow says it is a closed set: its start, its finish, its re
   no("closed: ordersToPick to ordersToShip over ordersToPack cancel pack", "closed: ordersToPick", /closed is "<start stop> to <finish stop> over <rest stop>"/);
   no("    ordersToShip -> ship\n", "    ordersToShip\n", /its stop ordersToShip names no act/);
 });
+
+test("revision 54: a when tests a value against a word written there, `<ref> is <word>` and `is not`; read, carried, printed back; a value not set is not the word", async () => {
+  const { readWhen, whenHolds, whenJson, whenText } = await import("../src/acts.ts");
+  const on = (values: { [k: string]: string }) => ({ record: { id: "U-1", values }, context: {}, found: {}, now: "" });
+  const is = readWhen("record.stale is yes and record.qty > 0", 1);
+  assert.equal(whenText(whenJson(is)), "record.stale is yes and record.qty > 0");
+  assert.equal(whenHolds(is, on({ stale: "yes", qty: "2" })), true);
+  assert.equal(whenHolds(is, on({ stale: "no", qty: "2" })), false);
+  assert.equal(whenHolds(is, on({ qty: "2" })), false, "not set is not yes");
+  const not = readWhen("record.stale is not yes", 1);
+  assert.equal(whenText(whenJson(not)), "record.stale is not yes");
+  assert.equal(whenHolds(not, on({ stale: "no" })), true);
+  assert.equal(whenHolds(not, on({})), true, "not set is not yes");
+  assert.equal(whenHolds(not, on({ stale: "yes" })), false);
+  // On a link: the ask is read and printed back with it.
+  const flow = `flow: pick /2026-11-13\n  label: Pick\n  utility: fulfillment\n  stops:\n    toPick -> pack\n      asks odd: pack when record.state is not ready "Not ready. Pack it anyway?"\n`;
+  assert.match(printBundle(bundleOf(parsePackage(shop(flow)))), /^ {6}asks odd: pack when record\.state is not ready "Not ready\. Pack it anyway\?"$/m);
+});

@@ -170,6 +170,12 @@ and values, in the order written) beside the writes; the host MUST make them in 
 refused makes nothing, and MUST give each an id that is the same however often it runs the entry. A made
 record is not yet something the act's other lines may name (a link to it is a later revision's).
 
+**A value against a word (revision 54).** A `when` compared numbers and amounts, and said `has` or `no`; it
+could not say that a choice stands at one of its values. `<ref> is <word>` holds where the value is that word
+as written, and `<ref> is not <word>` where it is not; a value not set is not the word. So a link may ask
+where a flag a rule keeps says yes: `asks sticker: reprint when record.stickerStale is yes`. In the bundle the
+comparison is `{"has": reference, "is": "<word>"}`, with `"lacks": true` for `is not`.
+
 **Standing, and the acts that follow (revision 47).** Two things an act's writes could not say. A record's
 **standing**: a then may `archive` or `restore` the record in hand or the records a find answered, so "the last
 one sold archives the unit" and "some found brings it back" are the act's own. `actWrites` answers them as
