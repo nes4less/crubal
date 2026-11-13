@@ -3,6 +3,7 @@
 // The log is the truth; `rebuild` gives every other table back from it.
 
 import { compareVersions } from "@cruba/crubal";
+import { recordAt } from "@cruba/crubal";
 import { applyEntry, diffWrites, differs, type Draft, type Entry, type State, MemoryRecords } from "@cruba/crubal";
 import { type Contract, proposalMet, quorumHolds } from "@cruba/crubal";
 
@@ -149,6 +150,13 @@ function recipesBetween<R extends { from: string; to: string }>(recipes: R[], pk
   return recipes
     .filter((r) => r.from.startsWith(`${pkg} /`) && compareVersions(version(r.from), installed) >= 0 && compareVersions(version(r.to), target) <= 0)
     .sort((a, b) => compareVersions(version(a.from), version(b.from)));
+}
+
+/** The records an entry's writes name (revision 50), each once. */
+function touchedBy(entry: Entry): string[] {
+  const out = new Set<string>();
+  for (const w of Array.isArray(entry.writes) ? entry.writes : []) if (w && typeof w === "object" && !Array.isArray(w) && typeof w.record === "string") out.add(w.record);
+  return [...out];
 }
 
 export class PgStore {
@@ -1219,7 +1227,65 @@ export class PgStore {
       [owner, this.chain, seq, String(linked.log), linked.prev ?? null, hash, typeof linked.at === "string" ? linked.at : null, linked.witnessed === true, linked],
     );
     await client.query("update chains set head_seq = $3, head_hash = $4 where owner = $1 and chain = $2", [owner, this.chain, seq, hash]);
+    // Revision 50: the records this entry touches, indexed as it lands; the index is whole through this entry
+    // where it was whole through the one before.
+    await this.touchesReady();
+    const touched = touchedBy(linked);
+    if (touched.length) await client.query("insert into log_touches (owner, chain, record, seq) select $1, $2, r, $3 from unnest($4::text[]) as r on conflict do nothing", [owner, this.chain, seq, touched]);
+    await client.query("insert into log_touch_cursors (owner, chain, seq) values ($1, $2, 0) on conflict do nothing", [owner, this.chain]);
+    await client.query("update log_touch_cursors set seq = $3 where owner = $1 and chain = $2 and seq = $3 - 1", [owner, this.chain, seq]);
     return linked;
+  }
+
+  /** The index of the records each entry touches, and how far it is whole (revision 50); made once per process. */
+  private touchTable: Promise<void> | undefined;
+  private touchesReady(): Promise<void> {
+    this.touchTable ??= (async () => {
+      await this.pool.query("create table if not exists log_touches (owner text not null, chain text not null, record text not null, seq bigint not null, primary key (owner, chain, record, seq))");
+      await this.pool.query("create table if not exists log_touch_cursors (owner text not null, chain text not null, seq bigint not null default 0, primary key (owner, chain))");
+    })();
+    return this.touchTable;
+  }
+
+  /**
+   * Revision 50: index the entries of a log from before the index, a bounded batch at a time, oldest first.
+   * The chain is held for the batch, as a write holds it, so no entry lands between the read and the cursor.
+   * Answers how far the index is whole and the chain's head; they are equal when there is nothing left.
+   */
+  async indexTouches(limit = 500): Promise<{ through: number; head: number }> {
+    await this.touchesReady();
+    return transaction(this.pool, async (client) => {
+      const head = await this.lockChain(client);
+      await client.query("insert into log_touch_cursors (owner, chain, seq) values ($1, $2, 0) on conflict do nothing", [this.owner, this.chain]);
+      const cur = await client.query("select seq from log_touch_cursors where owner = $1 and chain = $2", [this.owner, this.chain]);
+      let through = Math.max(0, Number((cur.rows[0] as { seq: string | number } | undefined)?.seq ?? 0));
+      if (through >= head.seq) return { through: head.seq, head: head.seq };
+      const { rows } = await client.query("select seq, entry from log where owner = $1 and chain = $2 and seq > $3 order by seq limit $4", [this.owner, this.chain, through, Math.max(1, Math.floor(limit))]);
+      for (const row of rows as { seq: string | number; entry: Entry }[]) {
+        const touched = touchedBy(row.entry);
+        if (touched.length) await client.query("insert into log_touches (owner, chain, record, seq) select $1, $2, r, $3 from unnest($4::text[]) as r on conflict do nothing", [this.owner, this.chain, Number(row.seq), touched]);
+        through = Number(row.seq);
+      }
+      await client.query("update log_touch_cursors set seq = $3 where owner = $1 and chain = $2", [this.owner, this.chain, through]);
+      return { through, head: head.seq };
+    });
+  }
+
+  /**
+   * Revision 50: one record as it stood at a moment (as it stands, when none is said), and when each of its
+   * values last changed. Read by the index where it is whole; else by the log itself, which is slower and
+   * answers the same.
+   */
+  async recordAt(id: string, until?: string): Promise<{ record?: Record; changed: { [address: string]: string } }> {
+    await this.touchesReady();
+    const { rows: at } = await this.pool.query("select c.head_seq as head, coalesce(t.seq, 0) as through from chains c left join log_touch_cursors t on t.owner = c.owner and t.chain = c.chain where c.owner = $1 and c.chain = $2", [this.owner, this.chain]);
+    const where = at[0] as { head: string | number; through: string | number } | undefined;
+    if (!where) return { changed: {} };
+    const whole = Number(where.through) >= Number(where.head);
+    const { rows } = whole
+      ? await this.pool.query("select l.entry from log l join log_touches t on t.owner = l.owner and t.chain = l.chain and t.seq = l.seq where t.owner = $1 and t.chain = $2 and t.record = $3 order by l.seq", [this.owner, this.chain, id])
+      : await this.pool.query("select entry from log where owner = $1 and chain = $2 and entry->'writes' @> $3::jsonb order by seq", [this.owner, this.chain, JSON.stringify([{ record: id }])]);
+    return recordAt((rows as { entry: Entry }[]).map((r) => r.entry), id, until);
   }
 
   /**

@@ -318,3 +318,18 @@ create table if not exists restamps (
   primary key (owner, package, version)
 );
 
+-- Revision 50: the records each entry touches, and how far the index is whole (a log from before it is
+-- indexed a batch at a time by indexTouches).
+create table if not exists log_touches (
+  owner text not null,
+  chain text not null,
+  record text not null,
+  seq bigint not null,
+  primary key (owner, chain, record, seq)
+);
+create table if not exists log_touch_cursors (
+  owner text not null,
+  chain text not null,
+  seq bigint not null default 0,
+  primary key (owner, chain)
+);

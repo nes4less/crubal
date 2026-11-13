@@ -308,6 +308,36 @@ export function rebuild(entries: Entry[]): State {
   return state;
 }
 
+/**
+ * Revision 50: one record as it stood. The entries are the log's, in order; only this record's own writes are
+ * applied, and only those of entries at or before `until` (every one when it is not said). Answers the record
+ * as it then stood (nothing when it was not yet made) and, for each address of its values, when it last
+ * changed: the moment of the last entry that left it other than it was. An entry or a write redacted is
+ * passed over as a rebuild passes it over, so what it held is not answered.
+ */
+export function recordAt(entries: Entry[], id: string, until?: string): { record?: Record; changed: { [address: string]: string } } {
+  const state = emptyState();
+  const changed: { [address: string]: string } = {};
+  for (const e of entries) {
+    if (until !== undefined && typeof e.at === "string" && e.at > until) continue;
+    const writes = (Array.isArray(e.writes) ? e.writes.filter(isObj) : []).filter((w) => w.record === id && (typeof w.address === "string" || typeof w.envelope === "string"));
+    if (!writes.length) continue;
+    const before = { ...(state.records.get(id)?.values ?? {}) };
+    try {
+      applyEntry(state, { ...e, writes });
+    } catch {
+      // A write on a record whose making was redacted: nothing of it is answered.
+      continue;
+    }
+    const after = state.records.get(id)?.values ?? {};
+    if (typeof e.at !== "string") continue;
+    for (const k of new Set([...Object.keys(before), ...Object.keys(after)]))
+      if (serialize((before[k] ?? null) as Json) !== serialize((after[k] ?? null) as Json) || (k in before) !== (k in after)) changed[k] = e.at;
+  }
+  const record = state.records.get(id);
+  return { ...(record ? { record } : {}), changed };
+}
+
 /** The state as JSON, for comparing and for a dump. */
 export function stateJson(state: State): JsonObject {
   const out: JsonObject = { records: [...state.records.values()] as unknown as Json[] };

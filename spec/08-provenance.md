@@ -182,6 +182,21 @@ Two different things, never to be confused:
 - **Replay** (chapter 9.6) folds kept intake records again under the *current* definitions. It is new work,
   and it writes new entries.
 
+
+### 8.5.4 A record as it stood (revision 50)
+
+The log holds every write to a record with its moment, so it answers two questions a record's present values
+cannot: what the record held at a moment, and when each of its values last changed. `recordAt(entries, id,
+until)` applies only that record's own writes, of the entries at or before `until` (every entry when it is
+not said), and answers the record as it then stood, nothing when it was not yet made, and for each address of
+its values the moment of the last entry that left it other than it was. A value written again as it was does
+not move its moment. An entry or a write redacted (8.5.2) is passed over, as a rebuild passes it over.
+
+A store SHOULD answer it without reading the whole log: by an index of the records each entry touches,
+written as the entry lands. A log from before the index is indexed a bounded batch at a time, oldest first,
+with the chain held for the batch as a write holds it; until the index is whole the store MUST answer from
+the log itself, slower and the same.
+
 ## 8.6 Migrations and history
 
 A migration's write gets its own log entry, with `by: {"migration": "<recipe>"}`. It never changes a
