@@ -10,6 +10,7 @@ import { evaluate, parseCondition } from "./conditions.ts";
 import type { Json, JsonObject } from "./model.ts";
 import { CrubalError, type Node } from "./tree.ts";
 import { type Facet, unquote } from "./defs.ts";
+import { checkScalar } from "./dictionary.ts";
 
 /** A reference an act's lines may make: the record in hand's facet, a context record (or its facet), a found
  * record's facet, or the route's row's column. */
@@ -574,6 +575,8 @@ export type ActInput = {
   run?: string;
   /** Revision 44: what the act was given, by name, defaults filled (`givenOf`). */
   given?: { [name: string]: Json };
+  /** Revision 44: the facets, so a given its facet refuses stops the act before any write. */
+  facetOf?: (key: string) => Facet | undefined;
   /** The facets that are marks (revision 34): those a marked filter in force names. A mark is taken once. */
   marks?: string[];
 };
@@ -745,26 +748,40 @@ const said = (v: Json | undefined): v is Json => v !== undefined && v !== null &
 
 /** What an act is given (15.1, revision 44), from what the person said: each given takes what was said, else its
  * default. `asks` names the ones still to ask (no word said and no default); `opens` is what each question opens
- * on (what was said, else its `from` as the record and the context stand, else its default). Pure: the app asks
- * by each given's facet, and the store refuses a value its facet refuses when the act's writes land. */
+ * on (what was said, else its `from` as the record and the context stand, else its default). With the facets at
+ * hand (`facetOf`), a value its facet refuses is `refused` with its words, and is not among the values: a word
+ * where a number goes, a number outside the facet's range, a choice the facet lacks. Pure. */
 export function givenOf(
   a: Pick<Act, "given">,
   told: { [name: string]: Json | undefined },
   i: Pick<ActInput, "record" | "context">,
-): { values: { [name: string]: Json }; asks: string[]; opens: { [name: string]: Json } } {
+  facetOf?: (key: string) => Facet | undefined,
+): { values: { [name: string]: Json }; asks: string[]; opens: { [name: string]: Json }; refused: { name: string; why: string }[] } {
   const values: { [name: string]: Json } = {};
   const opens: { [name: string]: Json } = {};
   const asks: string[] = [];
+  const refused: { name: string; why: string }[] = [];
+  const problem = (g: ActGiven, v: Json): string | undefined => {
+    const f = facetOf?.(bare(g.facet));
+    if (!f) return undefined;
+    const c = checkScalar(f, v);
+    if (c.flag === "range" && f.range) return `${g.name} is ${f.range.min} to ${f.range.max}`;
+    if (c.outcome === "contradiction") return `${g.name} is a ${f.type}${f.type === "choice" && f.values?.length ? `, one of ${f.values.map((x) => x.value).join(", ")}` : ""}`;
+    if (f.type === "choice" && !f.open && typeof v === "string" && !(f.values ?? []).some((x) => x.value === v || x.aliases.includes(v))) return `${g.name} is one of ${(f.values ?? []).map((x) => x.value).join(", ")}`;
+    return undefined;
+  };
   for (const g of a.given ?? []) {
     const t = told[g.name];
     const v = said(t) ? t : g.default;
-    if (said(v)) values[g.name] = v;
+    const why = said(v) ? problem(g, v) : undefined;
+    if (why) refused.push({ name: g.name, why });
+    else if (said(v)) values[g.name] = v;
     else asks.push(g.name);
     const from = g.from ? valueOf(g.from, { ...i, found: {} }) : undefined;
     const o = said(t) ? t : said(from) ? from : g.default;
     if (said(o)) opens[g.name] = o;
   }
-  return { values, asks, opens };
+  return { values, asks, opens, refused };
 }
 
 /** The writes an act makes when it lands (15): pure, given what the finds answered or minted. A `first` find
@@ -780,7 +797,8 @@ export function actWrites(a: Act, i: ActInput): ActWrites {
   }
   // Revision 44: what the act is given is in hand before any write, a default standing in where nothing was said.
   if (a.given?.length) {
-    const g = givenOf(a, i.given ?? {}, i);
+    const g = givenOf(a, i.given ?? {}, i, i.facetOf);
+    if (g.refused[0]) return { ok: false, why: g.refused[0].why };
     if (g.asks.length) return { ok: false, why: `${g.asks[0]} is not given` };
     i = { ...i, given: g.values };
   }

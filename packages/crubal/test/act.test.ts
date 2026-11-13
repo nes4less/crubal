@@ -546,8 +546,15 @@ test("revision 44: an act says what it is given, each typed by a facet; the ques
   const box = { id: "C-1", values: { containerCapacity: "6" } };
   const at = { record: box, context: {} };
   // Nothing said: the count is still to ask and opens on the record's; the word takes its default.
-  assert.deepEqual(givenOf(a, {}, at), { values: { word: "open" }, asks: ["count"], opens: { count: "6", word: "open" } });
-  assert.deepEqual(givenOf(a, { count: "4", word: "full" }, at), { values: { count: "4", word: "full" }, asks: [], opens: { count: "4", word: "full" } });
+  assert.deepEqual(givenOf(a, {}, at), { values: { word: "open" }, asks: ["count"], opens: { count: "6", word: "open" }, refused: [] });
+  assert.deepEqual(givenOf(a, { count: "4", word: "full" }, at), { values: { count: "4", word: "full" }, asks: [], opens: { count: "4", word: "full" }, refused: [] });
+  // With the facets at hand, a value its facet refuses is refused with its words, and nothing lands.
+  const dict = readDefinitions(src);
+  const facetOf = (k: string) => dict.facets.get(k);
+  assert.deepEqual(givenOf(a, { count: "many" }, at, facetOf).refused, [{ name: "count", why: "count is a number" }]);
+  assert.deepEqual(givenOf(a, { count: "4", word: "ajar" }, at, facetOf).refused, [{ name: "word", why: "word is one of open, full" }]);
+  assert.deepEqual(givenOf(a, { count: "4", word: "full" }, at, facetOf).refused, []);
+  assert.deepEqual(actWrites(a, { ...at, found: { inside: [] }, now: "N", given: { count: "many" }, facetOf }), { ok: false, why: "count is a number" });
   const units = [{ id: "U-1", values: {} }];
   const input = (told?: { [k: string]: string }) => ({ ...at, found: { inside: units }, now: "N", ...(told ? { given: told } : {}) });
   assert.deepEqual(actWrites(a, input()), { ok: false, why: "count is not given" });

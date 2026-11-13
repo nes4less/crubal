@@ -128,8 +128,10 @@ act: reprice /2026-11-15
 
 The app asks for each given by its facet, opened on its `from`; `givenOf` answers, pure, what was said with the
 defaults laid under it, which are still to ask, and what each question opens on. The act lands only with every
-given in hand: `actWrites` refuses with "`<name>` is not given" before any write. A value is checked as any
-write is: the store refuses what the given's facet refuses when the act's writes land. A given is not kept: it
+given in hand: `actWrites` refuses with "`<name>` is not given" before any write. A value is checked by its
+facet before any write: a word where a number goes, a number outside the facet's range, or a choice the facet
+lacks is `refused` by `givenOf` with its words, and the act does not land (an act's writes are not a form's, so
+nothing later would refuse them). A given is not kept: it
 is the press's, read once. An act computes nothing from a given yet (a count less what was on hand is the app's
 until acts can subtract); that is a later revision's.
 
