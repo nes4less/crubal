@@ -17,7 +17,9 @@ export type ActRef =
   | { record: string }
   | { context: string; facet?: string }
   | { found: string; facet?: string }
-  | { route: string; column: string };
+  | { route: string; column: string }
+  /** Revision 44: what the act was given, by its name. */
+  | { given: string };
 
 /** What a pick in a find compares a facet with: a literal, or a reference. */
 export type ActPickValue = { literal: string } | { caller: true } | { self: true } | ActRef;
@@ -82,6 +84,11 @@ export type ActThen = {
  * it is refused. */
 export type ActNeed = { facet: string; lacks?: true; words?: string; line: number };
 
+/** Revision 44: a value the act is given by the person pressing it. Its type is a facet's (`as`), so what asks
+ * for it and what refuses it are the facet's own; `from` is what the question opens on, `default` what it takes
+ * when the person says nothing (and then it need not be asked). */
+export type ActGiven = { name: string; facet: string; words?: string; from?: ActRef; default?: string; line: number };
+
 export type Act = {
   name: string;
   version: string;
@@ -96,6 +103,8 @@ export type Act = {
   context: string[];
   /** Revision 42: read before anything else; the first that fails stops the act before any write. */
   needs?: ActNeed[];
+  /** Revision 44: what the act is given, each asked of the person unless it has a default. */
+  given?: ActGiven[];
   route?: ActRoute;
   finds: ActFind[];
   counts: ActCount[];
@@ -120,6 +129,9 @@ const WORD = /^[a-z][\w-]*$/;
 function readRef(t: string, line: number, what: string, routes: Set<string> = new Set()): ActRef {
   let m = t.match(/^record\.([\w:]+)$/);
   if (m) return { record: m[1] as string };
+  // Revision 44: `given.<name>`, what the act was given.
+  m = t.match(/^given\.([\w-]+)$/);
+  if (m) return { given: m[1] as string };
   m = t.match(/^context\.([\w-]+)(?:\.([\w:]+))?$/);
   if (m) return m[2] ? { context: m[1] as string, facet: m[2] } : { context: m[1] as string };
   m = t.match(/^([\w-]+)\.([\w:]+)$/);
@@ -299,6 +311,16 @@ export function readAct(node: Node): Act {
         (a.needs ??= []).push({ facet: m[2] as string, ...(m[1] ? { lacks: true as const } : {}), ...(m[3] ? { words: m[3] } : {}), line: l.line });
       }
       if (!a.needs?.length) throw new CrubalError(`the act ${name} needs nothing: its lines go beneath needs:`, c.line);
+    } else if (c.key === "given") {
+      for (const l of c.children) {
+        const t = l.text.trim();
+        if (!t) continue;
+        const m = t.match(/^([\w-]+)\s+as\s+([\w:]+)(?:\s+"([^"]+)")?(?:\s+from\s+(\S+)|\s+default\s+(.+))?$/);
+        if (!m || !WORD.test(m[1] as string)) throw new CrubalError(`a given is "<name> as <facet>", its words in quotes after it or not, then "from <ref>" (what the question opens on) or "default <value>" (what it takes unasked) or neither: ${t}`, l.line);
+        if (a.given?.some((g) => g.name === m[1])) throw new CrubalError(`the act ${name} is given ${m[1]} twice`, l.line);
+        (a.given ??= []).push({ name: m[1] as string, facet: m[2] as string, ...(m[3] ? { words: m[3] } : {}), ...(m[4] ? { from: readRef(m[4], l.line, "a given's from", routes) } : {}), ...(m[5] !== undefined ? { default: unquote(m[5].trim()) } : {}), line: l.line });
+      }
+      if (!a.given?.length) throw new CrubalError(`the act ${name} is given nothing: its lines go beneath given:`, c.line);
     } else if (c.key === "route") continue;
     else if (c.key === "find") for (const l of c.children) { if (l.text.trim()) { const f = readFind(l.text.trim(), l.line, routes); a.finds.push(f); founds.add(f.name); } }
     else if (c.key === "count") for (const l of c.children) { if (l.text.trim()) { const k = readCount(l.text.trim(), l.line, routes, founds); a.counts.push(k); countNames.add(k.name); } }
@@ -330,7 +352,7 @@ export function readAct(node: Node): Act {
       if (a.tells) throw new CrubalError(`the act ${name} tells twice`, c.line);
       a.tells = { kind: m[1] as string, aspect: m[2] as string, sets: c.children.filter((l) => l.text.trim()).map((l) => readSet(l.text.trim(), l.line, routes)), line: c.line };
       if (!a.tells.sets.length) throw new CrubalError(`the act ${name} tells ${m[1]} and sets nothing: its set lines go beneath tells:`, c.line);
-    } else throw new CrubalError(`an act has utility, replaces, label, describe, on, takes, context, needs, route, find, mint, count, set, then, send, lands and tells, not ${c.key}`, c.line);
+    } else throw new CrubalError(`an act has utility, replaces, label, describe, on, takes, context, needs, given, route, find, mint, count, set, then, send, lands and tells, not ${c.key}`, c.line);
   }
   if (!a.utility) throw new CrubalError(`the act ${name} names no utility`, node.line);
   if (!a.on) throw new CrubalError(`the act ${name} says no on: the level it acts on`, node.line);
@@ -394,7 +416,12 @@ export function checkActList(acts: Act[], env: ActEnv): void {
       return f?.type === "compound" && f.children ? new Set(f.children.keys()) : undefined;
     };
     const routeColumns = a.route ? columns(a.route.rows) : undefined;
+    const givens = new Set((a.given ?? []).map((g) => g.name));
     const refOk = (r: ActRef, line: number, inCount = false) => {
+      if ("given" in r) {
+        if (!givens.has(r.given)) throw new CrubalError(`${where} reads given.${r.given}, which its given lacks`, line);
+        return;
+      }
       if ("found" in r && !found.has(r.found)) throw new CrubalError(`${where} names ${r.found}, which no find declares`, line);
       if ("found" in r && !r.facet) return;
       if ("route" in r) {
@@ -418,8 +445,16 @@ export function checkActList(acts: Act[], env: ActEnv): void {
         if (!("literal" in p.value) && !("caller" in p.value) && !("self" in p.value)) refOk(p.value, p.line, inCount);
       }
     };
+    for (const g of a.given ?? []) {
+      needFacet(g.facet, g.line, `is given ${g.name} as`);
+      if (g.from) {
+        if (!("record" in g.from) && !("context" in g.from)) throw new CrubalError(`${where}'s given ${g.name} opens from ${refText(g.from)}: a given is asked before anything is found, so it opens from record.<facet> or context.<kind>.<facet>`, g.line);
+        refOk(g.from, g.line);
+      }
+    }
     if (a.route) {
       const r = a.route;
+      if ("given" in r.rows) throw new CrubalError(`${where} routes over rows that aren't the record's or a context record's`, r.line);
       if ("context" in r.rows && !r.rows.facet) throw new CrubalError(`${where} routes over context.${r.rows.context}, which names no facet: the rows are a compound facet's`, r.line);
       if ("found" in r.rows || "route" in r.rows) throw new CrubalError(`${where} routes over rows that aren't the record's or a context record's`, r.line);
       refOk(r.rows, r.line);
@@ -452,6 +487,7 @@ export function checkActList(acts: Act[], env: ActEnv): void {
     };
     for (const f of a.finds) {
       if (found.has(f.name)) throw new CrubalError(`${where} finds ${f.name} twice`, f.line);
+      if (f.name === "given") throw new CrubalError(`${where} finds given, the word for what an act is given`, f.line);
       if (f.name === routeName) throw new CrubalError(`${where} finds ${f.name}, its route's name`, f.line);
       if (!env.kinds.has(f.kind) && !env.levels.has(f.kind) && strict) throw new CrubalError(`${where} finds ${f.kind}, which isn't a kind ${here}`, f.line);
       picksOk(f.where, `'s find ${f.name}`);
@@ -536,6 +572,8 @@ export type ActInput = {
   owner?: string;
   /** The act run's id (revision 31): what a told post's `run` source carries. */
   run?: string;
+  /** Revision 44: what the act was given, by name, defaults filled (`givenOf`). */
+  given?: { [name: string]: Json };
   /** The facets that are marks (revision 34): those a marked filter in force names. A mark is taken once. */
   marks?: string[];
 };
@@ -559,7 +597,8 @@ const facetOf = (rec: ActRecord | undefined, facet: string): Json | undefined =>
   return f === PARENT ? (rec.of ?? rec.values[f]) : rec.values[f];
 };
 
-const valueOf = (r: ActRef, i: Pick<ActInput, "record" | "context" | "found" | "route">): Json | undefined => {
+const valueOf = (r: ActRef, i: Pick<ActInput, "record" | "context" | "found" | "route" | "given">): Json | undefined => {
+  if ("given" in r) return i.given?.[r.given];
   if ("record" in r) return facetOf(i.record, r.record);
   if ("context" in r) return r.facet ? facetOf(i.context[r.context], r.facet) : i.context[r.context]?.id;
   if ("route" in r) return i.route?.row[r.column];
@@ -702,6 +741,32 @@ export function tellsValuesOf(a: Act, i: ActInput): { ok: true; kind: string; as
   return { ok: true, kind: a.tells.kind, aspect: a.tells.aspect, values };
 }
 
+const said = (v: Json | undefined): v is Json => v !== undefined && v !== null && v !== "";
+
+/** What an act is given (15.1, revision 44), from what the person said: each given takes what was said, else its
+ * default. `asks` names the ones still to ask (no word said and no default); `opens` is what each question opens
+ * on (what was said, else its `from` as the record and the context stand, else its default). Pure: the app asks
+ * by each given's facet, and the store refuses a value its facet refuses when the act's writes land. */
+export function givenOf(
+  a: Pick<Act, "given">,
+  told: { [name: string]: Json | undefined },
+  i: Pick<ActInput, "record" | "context">,
+): { values: { [name: string]: Json }; asks: string[]; opens: { [name: string]: Json } } {
+  const values: { [name: string]: Json } = {};
+  const opens: { [name: string]: Json } = {};
+  const asks: string[] = [];
+  for (const g of a.given ?? []) {
+    const t = told[g.name];
+    const v = said(t) ? t : g.default;
+    if (said(v)) values[g.name] = v;
+    else asks.push(g.name);
+    const from = g.from ? valueOf(g.from, { ...i, found: {} }) : undefined;
+    const o = said(t) ? t : said(from) ? from : g.default;
+    if (said(o)) opens[g.name] = o;
+  }
+  return { values, asks, opens };
+}
+
 /** The writes an act makes when it lands (15): pure, given what the finds answered or minted. A `first` find
  * that answered nothing stops the act with the reason, before any write. */
 export function actWrites(a: Act, i: ActInput): ActWrites {
@@ -712,6 +777,12 @@ export function actWrites(a: Act, i: ActInput): ActWrites {
     const v = second === undefined ? i.record.values[bare(first)] : i.linked?.[bare(first)]?.values[second];
     const holds = v !== undefined && v !== null && v !== "" && !(Array.isArray(v) && !v.length);
     if (holds === !!n.lacks) return { ok: false, why: n.words ?? (n.lacks ? `${second ?? bare(first)} is already set` : `${second ?? bare(first)} is not set`) };
+  }
+  // Revision 44: what the act is given is in hand before any write, a default standing in where nothing was said.
+  if (a.given?.length) {
+    const g = givenOf(a, i.given ?? {}, i);
+    if (g.asks.length) return { ok: false, why: `${g.asks[0]} is not given` };
+    i = { ...i, given: g.values };
   }
   for (const f of a.finds) if (f.take === "first" && !i.found[f.name]?.length) return { ok: false, why: `no ${f.kind} for ${f.name}` };
   const record: JsonObject = {};
@@ -825,9 +896,9 @@ export function findPicksOf(f: { where: ActPick[] }, i: Omit<ActInput, "found" |
 // ─── JSON and text ──────────────────────────────────────────────────────────────
 
 const refJson = (r: ActRef): JsonObject =>
-  "record" in r ? { record: r.record } : "context" in r ? { context: r.context, ...(r.facet ? { facet: r.facet } : {}) } : "route" in r ? { route: r.route, column: r.column } : { found: r.found, ...(r.facet ? { facet: r.facet } : {}) };
+  "given" in r ? { given: r.given } : "record" in r ? { record: r.record } : "context" in r ? { context: r.context, ...(r.facet ? { facet: r.facet } : {}) } : "route" in r ? { route: r.route, column: r.column } : { found: r.found, ...(r.facet ? { facet: r.facet } : {}) };
 const refText = (r: ActRef): string =>
-  "record" in r ? (r.record ? `record.${r.record}` : "record") : "context" in r ? `context.${r.context}${r.facet ? `.${r.facet}` : ""}` : "route" in r ? `${r.route}.${r.column}` : r.facet ? `${r.found}.${r.facet}` : r.found;
+  "given" in r ? `given.${r.given}` : "record" in r ? (r.record ? `record.${r.record}` : "record") : "context" in r ? `context.${r.context}${r.facet ? `.${r.facet}` : ""}` : "route" in r ? `${r.route}.${r.column}` : r.facet ? `${r.found}.${r.facet}` : r.found;
 const termJson = (t: ActTerm): JsonObject => ("number" in t ? { number: t.number } : "count" in t ? { count: t.count, ...(t.plus !== undefined ? { plus: t.plus } : {}) } : { ref: refJson(t.ref), ...(t.plus !== undefined ? { plus: t.plus } : {}) });
 const termText = (t: ActTerm): string => ("number" in t ? String(t.number) : `${"count" in t ? t.count : refText(t.ref)}${t.plus !== undefined ? ` + ${t.plus}` : ""}`);
 
@@ -853,6 +924,7 @@ export function actJson(a: Act): JsonObject {
     ...(a.takes ? { takes: a.takes } : {}),
     ...(a.context.length ? { context: [...a.context] } : {}),
     ...(a.needs?.length ? { needs: a.needs.map((n): JsonObject => ({ facet: n.facet, ...(n.lacks ? { lacks: true } : {}), ...(n.words ? { words: n.words } : {}) })) } : {}),
+    ...(a.given?.length ? { given: a.given.map((g): JsonObject => ({ name: g.name, facet: g.facet, ...(g.words ? { words: g.words } : {}), ...(g.from ? { from: refJson(g.from) } : {}), ...(g.default !== undefined ? { default: g.default } : {}) })) } : {}),
     ...(a.route
       ? {
           route: {
@@ -888,7 +960,9 @@ export function actJson(a: Act): JsonObject {
 }
 
 const refOfJson = (o: JsonObject): ActRef =>
-  typeof o.record === "string"
+  typeof o.given === "string"
+    ? { given: o.given }
+    : typeof o.record === "string"
     ? { record: o.record }
     : typeof o.context === "string"
       ? { context: o.context, ...(typeof o.facet === "string" ? { facet: o.facet } : {}) }
@@ -930,6 +1004,10 @@ export function actText(a: JsonObject): string[] {
   if (Array.isArray(a.needs) && a.needs.length) {
     out.push("  needs:");
     for (const n of a.needs as JsonObject[]) out.push(`    ${n.lacks === true ? "no " : ""}${n.facet}${typeof n.words === "string" ? ` "${n.words}"` : ""}`);
+  }
+  if (Array.isArray(a.given) && a.given.length) {
+    out.push("  given:");
+    for (const g of a.given as JsonObject[]) out.push(`    ${g.name} as ${g.facet}${typeof g.words === "string" ? ` "${g.words}"` : ""}${g.from && typeof g.from === "object" ? ` from ${refText(refOfJson(g.from as JsonObject))}` : typeof g.default === "string" ? ` default ${q(g.default)}` : ""}`);
   }
   if (a.route && typeof a.route === "object") {
     const r = a.route as JsonObject;

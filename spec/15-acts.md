@@ -73,6 +73,7 @@ act: fileByCategory /2026-11-09
 | `takes` | revision 35: `share`, where the level's kind declares its quantity (11.2 `shares`): the act may land on fewer than the record holds. The one running it gives a count, all of it when none is given. Fewer **splits** the record (15.2) and the act lands on the share taken |
 | `context` | kinds the act holds beside the record, asked once and kept per person (12.11's `context:`): `context.<kind>` in its lines names the record held, `context.<kind>.<facet>` (revision 26) reads its facet |
 | `needs` | revision 42: one line per need, `<facet>` or `no <facet>`, with its words in quotes after it or not: what the record in hand must hold, or lack, for the act to land. The facet is the record's own, or `<link facet>.<facet>`, the facet of the record it links to (one hop; the host hands the linked record, and one that links to nothing holds nothing). Read before anything else; the first that fails stops the act before any write, with its words (or "`<facet>` is not set", "`<facet>` is already set") as the reason |
+| `given` | revision 44: one line per value the act is given by the person pressing it, `<name> as <facet>`, with its words in quotes after it or not, then `from <ref>` or `default <value>` or neither. The facet is the given's type: what asks for it (a number, money, a choice) and what refuses it are the facet's own. `from record.<facet>` or `from context.<kind>.<facet>` is what the question **opens on** (a count opened on what is expected); `default <value>` is what the given takes when the person says nothing, and a given with a default need not be asked. `given.<name>` reads it wherever a reference may stand: a set's or a mint's source, a then's value, a `when`'s term, a pick's value |
 | `route` | revision 26, one line: `<name> -> row of <ref> by <column> over record[, record.<link facet>] [keep <column> by <kind> where <picks>]`: the rows of a compound facet on a record (`context.station.slots`, the station's rack), each row's `<column>` a condition (6.3) read over the record in hand's values laid over the linked record's (`record.of`, the product's); the first row whose condition holds is taken; the last row takes what no row above claimed, its condition unread; with `keep`, a row whose count (the records of the kind the picks admit) is its `<column>` or more is passed over. `<name>.<column>` thereafter reads the row taken; in the count's picks it reads the row being weighed |
 | `of` | a record's parent (1.1), no facet: it stands where a facet may (`record.of`, a route's `over`, a pick's facet `of = record.of`) and the dictionary is never asked for it |
 | `find` | one line per find, `<name> -> first\|all <kind> [where <facet> = <value>, …] [order <facet> [after\|before]]`: the records of a kind the picks admit, in the order said, the first or all; a pick's facet may be a link facet's target's, `<link facet>.<facet>` (revision 26, one hop); a pick's value is a literal, `record.<facet>` (the record in hand's), `context.<kind>` (the context record's id), `context.<kind>.<facet>`, `<found>.<facet>` (an earlier find's), `<found>` alone (its id, revision 26), `caller` (revision 35: the person running the act, as `link caller` is in a set), `record` alone (revision 39: the record in hand, its id, so `of = record` finds the records beneath it and `<link facet> = record` those that link to it; the word itself as a literal is written quoted) or `<route>.<column>` (the row taken) |
@@ -111,6 +112,27 @@ beside its values (`clear` on the found record's writes) and taken off as the re
 reference reads nothing for writes nothing. Where two thens write one facet of one record, the later
 stands, a clear as much as a value.
 
+**What an act is given (revision 44).** Some presses need a value from the person: a price, a count, how many
+to add. An act says so itself, so the question is asked wherever the act is pressed (a card, a scan, a case's
+answer, a cart) and never lives in one screen:
+
+```crubal
+act: reprice /2026-11-15
+  utility: products
+  on: offer
+  given:
+    price as price "What price?" from record.price
+  set:
+    price -> given.price
+```
+
+The app asks for each given by its facet, opened on its `from`; `givenOf` answers, pure, what was said with the
+defaults laid under it, which are still to ask, and what each question opens on. The act lands only with every
+given in hand: `actWrites` refuses with "`<name>` is not given" before any write. A value is checked as any
+write is: the store refuses what the given's facet refuses when the act's writes land. A given is not kept: it
+is the press's, read once. An act computes nothing from a given yet (a count less what was on hand is the app's
+until acts can subtract); that is a later revision's.
+
 **A closed set (revision 42).** A set of records fixed when the work starts, with a finish that judges the
 rest, is three acts on the thing that holds the set and needs no word of its own. The start takes a mark on
 it (taken once, so one set is open on a thing at a time) and writes a state on every record it reaches; the
@@ -145,7 +167,7 @@ among its acts nor lists the act it `replaces`; replaces itself; is `on` no leve
 routes over no compound facet, by a column the compound lacks, or over a link facet the level lacks; finds, counts
 or mints a kind the package lacks; counts under a name a find, route or count already bears; picks, orders by, sets, mints or reads a facet the package lacks (a route's
 column the compound's); names a find, route, count or context it did not declare (a then's link and its references among them, revision 39); sets one facet twice; finds one name
-twice; mints a find that takes `all`; lands when the send reports and sends nothing; takes anything but `share`, or takes a share on a level whose kind declares no quantity for it (revision 35); or, revision 31, tells a kind the
+twice; (revision 44) is given one name twice, is given a value as a facet the package lacks, opens a given from what is not the record's or a context record's, reads `given.<name>` it was not given, or names a find `given`; mints a find that takes `all`; lands when the send reports and sends nothing; takes anything but `share`, or takes a share on a level whose kind declares no quantity for it (revision 35); or, revision 31, tells a kind the
 package lacks, tells as an aspect no kind declares under `follow:`, tells with no set lines, or tells and sets one
 facet twice. In force (11.4, at install) the aspect is the exception: a telling whose aspect no kind in force
 declares is **inert**, never a refusal, since nobody can follow by an aspect nobody declares and the kind that
@@ -155,12 +177,12 @@ leaves to the check of the packages in force together (11.4, at install), which 
 
 ## 15.4 The JSON form
 
-An act is `{"act", "version", "utility", "replaces", "label", "describe", "on", "takes", "context": [...], "needs": [{"facet", "lacks": true, "words"}] (revision 42), "route": {"name",
+An act is `{"act", "version", "utility", "replaces", "label", "describe", "on", "takes", "context": [...], "needs": [{"facet", "lacks": true, "words"}] (revision 42), "given": [{"name", "facet", "words", "from": reference, "default"}] (revision 44), "route": {"name",
 "rows": reference, "by", "over": [reference…], "keep": {"column", "kind", "where": [pick…]}}, "finds": [{"name",
 "take", "kind", "where": [{"facet", "value": {"literal"} | {"caller": true} | {"self": true} (revision 39: the record in hand) | reference}], "order": {"facet", "dir"}, "mint": {"kind",
 "sets": [set…]}}], "counts": [{"name", "kind", "where": [pick…]}], "sets": [{"facet", "source": {"literal"} | {"link"} | {"now": true} | {"caller": true} | {"none": true} | {"next": {"prefix":
 reference | {"literal"}, "in": {"kind", "facet"}, "suffix": reference}} | {"owner": true} | {"run": true} | reference}], "thens": [{"when": {"left", "op", "right"} (a term `{"ref", "plus"} | {"count", "plus"} | {"number"}`),
 "sets": [{"found", "facet", "value": {"literal"} | {"now": true} | (revision 39) {"none": true} | {"link"} | {"caller": true} | reference}], "send": {"verb", "words"}}] (`when` absent from revision 39 where the then has no condition), "send": {"verb",
 "words"}, "lands", "tells": {"kind", "aspect", "sets": [set…]}}` under `acts` (`tells` from revision 31; a link set's `link` may be `record`); a reference is `{"record"} | {"context"} | {"context", "facet"} | {"found"} | {"found",
-"facet"} | {"route", "column"}`; a pick's facet may be `"<link>.<facet>"`. An act holds no value on any record:
+"facet"} | {"route", "column"} | (revision 44) {"given"}`; a pick's facet may be `"<link>.<facet>"`. An act holds no value on any record:
 retiring one is a safe change (10.5). A reader that doesn't know the act carries it unchanged (13.5).
