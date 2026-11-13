@@ -8,7 +8,7 @@ import { bundleOf, emptyParsed, parsePackage, printBundle, readBundle, readBundl
 import { serialize } from "../src/canonical.ts";
 import { checkPermissions, readAccess } from "../src/access.ts";
 import { emptyDictionary } from "../src/defs.ts";
-import { casePress, checkFlowsInForce, checkPackages, flowJoins, flowStamps, readPackages } from "../src/packages.ts";
+import { askWords, casePress, checkFlowsInForce, checkPackages, flowJoins, flowStamps, readPackages } from "../src/packages.ts";
 import { publish } from "../src/publish.ts";
 import { CrubalError } from "../src/tree.ts";
 
@@ -442,6 +442,15 @@ test("revision 48: a link says the questions it asks in place of its stamp, each
   no("offers: pack", "offers: refund", /offers: refund isn't among orders's acts/);
   no("record.lineCount > 1", "record.nope > 1", /record\.nope isn't a facet|nope isn't a facet/);
   no("record.lineCount > 1", "context.order.lineCount > 1", /a link's when reads record\.<facet>/);
+  // Revision 51: an ask's words say a value of the record touched.
+  const said = asking.replace('"How many did you pick?"', '"{record.lineCount} lines for {record.buyer}. How many did you pick?"');
+  assert.notEqual(said, asking);
+  checkPackages(counted(said));
+  const words = readPackages(counted(said))[0]?.flows[0]?.stops[1]?.asks?.[0]?.words ?? "";
+  assert.equal(askWords(words, { values: { lineCount: "3", buyer: "Pat" } }), "3 lines for Pat. How many did you pick?");
+  assert.equal(askWords(words, { values: { lineCount: { $qty: "2", unit: "ea" } } }), "2 lines for . How many did you pick?");
+  assert.throws(() => checkPackages(counted(said.replace("{record.buyer}", "{record.nope}"))), (e: unknown) => e instanceof CrubalError && /nope isn't a facet/.test(e.message));
+  assert.throws(() => checkPackages(counted(said.replace("{record.buyer}", "{buyer}"))), (e: unknown) => e instanceof CrubalError && /its words say \{record\.<facet>\}/.test(e.message));
 });
 
 const third = `lane: ordersToShip /2026-11-05

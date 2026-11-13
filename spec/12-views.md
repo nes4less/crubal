@@ -727,6 +727,11 @@ the flow and not from an app:
   at hand for it, opened as they open, so a person who sees more than was expected says so without a second
   touch. Nothing is asked.
 
+An ask's words may say a value of the record touched, `{record.<facet>}` (revision 51): "{record.qty} are
+expected. How many are there?". `askWords` fills them: a number or a word as written, money and a quantity by
+their amount, nothing where the value is not set. A package MUST be refused at publish when the braces hold
+anything but `record.<facet>` or name a facet the package lacks.
+
 An act is the flow's utility's, or another's as `<utility>.<act>`. An ask does not stamp: what its act writes
 is its own. A package MUST be refused at publish when a stop asks one name twice, says `offers` twice or
 offers nothing, an ask or an offer names an act its utility lacks or a utility not in force, or an ask's

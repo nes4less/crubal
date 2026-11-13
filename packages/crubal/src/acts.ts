@@ -7,6 +7,7 @@
 // values a mint makes, the writes a landing makes; the app runs the finds and counts, makes the mints and the
 // writes and the sends, and stamps the lane (12.11) when the act lands.
 import { evaluate, parseCondition } from "./conditions.ts";
+import { serialize } from "./canonical.ts";
 import type { Json, JsonObject } from "./model.ts";
 import { CrubalError, type Node } from "./tree.ts";
 import { type Facet, unquote } from "./defs.ts";
@@ -105,7 +106,8 @@ export type ActThen = {
 
 /** Revision 42: what the record in hand must hold (or, with `no`, lack) for the act to land; its own words when
  * it is refused. */
-export type ActNeed = { facet: string; lacks?: true; words?: string; line: number };
+/** Revision 51: `is` says what the value must be (`=`) or must not be (`!=`), a literal compared as text. */
+export type ActNeed = { facet: string; lacks?: true; is?: { op: "=" | "!="; value: string }; words?: string; line: number };
 
 /** Revision 44: a value the act is given by the person pressing it. Its type is a facet's (`as`), so what asks
  * for it and what refuses it are the facet's own; `from` is what the question opens on, `default` what it takes
@@ -371,8 +373,14 @@ export function readAct(node: Node): Act {
       for (const l of c.children) {
         const t = l.text.trim();
         if (!t) continue;
+        // Revision 51: `<facet> = <value>` and `<facet> != <value>`, the value a word or a number.
+        const is = t.match(/^([\w:]+(?:\.\w+)?)\s*(!=|=)\s*([\w.-]+)(?:\s+"([^"]+)")?$/);
+        if (is) {
+          (a.needs ??= []).push({ facet: is[1] as string, is: { op: is[2] as "=" | "!=", value: is[3] as string }, ...(is[4] ? { words: is[4] } : {}), line: l.line });
+          continue;
+        }
         const m = t.match(/^(no\s+)?([\w:]+(?:\.\w+)?)(?:\s+"([^"]+)")?$/);
-        if (!m) throw new CrubalError(`a need is "<facet>" or "no <facet>" (the facet the record's own, or "<link facet>.<facet>", the linked record's), its words in quotes after it or not: ${t}`, l.line);
+        if (!m) throw new CrubalError(`a need is "<facet>", "no <facet>", "<facet> = <value>" or "<facet> != <value>" (the facet the record's own, or "<link facet>.<facet>", the linked record's), its words in quotes after it or not: ${t}`, l.line);
         (a.needs ??= []).push({ facet: m[2] as string, ...(m[1] ? { lacks: true as const } : {}), ...(m[3] ? { words: m[3] } : {}), line: l.line });
       }
       if (!a.needs?.length) throw new CrubalError(`the act ${name} needs nothing: its lines go beneath needs:`, c.line);
@@ -993,6 +1001,12 @@ export function actWrites(a: Act, i: ActInput): ActWrites {
     const [first = "", second] = n.facet.split(".");
     const v = second === undefined ? i.record.values[bare(first)] : i.linked?.[bare(first)]?.values[second];
     const holds = v !== undefined && v !== null && v !== "" && !(Array.isArray(v) && !v.length);
+    if (n.is) {
+      // Revision 51: the value as text beside the literal; a value not set is no value, so `=` fails and `!=` holds.
+      const same = holds && (typeof v === "string" || typeof v === "number" ? String(v) : serialize(v as Json)) === n.is.value;
+      if (same !== (n.is.op === "=")) return { ok: false, why: n.words ?? `${second ?? bare(first)} is ${n.is.op === "=" ? "not " : ""}${n.is.value}` };
+      continue;
+    }
     if (holds === !!n.lacks) return { ok: false, why: n.words ?? (n.lacks ? `${second ?? bare(first)} is already set` : `${second ?? bare(first)} is not set`) };
   }
   // Revision 44: what the act is given is in hand before any write, a default standing in where nothing was said.
@@ -1225,7 +1239,7 @@ export function actJson(a: Act): JsonObject {
     on: a.on,
     ...(a.takes ? { takes: a.takes } : {}),
     ...(a.context.length ? { context: [...a.context] } : {}),
-    ...(a.needs?.length ? { needs: a.needs.map((n): JsonObject => ({ facet: n.facet, ...(n.lacks ? { lacks: true } : {}), ...(n.words ? { words: n.words } : {}) })) } : {}),
+    ...(a.needs?.length ? { needs: a.needs.map((n): JsonObject => ({ facet: n.facet, ...(n.lacks ? { lacks: true } : {}), ...(n.is ? { is: { op: n.is.op, value: n.is.value } } : {}), ...(n.words ? { words: n.words } : {}) })) } : {}),
     ...(a.given?.length ? { given: a.given.map((g): JsonObject => ({ name: g.name, facet: g.facet, ...(g.words ? { words: g.words } : {}), ...(g.from ? { from: refJson(g.from) } : {}), ...(g.default !== undefined ? { default: g.default } : {}) })) } : {}),
     ...(a.route
       ? {
@@ -1315,7 +1329,7 @@ export function actText(a: JsonObject): string[] {
   if (Array.isArray(a.context) && a.context.length) out.push(`  context: ${(a.context as string[]).join(", ")}`);
   if (Array.isArray(a.needs) && a.needs.length) {
     out.push("  needs:");
-    for (const n of a.needs as JsonObject[]) out.push(`    ${n.lacks === true ? "no " : ""}${n.facet}${typeof n.words === "string" ? ` "${n.words}"` : ""}`);
+    for (const n of a.needs as JsonObject[]) out.push(`    ${n.lacks === true ? "no " : ""}${n.facet}${n.is && typeof n.is === "object" ? ` ${(n.is as JsonObject).op} ${(n.is as JsonObject).value}` : ""}${typeof n.words === "string" ? ` "${n.words}"` : ""}`);
   }
   if (Array.isArray(a.given) && a.given.length) {
     out.push("  given:");
