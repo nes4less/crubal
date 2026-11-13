@@ -187,3 +187,27 @@ test("a rule's because round-trips through the printer's quoting", () => {
 `);
   assert.equal(rules[0]?.because, "the catalog pages the products that have units, history included (6.4)");
 });
+
+test("revision 53: a test of one value beside another on the same record, so a rule keeps a flag true as either changes", () => {
+  const d = readDefinitions("kind: item\n  levels: product, unit\nsaid$\nsays$\nstale{yes|no}\n");
+  const rules = readRules(`rule: staleYes
+  when: said has and not said same as says
+  then: stale is "yes"
+  strength: must
+rule: staleNo
+  when: not said has or said same as says
+  then: stale is "no"
+  strength: must
+`);
+  const e = new Engine(d, rules);
+  const flag = (values: { [k: string]: string }) => {
+    const out = e.write({ id: "U-1", kind: "item", level: "unit", owner: "t", values });
+    return out.find((r) => r.address === "stale" && r.result === "derived")?.value;
+  };
+  assert.equal(flag({ said: "5", says: "6" }), "yes");
+  assert.equal(flag({ said: "5", says: "5" }), "no");
+  assert.equal(flag({ says: "5" }), "no", "never said: nothing is stale");
+  // A flag that stood is derived again as the values now stand.
+  assert.equal(flag({ said: "5", says: "6", stale: "no" }), "yes");
+  assert.throws(() => readRules("rule: x\n  when: said same\n  then: stale is \"yes\"\n  strength: must\n"), CrubalError);
+});
