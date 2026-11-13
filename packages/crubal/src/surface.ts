@@ -52,11 +52,17 @@ const caseParts = (c: NonNullable<Flow["stops"][number]["cases"]>[number]) => [
 
 /**
  * Every node of the surface the packages in force declare, parents before children. A lane a chain names as a
- * stop is that chain's link, and stands as a lane of its own too, since it is worked on its own.
+ * stop is that chain's link and no node besides (a link is a lane and its stamp): its other presses stand
+ * beneath the link. A lane in several chains is a link of each.
  */
 export function surfaceOf(info: { utilities?: Utility[]; flows?: Flow[]; lanes?: Lane[] }): SurfaceNode[] {
   const out: SurfaceNode[] = [];
   const lanes = info.lanes ?? [];
+  const presses = (l: Lane | undefined, at: string, but?: string): SurfaceNode[] =>
+    [l?.card?.primary, l?.card?.quiet, ...(l?.card?.quick ?? [])].flatMap((p) =>
+      p && /^[A-Za-z][\w-]*$/.test(p.to) && p.to !== "page" && p.to !== but ? [{ address: `${at}/${p.to}`, sort: "press" as const, name: p.to, label: p.word, acts: [p.to] }] : [],
+    );
+  const linked = new Set((info.flows ?? []).flatMap((f) => f.stops.map((s) => s.name)));
   for (const u of info.utilities ?? []) out.push({ address: u.name, sort: "utility", name: u.name, ...(u.label ? { label: u.label } : {}), serves: u.serves });
   for (const f of info.flows ?? []) {
     const at = under(f.utility, f.name);
@@ -65,6 +71,7 @@ export function surfaceOf(info: { utilities?: Utility[]; flows?: Flow[]; lanes?:
       const link = `${at}/${s.name}`;
       const lane = lanes.find((l) => l.name === s.name);
       out.push({ address: link, sort: "link", name: s.name, ...(lane?.label ? { label: lane.label } : {}), ...(s.act ? { acts: [s.act] } : {}) });
+      out.push(...presses(lane, link, s.act));
       for (const c of s.cases ?? []) {
         const name = c.kind === "stranger" ? "stranger" : (c.name ?? "flag");
         for (const { key, press } of caseParts(c))
@@ -73,10 +80,9 @@ export function surfaceOf(info: { utilities?: Utility[]; flows?: Flow[]; lanes?:
     }
   }
   for (const l of lanes) {
+    if (linked.has(l.name)) continue;
     const at = under(l.utility, l.name);
-    out.push({ address: at, sort: "lane", name: l.name, ...(l.label ? { label: l.label } : {}), serves: l.serves });
-    for (const p of [l.card?.primary, l.card?.quiet, ...(l.card?.quick ?? [])])
-      if (p && /^[A-Za-z][\w-]*$/.test(p.to) && p.to !== "page") out.push({ address: `${at}/${p.to}`, sort: "press", name: p.to, label: p.word, acts: [p.to] });
+    out.push({ address: at, sort: "lane", name: l.name, ...(l.label ? { label: l.label } : {}), serves: l.serves }, ...presses(l, at));
   }
   return out;
 }

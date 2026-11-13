@@ -66,7 +66,7 @@ test("the surface is read from the utilities, chains, links, cases and lanes in 
     },
   ] as unknown as Flow[];
   const lanes = [
-    { name: "unitsExpected", label: "Units expected", utility: "inventory", serves },
+    { name: "unitsExpected", label: "Units expected", utility: "inventory", serves, card: { primary: { word: "Seen", to: "seen", line: 1 }, quick: [{ word: "Not found", to: "notFound", line: 1 }] } },
     { name: "boxes", label: "Boxes", utility: "inventory", serves, card: { primary: { word: "Transfer", to: "transfer", line: 1 }, quiet: { word: "Open", to: "page", line: 1 }, quick: [] } },
     { name: "shelf", serves: [{ as: "public", line: 1 }] },
   ] as unknown as Lane[];
@@ -78,10 +78,10 @@ test("the surface is read from the utilities, chains, links, cases and lanes in 
       "chain inventory/audit",
       "link inventory/audit/containersToAudit",
       "link inventory/audit/unitsExpected",
+      "press inventory/audit/unitsExpected/notFound",
       "case inventory/audit/unitsExpected/stranger/yes",
       "case inventory/audit/unitsExpected/stranger/no",
       "case inventory/audit/unitsExpected/stranger/or1",
-      "lane inventory/unitsExpected",
       "lane inventory/boxes",
       "press inventory/boxes/transfer",
       "lane /shelf",
