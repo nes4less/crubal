@@ -598,9 +598,27 @@ export class Engine {
       return (how === "best" ? sorted[0] : sorted.at(-1)) as Json;
     }
     const nums = items.map((v) => Number(isObj(v) ? (v.$qty ?? v.$money) : v));
-    if (how === "sum") return String(nums.reduce((a, b) => a + b, 0));
-    if (how === "least" || how === "worst") return String(Math.min(...nums));
-    if (how === "most" || how === "best") return String(Math.max(...nums));
+    if (how === "sum") {
+      const total = nums.reduce((a, b) => a + b, 0);
+      // A sum of money in one currency is money, of quantities in one unit a quantity, to the most decimal
+      // places among them (0.3.102). Plain numbers, or a mix, sum to a plain number as before.
+      const of = (v: Json, amount: "$money" | "$qty", name: "currency" | "unit") => (isObj(v) && typeof v[amount] === "string" ? String(v[name] ?? "") : undefined);
+      for (const [amount, name] of [["$money", "currency"], ["$qty", "unit"]] as const) {
+        const first = of(items[0] as Json, amount, name);
+        if (first === undefined || !items.every((v) => of(v, amount, name) === first)) continue;
+        const places = Math.min(6, Math.max(...items.map((v) => (String((v as JsonObject)[amount]).split(".")[1] ?? "").length)));
+        return { [amount]: total.toFixed(places), [name]: first };
+      }
+      return String(total);
+    }
+    // The least and the most are the value itself, as a view answers them (12.5): money keeps its currency and
+    // its decimal places, a quantity its unit. Before 0.3.102 a rollup answered the bare amount.
+    const picked = (n: number): Json => {
+      const v = items[nums.indexOf(n)] as Json;
+      return typeof v === "number" ? String(v) : v;
+    };
+    if (how === "least" || how === "worst") return picked(Math.min(...nums));
+    if (how === "most" || how === "best") return picked(Math.max(...nums));
     if (how === "join") return items;
     return items.at(-1);
   }

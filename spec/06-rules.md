@@ -86,7 +86,11 @@ aggregate = combine " of " address [ " where " condition ]      ; "worst of part
   `when: auctionEnds before now`. Moments compare by instant; a local date or time of day compared with a
   moment is undetermined; a plain date compared with a moment compares by the moment's UTC date.
 - **Aggregates** use the combine rules (chapter 4.4), `count`, and `least` and `most` (the smallest and
-  largest number, quantity, money or date; for ranked choices, use `best` and `worst`). `over` and `under` on a ranked choice
+  largest number, quantity, money or date; for ranked choices, use `best` and `worst`). The least and the most
+  are the value itself: money keeps its currency and its decimal places, a quantity its unit (erratum,
+  0.3.102: a rollup answered the bare amount where a view answered the value). A sum of money in one
+  currency is money, of quantities in one unit a quantity, to the most decimal places among them; plain
+  numbers, or a mix, sum to a plain number. `over` and `under` on a ranked choice
   compare positions in the list: earlier is higher.
 
 ### 6.3.1 Empties in conditions
