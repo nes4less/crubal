@@ -88,7 +88,10 @@ export type ActWhen = ActCond & { and?: ActCond[] };
 export type ActMake = { name: string; kind: string; when?: ActWhen; sets: ActSet[]; line: number };
 export type ActThenSet = { found: string; facet: string; value: ActThenValue };
 /** Revision 47: another act run when this one has landed: `[<utility>/]<act> on record|<found> [when …]`. */
-export type ActAlso = { utility?: string; act: string; on: string; when?: ActWhen; line: number };
+/** Revision 49: `with` gives the act run what it is given, a literal or a reference read as this act stood. */
+export type ActAlso = { utility?: string; act: string; on: string; with?: { name: string; value: { literal: string } | ActRef }[]; when?: ActWhen; line: number };
+/** An act another runs, on its record, with what it is given. */
+export type ActRun = { utility?: string; act: string; id: string; given?: { [name: string]: Json } };
 export type ActThen = {
   /** Absent (revision 39): the writes are made whenever the act lands. */
   when?: ActWhen;
@@ -134,6 +137,8 @@ export type Act = {
   makes?: ActMake[];
   /** Revision 47: the acts run when this one has landed. */
   also?: ActAlso[];
+  /** Revision 49: the acts run before this one lands, each on its record; one that refuses stops this act. */
+  first?: ActAlso[];
   /** A transport verb the app provides and the words after it, carried unchanged. */
   send?: { verb: string; words: string };
   /** When the act counts as landed: at once, or when its send reports. */
@@ -407,15 +412,25 @@ export function readAct(node: Node): Act {
         (a.makes ??= []).push(make);
       }
       if (!a.makes?.length) throw new CrubalError(`the act ${name} makes nothing: its lines go beneath make:`, c.line);
-    } else if (c.key === "also") {
-      // Revision 47: `[<utility>/]<act> on record|<found> [when …]`: an act run when this one has landed.
+    } else if (c.key === "also" || c.key === "first") {
+      // Revision 47: `[<utility>/]<act> on record|<found> [with <given> = <value>, …] [when …]`: an act run when
+      // this one has landed (`also`) or, revision 49, before it lands (`first`).
+      const list: ActAlso[] = [];
       for (const l of c.children) {
         if (!l.text.trim()) continue;
-        const m = l.text.trim().match(/^(?:([a-z][\w-]*)\/)?([a-z][\w-]*)\s+on\s+([\w-]+)(?:\s+when\s+(.+))?$/);
-        if (!m) throw new CrubalError(`an also is "[<utility>/]<act> on record|<found> [when …]": ${l.text.trim()}`, l.line);
-        (a.also ??= []).push({ ...(m[1] ? { utility: m[1] } : {}), act: m[2] as string, on: m[3] as string, ...(m[4] ? { when: readWhen(m[4], l.line, routes, countNames) } : {}), line: l.line });
+        const m = l.text.trim().match(/^(?:([a-z][\w-]*)\/)?([a-z][\w-]*)\s+on\s+([\w-]+)(?:\s+with\s+(.+?))?(?:\s+when\s+(.+))?$/);
+        if (!m) throw new CrubalError(`${c.key === "also" ? "an also" : "a first"} is "[<utility>/]<act> on record|<found> [with <given> = <value>, …] [when …]": ${l.text.trim()}`, l.line);
+        const gives = (m[4] ?? "").split(",").map((x) => x.trim()).filter(Boolean).map((x) => {
+          const g = x.match(/^([\w-]+)\s*=\s*(.+)$/);
+          if (!g) throw new CrubalError(`a with is "<given> = <value>": ${x}`, l.line);
+          const v = (g[2] as string).trim();
+          return { name: g[1] as string, value: isRef(v) ? readRef(v, l.line, "a with", routes) : { literal: unquote(v) } };
+        });
+        list.push({ ...(m[1] ? { utility: m[1] } : {}), act: m[2] as string, on: m[3] as string, ...(gives.length ? { with: gives } : {}), ...(m[5] ? { when: readWhen(m[5], l.line, routes, countNames) } : {}), line: l.line });
       }
-      if (!a.also?.length) throw new CrubalError(`the act ${name} runs nothing also: its lines go beneath also:`, c.line);
+      if (!list.length) throw new CrubalError(`the act ${name} runs nothing ${c.key}: its lines go beneath ${c.key}:`, c.line);
+      if (c.key === "also") a.also = [...(a.also ?? []), ...list];
+      else a.first = [...(a.first ?? []), ...list];
     } else if (c.key === "set") for (const l of c.children) { if (l.text.trim()) a.sets.push(readSet(l.text.trim(), l.line, routes)); }
     else if (c.key === "then") for (const l of c.children) { if (l.text.trim()) a.thens.push(readThen(l.text.trim(), l.line, routes, countNames)); }
     else if (c.key === "send") {
@@ -432,7 +447,7 @@ export function readAct(node: Node): Act {
       if (a.tells) throw new CrubalError(`the act ${name} tells twice`, c.line);
       a.tells = { kind: m[1] as string, aspect: m[2] as string, sets: c.children.filter((l) => l.text.trim()).map((l) => readSet(l.text.trim(), l.line, routes)), line: c.line };
       if (!a.tells.sets.length) throw new CrubalError(`the act ${name} tells ${m[1]} and sets nothing: its set lines go beneath tells:`, c.line);
-    } else throw new CrubalError(`an act has utility, replaces, label, describe, on, takes, context, needs, given, route, find, mint, count, make, set, then, also, send, lands and tells, not ${c.key}`, c.line);
+    } else throw new CrubalError(`an act has utility, replaces, label, describe, on, takes, context, needs, given, route, find, mint, count, make, set, then, also, first, send, lands and tells, not ${c.key}`, c.line);
   }
   if (!a.utility) throw new CrubalError(`the act ${name} names no utility`, node.line);
   if (!a.on) throw new CrubalError(`the act ${name} says no on: the level it acts on`, node.line);
@@ -637,7 +652,7 @@ export function checkActList(acts: Act[], env: ActEnv): void {
         sourceOk(s, "makes with");
       }
     }
-    for (const x of a.also ?? []) {
+    for (const x of [...(a.also ?? []), ...(a.first ?? [])]) {
       if (x.on !== "record" && !found.has(x.on)) throw new CrubalError(`${where} also runs ${x.act} on ${x.on}, which no find declares`, x.line);
       const own = !x.utility || x.utility === a.utility;
       if (own && x.act === a.name && x.on === "record") throw new CrubalError(`${where} also runs itself on the record in hand`, x.line);
@@ -714,7 +729,7 @@ export type ActWrites =
        * present where a then archives or restores. */
       stands?: { id: string; to: "archived" | "active"; reason?: string }[];
       /** Revision 47: the acts to run once this one has landed, each on its record; present where the act says also. */
-      also?: { utility?: string; act: string; id: string }[];
+      also?: ActRun[];
       sends: { verb: string; words: string }[];
     }
   | { ok: false; why: string };
@@ -1113,15 +1128,7 @@ export function actWrites(a: Act, i: ActInput): ActWrites {
     for (const m of makes) sweep(m.values);
   }
   // Revision 47: the acts run once this one has landed, each read as the record in hand stood.
-  const also: { utility?: string; act: string; id: string }[] = [];
-  for (const x of a.also ?? []) {
-    const perRecord = x.on !== "record" && termsOf(x.when).some((t) => "ref" in t && "found" in t.ref && t.ref.found === x.on);
-    if (!perRecord && !whenHolds(x.when, i)) continue;
-    for (const rec of x.on === "record" ? [i.record] : (i.found[x.on] ?? [])) {
-      if (perRecord && !whenHolds(x.when, { ...i, found: { ...i.found, [x.on]: [rec] } })) continue;
-      also.push({ ...(x.utility ? { utility: x.utility } : {}), act: x.act, id: rec.id });
-    }
-  }
+  const also = runsOf(a.also, i);
   return { ok: true, record, clear, then, ...(a.makes?.length ? { makes } : {}), ...(a.thens.some((t) => t.stand) ? { stands } : {}), ...(a.also?.length ? { also } : {}), sends };
 }
 
@@ -1150,6 +1157,32 @@ export function markFacets(filters: Iterable<{ facet: string; marked?: boolean }
   return [...out];
 }
 
+/** The acts a list of run lines names, each on its record with what it is given, read as the act stands. */
+function runsOf(list: ActAlso[] | undefined, i: ActInput): ActRun[] {
+  const out: ActRun[] = [];
+  for (const x of list ?? []) {
+    const perRecord = x.on !== "record" && termsOf(x.when).some((t) => "ref" in t && "found" in t.ref && t.ref.found === x.on);
+    if (!perRecord && !whenHolds(x.when, i)) continue;
+    for (const rec of x.on === "record" ? [i.record] : (i.found[x.on] ?? [])) {
+      const at = x.on === "record" ? i : { ...i, found: { ...i.found, [x.on]: [rec] } };
+      if (perRecord && !whenHolds(x.when, at)) continue;
+      const given: { [name: string]: Json } = {};
+      for (const g of x.with ?? []) {
+        const v = "literal" in g.value ? g.value.literal : valueOf(g.value, at);
+        if (v !== undefined && v !== null) given[g.name] = v;
+      }
+      out.push({ ...(x.utility ? { utility: x.utility } : {}), act: x.act, id: rec.id, ...(x.with?.length ? { given } : {}) });
+    }
+  }
+  return out;
+}
+
+/** Revision 49: the acts to run before this one lands, each on its record. The host runs them in order, stops
+ * the act with the reason of the first that refuses, and reads the act's finds again before it lands. */
+export function firstOf(a: Act, i: ActInput): ActRun[] {
+  return runsOf(a.first, i);
+}
+
 /** The picks of a find or a count resolved for the host to run: a literal, or the referenced value as it stands.
  * A pick's facet may be `<link>.<facet>`, carried as written for the host to hop. */
 export function findPicksOf(f: { where: ActPick[] }, i: Omit<ActInput, "found" | "now"> & { found?: ActInput["found"] }): { facet: string; value: Json | undefined }[] {
@@ -1173,6 +1206,7 @@ const termText = (t: ActTerm): string => ("number" in t ? String(t.number) : `${
 /** The quoting the text form needs for a literal (2.5): words with a space, a comma or a colon are quoted. */
 const q = (s: string) => (/[\s,:]|^$/.test(s) ? JSON.stringify(s) : s);
 
+const runJson = (x: ActAlso): JsonObject => ({ ...(x.utility ? { utility: x.utility } : {}), act: x.act, on: x.on, ...(x.with?.length ? { with: x.with.map((g): JsonObject => ({ name: g.name, value: "literal" in g.value ? { literal: g.value.literal } : refJson(g.value) })) } : {}), ...(x.when ? { when: whenJson(x.when) } : {}) });
 const pickJson = (p: ActPick): JsonObject => ({ facet: p.facet, value: "literal" in p.value ? { literal: p.value.literal } : "caller" in p.value ? { caller: true } : "self" in p.value ? { self: true } : refJson(p.value) });
 const thenValueJson = (v: ActThenValue): JsonObject =>
   "literal" in v ? { literal: v.literal } : "now" in v ? { now: true } : "none" in v ? { none: true } : "caller" in v ? { caller: true } : "person" in v ? { person: true } : "link" in v ? { link: v.link } : "sum" in v ? sumJson(v.sum) : refJson(v);
@@ -1223,7 +1257,8 @@ export function actJson(a: Act): JsonObject {
       }),
     ),
     ...(a.makes?.length ? { makes: a.makes.map((m): JsonObject => ({ name: m.name, kind: m.kind, ...(m.when ? { when: whenJson(m.when) } : {}), sets: m.sets.map(setJson) })) } : {}),
-    ...(a.also?.length ? { also: a.also.map((x): JsonObject => ({ ...(x.utility ? { utility: x.utility } : {}), act: x.act, on: x.on, ...(x.when ? { when: whenJson(x.when) } : {}) })) } : {}),
+    ...(a.also?.length ? { also: a.also.map(runJson) } : {}),
+    ...(a.first?.length ? { first: a.first.map(runJson) } : {}),
     ...(a.send ? { send: { verb: a.send.verb, words: a.send.words } } : {}),
     lands: a.lands,
     ...(a.tells ? { tells: { kind: a.tells.kind, aspect: a.tells.aspect, sets: a.tells.sets.map(setJson) } } : {}),
@@ -1353,10 +1388,17 @@ export function actText(a: JsonObject): string[] {
       for (const s of (m.sets as JsonObject[] | undefined) ?? []) out.push(`      ${s.facet} -> ${sourceText(s.source as JsonObject)}`);
     }
   }
-  const also = (a.also as JsonObject[] | undefined) ?? [];
-  if (also.length) {
-    out.push("  also:");
-    for (const x of also) out.push(`    ${typeof x.utility === "string" ? `${x.utility}/` : ""}${x.act} on ${x.on}${x.when && typeof x.when === "object" ? ` when ${whenText(x.when as JsonObject)}` : ""}`);
+  for (const key of ["first", "also"] as const) {
+    const runs = (a[key] as JsonObject[] | undefined) ?? [];
+    if (!runs.length) continue;
+    out.push(`  ${key}:`);
+    for (const x of runs) {
+      const gives = ((x.with as JsonObject[] | undefined) ?? []).map((g) => {
+        const v = g.value as JsonObject;
+        return `${g.name} = ${typeof v.literal === "string" ? (isRef(v.literal) ? JSON.stringify(v.literal) : q(v.literal)) : refText(refOfJson(v))}`;
+      });
+      out.push(`    ${typeof x.utility === "string" ? `${x.utility}/` : ""}${x.act} on ${x.on}${gives.length ? ` with ${gives.join(", ")}` : ""}${x.when && typeof x.when === "object" ? ` when ${whenText(x.when as JsonObject)}` : ""}`);
+    }
   }
   if (a.send && typeof a.send === "object") {
     const s = a.send as JsonObject;

@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { followersOn } from "../src/access.ts";
-import { type ActRecord, actWrites, findPicksOf, givenOf, mintValuesOf, nextInSeries, routeCountPicksOf, routeOf, tellsValuesOf } from "../src/acts.ts";
+import { type ActRecord, actWrites, findPicksOf, firstOf, givenOf, mintValuesOf, nextInSeries, routeCountPicksOf, routeOf, tellsValuesOf } from "../src/acts.ts";
 import type { JsonObject } from "../src/model.ts";
 import { bundleOf, parsePackage, printBundle, readBundle } from "../src/bundle.ts";
 import { serialize } from "../src/canonical.ts";
@@ -771,6 +771,47 @@ test("revision 48: a link names a record the act makes, carried as $made for the
   assert.deepEqual(actWrites(p, { record: { id: "C-1", values: { containerLabel: { $money: "12.50", currency: "EUR" } } }, context: {}, found: {}, now: "N", given: { price: usd("15.00") } }), { ok: false, why: "given.price and record.containerLabel are not of one currency or unit" });
   const q = actWrites(p, { record: { id: "C-1", values: { containerLabel: { $qty: "2", unit: "kg" } } }, context: {}, found: {}, now: "N", given: { price: "5" } });
   assert.deepEqual(q.ok && q.record.containerLabel, { $qty: "3", unit: "kg" });
+});
+
+const before = `act: recount /2026-11-20
+  utility: bench
+  label: Count
+  on: container
+  find:
+    inside -> all unit where of = record, filedBox = made
+    loose -> first unit where filedIn = record
+  first:
+    label on record with why = "set aside", was = record.containerLabel when no record.containerSlot
+    bench/file on inside when has inside.filedBox
+  set:
+    containerState -> full
+  also:
+    file on loose with why = late
+`;
+
+test("revision 49: an act says the acts run first, before it lands, and gives an act it runs what it is given; read, carried, printed back", () => {
+  const src = bench(file + label + before).replace("acts: file, label", "acts: file, label, recount");
+  checkPackages(src);
+  const a = readPackages(src)[0]?.acts.find((x) => x.name === "recount") as NonNullable<ReturnType<typeof readPackages>[number]["acts"][number]>;
+  const at = { record: { id: "C-1", values: { containerLabel: "A1" } } as ActRecord, context: {}, found: { inside: [{ id: "U-1", values: { filedBox: "made" } }, { id: "U-2", values: {} }] as ActRecord[], loose: [{ id: "U-3", values: {} }] as ActRecord[] }, now: "N" };
+  assert.deepEqual(firstOf(a, at), [
+    { act: "label", id: "C-1", given: { why: "set aside", was: "A1" } },
+    { utility: "bench", act: "file", id: "U-1" },
+  ]);
+  // The when on the record in hand fails: that first is not run; the per-record one still reads each.
+  assert.deepEqual(firstOf(a, { ...at, record: { id: "C-1", values: { containerSlot: "3" } } }), [{ utility: "bench", act: "file", id: "U-1" }]);
+  const w = actWrites(a, at);
+  assert.deepEqual(w.ok && w.also, [{ act: "file", id: "U-3", given: { why: "late" } }]);
+  const text = printBundle(bundleOf(parsePackage(src)));
+  assert.match(text, /^ {2}first:\n {4}label on record with why = "set aside", was = record\.containerLabel when no record\.containerSlot\n {4}bench\/file on inside when has inside\.filedBox$/m);
+  assert.match(text, /^ {4}file on loose with why = late$/m);
+  const b = bundleOf(parsePackage(src));
+  assert.equal(serialize(bundleOf(readBundle(b))), serialize(b));
+  const no = (from: string, to: string, why: RegExp) => assert.throws(() => checkPackages(src.replace(from, to)), (e: unknown) => e instanceof CrubalError && why.test(e.message), from);
+  no("bench/file on inside when", "bench/file on nobody when", /runs file on nobody, which no find declares/);
+  no("label on record with", "relabel on record with", /runs relabel, which isn't among bench's acts/);
+  no("with why = late", "with why late", /a with is "<given> = <value>"/);
+  no("  first:\n    label on record with why = \"set aside\", was = record.containerLabel when no record.containerSlot\n    bench/file on inside when has inside.filedBox\n", "  first:\n", /runs nothing first/);
 });
 
 const feed = (tail: string) => `package: feed /2026-11-12

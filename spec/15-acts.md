@@ -182,6 +182,17 @@ written; the host runs each as the same person, **after** this act's entry, each
 own entry. One that is refused is said and undoes nothing; an act run this way runs its own `also`, and the
 host MUST stop a chain that returns to an act and record it has already run.
 
+**The acts run first (revision 49).** An act may say the acts that run **before** it lands, under `first:`,
+each line as an also's: `[<utility>/]<act> on record|<found> [with …] [when …]`. `firstOf` answers them, each
+on its record. The host MUST run them in the order written, each as its own act with its own guard; where one
+refuses, this act stops with that reason and writes nothing, and what the earlier ones wrote stands (they are
+acts of their own, not one entry with this one). The host MUST then read the act's finds again before it
+lands, so a record a first act changed is read as it now stands. A line of `first` or `also` may give the act
+it runs what that act is given: `with <given> = <value>[, …]`, a literal or a reference read as this act stood
+(a found record's own, where the line runs on it). An act given nothing it asks for is refused as any act is.
+In the JSON form an act carries `"first": [{"utility", "act", "on", "with": [{"name", "value"}], "when"}]`,
+and an also the same `with`.
+
 **A link to what the act makes, and amounts (revision 48).** A make's name may stand where a link's target
 does, `link <make>`, in a set, a then's value or another make's set: so the record in hand, a record found or
 a second record made can point at the one just made (the two sides of a split each naming the other's
