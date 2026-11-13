@@ -631,6 +631,18 @@ test("revision 45: a set or a then adds or takes one number from another; a when
   assert.deepEqual(bareBox.ok && bareBox.makes, []);
   // A sum over what is no number refuses the act before any write.
   assert.deepEqual(actWrites(a, { ...at("3", "A"), given: { count: "2" } }), { ok: false, why: "record.containerSlot holds no number to add" });
+  // Revision 46: `caller` writes the person running the act as words, in a set, a make and a then; quoted, it is the word.
+  const whoSrc = bench(file + label + computes.replace("filedBox -> counted", "filedBox -> caller").replace('filedBox -> "made again"', 'filedBox -> "caller"').replace("set record.containerSlot = record.containerSlot + 1", "set record.containerLabel = caller")).replace("acts: file, label", "acts: file, label, recount");
+  const who = readPackages(whoSrc)[0]?.acts.find((x) => x.name === "recount") as typeof a;
+  assert.deepEqual([who.makes?.[0]?.sets[2]?.source, who.makes?.[1]?.sets[2]?.source, who.thens[0]?.sets[0]?.value], [{ person: true }, { literal: "caller" }, { person: true }]);
+  const whoText = printBundle(bundleOf(parsePackage(whoSrc)));
+  assert.match(whoText, /^      filedBox -> caller$/m);
+  assert.match(whoText, /^      filedBox -> "caller"$/m);
+  assert.match(whoText, /set record\.containerLabel = caller$/m);
+  assert.equal(serialize(bundleOf(parsePackage(whoText))), serialize(bundleOf(parsePackage(whoSrc))));
+  const byPat = actWrites(who, { ...at("3"), given: { count: "2" }, caller: "P-pat" });
+  assert.deepEqual(byPat.ok && [byPat.record.containerLabel, byPat.makes?.[0]?.values.filedBox], ["P-pat", "P-pat"]);
+  assert.deepEqual(actWrites(who, { ...at("3"), given: { count: "2" } }), { ok: false, why: "no caller to set record.containerLabel to" });
   // A literal that reads like a sum is written quoted and stays words.
   const lit = readPackages(bench(file + label + computes.replace("filedBox -> counted", 'filedBox -> "record.x - 1"')).replace("acts: file, label", "acts: file, label, recount"))[0]?.acts.find((x) => x.name === "recount");
   assert.deepEqual(lit?.makes?.[0]?.sets[2]?.source, { literal: "record.x - 1" });
