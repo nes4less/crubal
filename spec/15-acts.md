@@ -79,8 +79,9 @@ act: fileByCategory /2026-11-09
 | `find` | one line per find, `<name> -> first\|all <kind> [where <facet> = <value>, …] [order <facet> [after\|before]]`: the records of a kind the picks admit, in the order said, the first or all; a pick's facet may be a link facet's target's, `<link facet>.<facet>` (revision 26, one hop); a pick's value is a literal, `record.<facet>` (the record in hand's), `context.<kind>` (the context record's id), `context.<kind>.<facet>`, `<found>.<facet>` (an earlier find's), `<found>` alone (its id, revision 26), `caller` (revision 35: the person running the act, as `link caller` is in a set), `record` alone (revision 39: the record in hand, its id, so `of = record` finds the records beneath it and `<link facet> = record` those that link to it; the word itself as a literal is written quoted) or `<route>.<column>` (the row taken) |
 | `count` | revision 26: one line per count, `<name> -> <kind> [where <picks>]`: how many records of the kind the picks admit, for a `then` to read by name; a pick's value may be a found record's bare name, its id |
 | `mint` | revision 26: under a find's name, `<found> -> <kind> when none`, then set lines beneath it: when the `first` find answered nothing, a record of the kind is made with these values, through its make form as the act's own source, and stands as what the find found |
-| `set` | one line per write on the record in hand, `<facet> -> <source>`: a literal, `link <found\|context>` (a link to the record found or held), `<found>.<facet>`, `<route>.<column>`, `context.<kind>.<facet>` or `record.<facet>` (a value copied), `now` (the moment), `link caller` (revision 29: a link to the person running the act), `none` (revision 29: the facet cleared), `next <ref> in <kind>.<facet>[, <ref>]` (revision 26: the next label in a series; revision 35: the prefix MAY be the words themselves, quoted, `next "PULL" in pull.pullLabel`: the prefix, one more than the highest number the kind's facet carries after that prefix, three digits, then the suffix when given), or, revision 31, `owner` (the owner the act lands at, as text), `run` (the act run's id) and `link record` (a link to the record in hand) |
-| `then` | one line per write on records found, `[when <term> <op> <term>] set <found>.<facet> = <value>[, <found>.<facet> = <value>…] [send <verb> <words>]`: a term a reference, a count's name or a number, with `+ n` added to a reference or a count; the ops `=`, `<`, `>`, `<=`, `>=`; the writes on every record the find answered; a value a literal or `now` (revision 26), or (revision 39) a set's own: `link <found\|context>`, `link record`, `link caller`, a reference (`record.<facet>`, `context.<kind>.<facet>`, `<found>.<facet>`, `<route>.<column>`: a value copied, read once and written on each) or `none` (the facet cleared); the send run only when the condition held. With no `when` (revision 39) the writes are made whenever the act lands |
+| `set` | one line per write on the record in hand, `<facet> -> <source>`: a literal, `link <found\|context>` (a link to the record found or held), `<found>.<facet>`, `<route>.<column>`, `context.<kind>.<facet>` or `record.<facet>` (a value copied), `now` (the moment), `link caller` (revision 29: a link to the person running the act), `none` (revision 29: the facet cleared), `next <ref> in <kind>.<facet>[, <ref>]` (revision 26: the next label in a series; revision 35: the prefix MAY be the words themselves, quoted, `next "PULL" in pull.pullLabel`: the prefix, one more than the highest number the kind's facet carries after that prefix, three digits, then the suffix when given), or, revision 31, `owner` (the owner the act lands at, as text), `run` (the act run's id) and `link record` (a link to the record in hand), or, revision 45, a **sum**: `<a> + <b>` or `<a> - <b>`, each a reference or a number and at least one a reference (`given.count - record.qty`, `record.movedCount + 1`), written as a number; words that read like a sum are a literal when quoted |
+| `make` | revision 45: one line per record the act makes when it lands, `<name> -> <kind> [when <term> <op> <term> [and …]]`, its set lines beneath as a mint's: a record of the kind with these values, made through its make form as the act's own source, whatever the finds answered. With a `when`, only where it holds. Its sources read the record in hand **as it stood** before the act's writes, so `given.count - record.qty` is the difference the act makes |
+| `then` | one line per write on records found, `[when <term> <op> <term>] set <found>.<facet> = <value>[, <found>.<facet> = <value>…] [send <verb> <words>]`: a term a reference, a count's name or a number, with `+ n` added to a reference or a count; the ops `=`, `<`, `>`, `<=`, `>=`; the writes on every record the find answered; a value a literal or `now` (revision 26), or (revision 39) a set's own: `link <found\|context>`, `link record`, `link caller`, a reference (`record.<facet>`, `context.<kind>.<facet>`, `<found>.<facet>`, `<route>.<column>`: a value copied, read once and written on each) or `none` (the facet cleared); the send run only when the condition held. With no `when` (revision 39) the writes are made whenever the act lands. Revision 45: the ops gain `!=`; a `when` may join comparisons with `and`, all of which must hold; a value may be a sum, as a set's; and `record.<facet>` names the record in hand as what is written on, over what the act's sets wrote (a write the act makes only where a condition holds) |
 | `send` | a transport verb the app provides (`print`, `notify`, `charge`, `ship`), then its words, carried unchanged for the app to read |
 | `lands` | when the act counts as landed, and its lane's stamp is written (12.11): `now` (the default), or `when the send reports` |
 | `tells` | revision 31: `<kind> as <aspect>`, its set lines beneath as a mint's: the **post** the act lands when the record in hand, or any of its ancestors, is followed (14.10). The kind is the post's (a kind of the package or one in force); the aspect is one a kind declares under `follow:` (11.2), what a follower chose to hear. At the landing the app asks for the live `follower` edges on the record and its ancestors; with none, nothing is made; with any, **one** record of the kind is made with these values through its make form, as the act's own source, whatever the number of followers, and **within the record in hand**, so its ancestors are the record's and a view of posts partitioned by `relation follower` (12.6, 14.10) serves it to whoever follows the record or what it is of. The sources are a set's; `owner`, `run` and `link record` name the sender, the run and the subject. A post is a record like any other: the follower's feed is a view over it |
@@ -132,8 +133,41 @@ given in hand: `actWrites` refuses with "`<name>` is not given" before any write
 facet before any write: a word where a number goes, a number outside the facet's range, or a choice the facet
 lacks is `refused` by `givenOf` with its words, and the act does not land (an act's writes are not a form's, so
 nothing later would refuse them). A given is not kept: it
-is the press's, read once. An act computes nothing from a given yet (a count less what was on hand is the app's
-until acts can subtract); that is a later revision's.
+is the press's, read once.
+
+**Computing, and making a record (revision 45).** An act that changes a quantity leaves a record of the change:
+how many, why, and what caused it. That needs four things, each general. A **sum** adds or takes one number from
+another wherever a value is written. A **make** is a record the act makes when it lands, under a `when` or not.
+A `when` says `!=` and joins comparisons with `and`. And a `then` may write on the **record in hand**, so a write
+made only where a condition holds (a counter raised when something was made) is the act's own:
+
+```crubal
+act: count /2026-11-16
+  utility: inventory
+  on: unit
+  context: container
+  given:
+    count as qty "How many are there?" from record.qty
+  make:
+    moved -> movement when given.count != record.qty
+      movedUnit -> link record
+      movedQty -> given.count - record.qty
+      movedReason -> counted
+      movedCause -> link container
+      movedAt -> now
+  set:
+    qty -> given.count
+  then:
+    when given.count != record.qty set record.movedCount = record.movedCount + 1
+```
+
+In a sum, a reference that holds nothing reads as 0 (a counter never yet raised), and one that holds what is no
+number stops the act before any write, with the reason; the result is written as a number. In a `when`, as
+before, a term that reads no number holds nowhere. Every source of a make and every term of its `when` reads the
+record in hand as it stood before the act's writes. `actWrites` answers the records to make (`makes`: name, kind
+and values, in the order written) beside the writes; the host MUST make them in the act's own entry, so an act
+refused makes nothing, and MUST give each an id that is the same however often it runs the entry. A made
+record is not yet something the act's other lines may name (a link to it is a later revision's).
 
 **A closed set (revision 42).** A set of records fixed when the work starts, with a finish that judges the
 rest, is three acts on the thing that holds the set and needs no word of its own. The start takes a mark on
@@ -169,7 +203,7 @@ among its acts nor lists the act it `replaces`; replaces itself; is `on` no leve
 routes over no compound facet, by a column the compound lacks, or over a link facet the level lacks; finds, counts
 or mints a kind the package lacks; counts under a name a find, route or count already bears; picks, orders by, sets, mints or reads a facet the package lacks (a route's
 column the compound's); names a find, route, count or context it did not declare (a then's link and its references among them, revision 39); sets one facet twice; finds one name
-twice; (revision 44) is given one name twice, is given a value as a facet the package lacks, opens a given from what is not the record's or a context record's, reads `given.<name>` it was not given, or names a find `given`; mints a find that takes `all`; lands when the send reports and sends nothing; takes anything but `share`, or takes a share on a level whose kind declares no quantity for it (revision 35); or, revision 31, tells a kind the
+twice; (revision 44) is given one name twice, is given a value as a facet the package lacks, opens a given from what is not the record's or a context record's, reads `given.<name>` it was not given, or names a find `given`; (revision 45) makes a kind the package lacks, makes under a name a find, route, count or make already bears (or `given` or `record`), makes and sets one facet twice, makes and sets nothing, or names a find `record`; mints a find that takes `all`; lands when the send reports and sends nothing; takes anything but `share`, or takes a share on a level whose kind declares no quantity for it (revision 35); or, revision 31, tells a kind the
 package lacks, tells as an aspect no kind declares under `follow:`, tells with no set lines, or tells and sets one
 facet twice. In force (11.4, at install) the aspect is the exception: a telling whose aspect no kind in force
 declares is **inert**, never a refusal, since nobody can follow by an aspect nobody declares and the kind that
@@ -183,8 +217,8 @@ An act is `{"act", "version", "utility", "replaces", "label", "describe", "on", 
 "rows": reference, "by", "over": [reference…], "keep": {"column", "kind", "where": [pick…]}}, "finds": [{"name",
 "take", "kind", "where": [{"facet", "value": {"literal"} | {"caller": true} | {"self": true} (revision 39: the record in hand) | reference}], "order": {"facet", "dir"}, "mint": {"kind",
 "sets": [set…]}}], "counts": [{"name", "kind", "where": [pick…]}], "sets": [{"facet", "source": {"literal"} | {"link"} | {"now": true} | {"caller": true} | {"none": true} | {"next": {"prefix":
-reference | {"literal"}, "in": {"kind", "facet"}, "suffix": reference}} | {"owner": true} | {"run": true} | reference}], "thens": [{"when": {"left", "op", "right"} (a term `{"ref", "plus"} | {"count", "plus"} | {"number"}`),
-"sets": [{"found", "facet", "value": {"literal"} | {"now": true} | (revision 39) {"none": true} | {"link"} | {"caller": true} | reference}], "send": {"verb", "words"}}] (`when` absent from revision 39 where the then has no condition), "send": {"verb",
+reference | {"literal"}, "in": {"kind", "facet"}, "suffix": reference}} | {"owner": true} | {"run": true} | (revision 45) {"sum": {"left", "op": "+" | "-", "right"}} (each side `{"number"}` or a reference) | reference}], "thens": [{"when": {"left", "op", "right"} (a term `{"ref", "plus"} | {"count", "plus"} | {"number"}`),
+"sets": [{"found", "facet", "value": {"literal"} | {"now": true} | (revision 39) {"none": true} | {"link"} | {"caller": true} | reference}], "send": {"verb", "words"}}] (`when` absent from revision 39 where the then has no condition; revision 45: a `when` may carry `"and": [{"left", "op", "right"}…]`, its op may be `"!="`, a then's value may be `{"sum"}`, and a then's `found` may be `"record"`, the record in hand), (revision 45) "makes": [{"name", "kind", "when", "sets": [set…]}], "send": {"verb",
 "words"}, "lands", "tells": {"kind", "aspect", "sets": [set…]}}` under `acts` (`tells` from revision 31; a link set's `link` may be `record`); a reference is `{"record"} | {"context"} | {"context", "facet"} | {"found"} | {"found",
 "facet"} | {"route", "column"} | (revision 44) {"given"}`; a pick's facet may be `"<link>.<facet>"`. An act holds no value on any record:
 retiring one is a safe change (10.5). A reader that doesn't know the act carries it unchanged (13.5).
