@@ -182,6 +182,19 @@ written; the host runs each as the same person, **after** this act's entry, each
 own entry. One that is refused is said and undoes nothing; an act run this way runs its own `also`, and the
 host MUST stop a chain that returns to an act and record it has already run.
 
+**A product, and an act run on the place's authority (revision 52).** A sum's operator may be `*`:
+`record.price * 0.9`. One side at most is money or a quantity; the product keeps what that side is of and its
+decimal places, rounded half up, and two amounts (money by money) are refused before any write. Two plain
+numbers give a plain number. A rule for a price's ending (.99, .50) is not this operator's: it is a place's own.
+
+A line of `first` or `also` may say **`as place`** after its record: `channels/delist on listed as place`.
+The act it names is then run on the place's authority: the host MUST NOT ask whether the person pressing may
+run it, and MUST still run it by its own needs and its own writes, in an entry that names the person. It is
+for the step a person's work needs and their own grants do not cover (a stockkeeper's quarantine ending a
+listing). The authority is the package's, which the place's Controller installed: a host SHOULD show, where
+it shows what an act does, that it runs another on the place's authority. In the JSON form the line carries
+`"as": "place"`, and `firstOf` and the writes' `also` carry `asPlace: true`.
+
 **A need that compares (revision 51).** A need may say what a value must be, `<facet> = <value>`, or must not
 be, `<facet> != <value>`, the value a word or a number, its words in quotes after it as any need's. The
 value the record holds is read as text beside it; a value not set is no value, so `=` fails and `!=` holds.

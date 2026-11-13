@@ -39,7 +39,8 @@ export type ActSource = { literal: string } | { link: string } | { now: true } |
 /** Revision 45: one number added to or taken from another, each a reference or a number (`given.count - record.qty`,
  * `record.movedCount + 1`). A reference that holds nothing reads as 0; one that holds no number refuses the act. */
 export type ActOperand = { number: number } | ActRef;
-export type ActSum = { left: ActOperand; op: "+" | "-"; right: ActOperand };
+/** Revision 52: `*` multiplies; one side at most is money or a quantity, and the product keeps what it is of. */
+export type ActSum = { left: ActOperand; op: "+" | "-" | "*"; right: ActOperand };
 
 export type ActSet = { facet: string; source: ActSource; line: number };
 
@@ -90,9 +91,9 @@ export type ActMake = { name: string; kind: string; when?: ActWhen; sets: ActSet
 export type ActThenSet = { found: string; facet: string; value: ActThenValue };
 /** Revision 47: another act run when this one has landed: `[<utility>/]<act> on record|<found> [when …]`. */
 /** Revision 49: `with` gives the act run what it is given, a literal or a reference read as this act stood. */
-export type ActAlso = { utility?: string; act: string; on: string; with?: { name: string; value: { literal: string } | ActRef }[]; when?: ActWhen; line: number };
+export type ActAlso = { utility?: string; act: string; on: string; /** Revision 52: run on the place's authority, the person not asked. */ asPlace?: true; with?: { name: string; value: { literal: string } | ActRef }[]; when?: ActWhen; line: number };
 /** An act another runs, on its record, with what it is given. */
-export type ActRun = { utility?: string; act: string; id: string; given?: { [name: string]: Json } };
+export type ActRun = { utility?: string; act: string; id: string; asPlace?: true; given?: { [name: string]: Json } };
 export type ActThen = {
   /** Absent (revision 39): the writes are made whenever the act lands. */
   when?: ActWhen;
@@ -233,14 +234,14 @@ function readRoute(text: string, line: number): ActRoute {
 
 /** Revision 45: `<ref|number> + <ref|number>` or `-`, at least one a reference; anything else is not a sum. */
 function readSum(t: string, line: number, routes: Set<string>): ActSum | undefined {
-  const m = t.match(/^(\S+)\s+([+-])\s+(\S+)$/);
+  const m = t.match(/^(\S+)\s+([+*-])\s+(\S+)$/);
   if (!m) return undefined;
   const num = (x: string) => /^\d+(?:\.\d+)?$/.test(x);
   const a = m[1] as string;
   const b = m[3] as string;
   if (!(num(a) || isRef(a)) || !(num(b) || isRef(b)) || (num(a) && num(b))) return undefined;
   const operand = (x: string): ActOperand => (num(x) ? { number: Number(x) } : readRef(x, line, "a sum", routes));
-  return { left: operand(a), op: m[2] as "+" | "-", right: operand(b) };
+  return { left: operand(a), op: m[2] as "+" | "-" | "*", right: operand(b) };
 }
 
 /** `filedIn -> link box`, `filedBox -> box.containerLabel`, `filedAt -> now`, `note -> "words"`,
@@ -426,15 +427,15 @@ export function readAct(node: Node): Act {
       const list: ActAlso[] = [];
       for (const l of c.children) {
         if (!l.text.trim()) continue;
-        const m = l.text.trim().match(/^(?:([a-z][\w-]*)\/)?([a-z][\w-]*)\s+on\s+([\w-]+)(?:\s+with\s+(.+?))?(?:\s+when\s+(.+))?$/);
-        if (!m) throw new CrubalError(`${c.key === "also" ? "an also" : "a first"} is "[<utility>/]<act> on record|<found> [with <given> = <value>, …] [when …]": ${l.text.trim()}`, l.line);
-        const gives = (m[4] ?? "").split(",").map((x) => x.trim()).filter(Boolean).map((x) => {
+        const m = l.text.trim().match(/^(?:([a-z][\w-]*)\/)?([a-z][\w-]*)\s+on\s+([\w-]+)(\s+as\s+place)?(?:\s+with\s+(.+?))?(?:\s+when\s+(.+))?$/);
+        if (!m) throw new CrubalError(`${c.key === "also" ? "an also" : "a first"} is "[<utility>/]<act> on record|<found> [as place] [with <given> = <value>, …] [when …]": ${l.text.trim()}`, l.line);
+        const gives = (m[5] ?? "").split(",").map((x) => x.trim()).filter(Boolean).map((x) => {
           const g = x.match(/^([\w-]+)\s*=\s*(.+)$/);
           if (!g) throw new CrubalError(`a with is "<given> = <value>": ${x}`, l.line);
           const v = (g[2] as string).trim();
           return { name: g[1] as string, value: isRef(v) ? readRef(v, l.line, "a with", routes) : { literal: unquote(v) } };
         });
-        list.push({ ...(m[1] ? { utility: m[1] } : {}), act: m[2] as string, on: m[3] as string, ...(gives.length ? { with: gives } : {}), ...(m[5] ? { when: readWhen(m[5], l.line, routes, countNames) } : {}), line: l.line });
+        list.push({ ...(m[1] ? { utility: m[1] } : {}), act: m[2] as string, on: m[3] as string, ...(m[4] ? { asPlace: true as const } : {}), ...(gives.length ? { with: gives } : {}), ...(m[6] ? { when: readWhen(m[6], l.line, routes, countNames) } : {}), line: l.line });
       }
       if (!list.length) throw new CrubalError(`the act ${name} runs nothing ${c.key}: its lines go beneath ${c.key}:`, c.line);
       if (c.key === "also") a.also = [...(a.also ?? []), ...list];
@@ -786,7 +787,7 @@ const sumValue = (sum: ActSum, i: ActInput): { ok: true; value: Json } | { ok: f
     if ("number" in o) return { n: o.number, places: (String(o.number).split(".")[1] ?? "").length };
     const v = valueOf(o, i);
     if (v === undefined || v === null || v === "") return { n: 0, places: 0 };
-    return amountOf(v) ?? `${refText(o)} holds no number to ${sum.op === "+" ? "add" : "take from"}`;
+    return amountOf(v) ?? `${refText(o)} holds no number to ${sum.op === "+" ? "add" : sum.op === "*" ? "multiply" : "take from"}`;
   };
   const l = read(sum.left);
   if (typeof l === "string") return { ok: false, why: l };
@@ -794,6 +795,19 @@ const sumValue = (sum: ActSum, i: ActInput): { ok: true; value: Json } | { ok: f
   if (typeof r === "string") return { ok: false, why: r };
   // Revision 48: money and quantities keep what they are of; two that differ are not summed.
   if (!sameOf(l.of, r.of)) return { ok: false, why: `${"number" in sum.left ? sum.left.number : refText(sum.left)} and ${"number" in sum.right ? sum.right.number : refText(sum.right)} are not of one currency or unit` };
+  const said = (o: ActOperand) => ("number" in o ? String(o.number) : refText(o));
+  // Revision 52: a product. Two amounts (money by money, a quantity by a quantity) are not multiplied; money
+  // or a quantity by a plain number keeps what it is of and its own decimal places, rounded half up.
+  if (sum.op === "*") {
+    if (l.of && r.of) return { ok: false, why: `${said(sum.left)} and ${said(sum.right)} are both amounts, and two amounts are not multiplied` };
+    const of = l.of ?? r.of;
+    const product = l.n * r.n;
+    if (!of) return { ok: true, value: String(Number(product.toFixed(6))) };
+    const places = Math.min(6, l.of ? l.places : r.places);
+    const rounded = (Math.sign(product) * Math.round(Math.abs(product) * 10 ** places + 1e-9)) / 10 ** places;
+    const text = rounded.toFixed(places);
+    return { ok: true, value: "money" in of ? { $money: text, currency: of.money } : { $qty: text, unit: of.qty } };
+  }
   const n = sum.op === "+" ? l.n + r.n : l.n - r.n;
   const of = l.of ?? r.of;
   if (!of) return { ok: true, value: String(Number(n.toFixed(6))) };
@@ -1185,7 +1199,7 @@ function runsOf(list: ActAlso[] | undefined, i: ActInput): ActRun[] {
         const v = "literal" in g.value ? g.value.literal : valueOf(g.value, at);
         if (v !== undefined && v !== null) given[g.name] = v;
       }
-      out.push({ ...(x.utility ? { utility: x.utility } : {}), act: x.act, id: rec.id, ...(x.with?.length ? { given } : {}) });
+      out.push({ ...(x.utility ? { utility: x.utility } : {}), act: x.act, id: rec.id, ...(x.asPlace ? { asPlace: true as const } : {}), ...(x.with?.length ? { given } : {}) });
     }
   }
   return out;
@@ -1220,7 +1234,7 @@ const termText = (t: ActTerm): string => ("number" in t ? String(t.number) : `${
 /** The quoting the text form needs for a literal (2.5): words with a space, a comma or a colon are quoted. */
 const q = (s: string) => (/[\s,:]|^$/.test(s) ? JSON.stringify(s) : s);
 
-const runJson = (x: ActAlso): JsonObject => ({ ...(x.utility ? { utility: x.utility } : {}), act: x.act, on: x.on, ...(x.with?.length ? { with: x.with.map((g): JsonObject => ({ name: g.name, value: "literal" in g.value ? { literal: g.value.literal } : refJson(g.value) })) } : {}), ...(x.when ? { when: whenJson(x.when) } : {}) });
+const runJson = (x: ActAlso): JsonObject => ({ ...(x.utility ? { utility: x.utility } : {}), act: x.act, on: x.on, ...(x.asPlace ? { as: "place" } : {}), ...(x.with?.length ? { with: x.with.map((g): JsonObject => ({ name: g.name, value: "literal" in g.value ? { literal: g.value.literal } : refJson(g.value) })) } : {}), ...(x.when ? { when: whenJson(x.when) } : {}) });
 const pickJson = (p: ActPick): JsonObject => ({ facet: p.facet, value: "literal" in p.value ? { literal: p.value.literal } : "caller" in p.value ? { caller: true } : "self" in p.value ? { self: true } : refJson(p.value) });
 const thenValueJson = (v: ActThenValue): JsonObject =>
   "literal" in v ? { literal: v.literal } : "now" in v ? { now: true } : "none" in v ? { none: true } : "caller" in v ? { caller: true } : "person" in v ? { person: true } : "link" in v ? { link: v.link } : "sum" in v ? sumJson(v.sum) : refJson(v);
@@ -1411,7 +1425,7 @@ export function actText(a: JsonObject): string[] {
         const v = g.value as JsonObject;
         return `${g.name} = ${typeof v.literal === "string" ? (isRef(v.literal) ? JSON.stringify(v.literal) : q(v.literal)) : refText(refOfJson(v))}`;
       });
-      out.push(`    ${typeof x.utility === "string" ? `${x.utility}/` : ""}${x.act} on ${x.on}${gives.length ? ` with ${gives.join(", ")}` : ""}${x.when && typeof x.when === "object" ? ` when ${whenText(x.when as JsonObject)}` : ""}`);
+      out.push(`    ${typeof x.utility === "string" ? `${x.utility}/` : ""}${x.act} on ${x.on}${x.as === "place" ? " as place" : ""}${gives.length ? ` with ${gives.join(", ")}` : ""}${x.when && typeof x.when === "object" ? ` when ${whenText(x.when as JsonObject)}` : ""}`);
     }
   }
   if (a.send && typeof a.send === "object") {
