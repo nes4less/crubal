@@ -2,6 +2,7 @@
 // an absent or unknown value is undetermined; `-` makes a test false, except `is -`. The Dictionary level
 // uses it for class lines' `when`; the Rules level for rules.
 
+import { serialize } from "./canonical.ts";
 import type { Json, JsonObject } from "./model.ts";
 import { CrubalError } from "./tree.ts";
 
@@ -17,7 +18,7 @@ export type Expr =
   | { op: "not"; a: Expr }
   | { op: "test"; path: string; verb: string; arg: string };
 
-const VERBS = [" shown to ", " may ", " wears ", " is not ", " is ", " in ", " has", " before ", " after ", " over ", " under "];
+const VERBS = [" shown to ", " may ", " wears ", " same as ", " is not ", " is ", " in ", " has", " before ", " after ", " over ", " under "];
 
 /** Split on a word outside parentheses and quotes. */
 function splitWord(s: string, word: string): string[] {
@@ -134,6 +135,13 @@ function test(e: Extract<Expr, { op: "test" }>, values: JsonObject, states?: Sta
   if (e.verb === "shown to") return true;
   const v = valueAt(values, e.path);
   const empty = emptyOf(v);
+  // Revision 53: one value beside another on the same record. Either one absent or unknown is undetermined.
+  if (e.verb === "same as") {
+    const o = valueAt(values, e.arg);
+    const other = emptyOf(o);
+    if (empty === "absent" || empty === "unknown" || other === "absent" || other === "unknown") return "undetermined";
+    return serialize(v as Json) === serialize(o as Json);
+  }
   if (e.verb === "has") {
     if (empty) return false;
     if (!e.arg) return true;
@@ -189,7 +197,7 @@ export function evaluate(e: Expr, values: JsonObject, states?: StateOf, now?: st
 
 /** The keys a condition reads, for layering checks. */
 export function reads(e: Expr): string[] {
-  if (e.op === "test") return [e.path];
+  if (e.op === "test") return e.verb === "same as" ? [e.path, e.arg] : [e.path];
   if (e.op === "not") return reads(e.a);
   return [...reads(e.a), ...reads(e.b)];
 }

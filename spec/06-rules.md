@@ -53,6 +53,7 @@ test      = path " is " value                      ; equals
           / path ( " before " / " after " ) value  ; dates, moments, times of day, or now
           / path ( " over " / " under " ) value    ; numbers, quantities, money, ranked choices
           / path " is not " value                  ; the same as "not path is value"
+          / path " same as " path                  ; revision 53: one value beside another on this record
           / path " wears " class                   ; the record there wears the class (chapter 7.6)
           / path " may " verb " " target           ; the caller there holds that item (chapter 14.6)
           / path " is unique"                      ; global (6.6); in "then" only
@@ -77,6 +78,10 @@ aggregate = combine " of " address [ " where " condition ]      ; "worst of part
   package defines a facet of that name, which then wins. A package SHOULD NOT name a facet after an envelope
   field.
 - **Values** are written as in the text form (chapter 2), read by the facet at the path.
+- **`same as`** (revision 53) tests one value beside another on the same record: `said same as says`. It
+  holds when both are set and are the same value as stored (1.4), and is undetermined when either is absent
+  or unknown. A rule that reads it is recomputed when either value changes, so a derived flag stays true as
+  what it compares moves: `when: said has and not said same as says` / `then: stale is "yes"`.
 - **`now`** is the moment the rule is evaluated, supplied by the caller so results stay reproducible:
   `when: auctionEnds before now`. Moments compare by instant; a local date or time of day compared with a
   moment is undetermined; a plain date compared with a moment compares by the moment's UTC date.
