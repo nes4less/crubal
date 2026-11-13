@@ -778,7 +778,7 @@ const before = `act: recount /2026-11-20
   label: Count
   on: container
   find:
-    inside -> all unit beneath record where filedBox = made
+    inside -> all unit where of = record, filedBox = made
     loose -> first unit where filedIn = record
   first:
     label on record with why = "set aside", was = record.containerLabel when no record.containerSlot
@@ -789,12 +789,10 @@ const before = `act: recount /2026-11-20
     file on loose with why = late
 `;
 
-test("revision 49: a find reads only what is beneath the record in hand; an act says the acts run first, before it lands, and gives an act it runs what it is given; read, carried, printed back", () => {
+test("revision 49: an act says the acts run first, before it lands, and gives an act it runs what it is given; read, carried, printed back", () => {
   const src = bench(file + label + before).replace("acts: file, label", "acts: file, label, recount");
   checkPackages(src);
   const a = readPackages(src)[0]?.acts.find((x) => x.name === "recount") as NonNullable<ReturnType<typeof readPackages>[number]["acts"][number]>;
-  assert.equal(a.finds[0]?.beneath, true);
-  assert.equal(a.finds[1]?.beneath, undefined);
   const at = { record: { id: "C-1", values: { containerLabel: "A1" } } as ActRecord, context: {}, found: { inside: [{ id: "U-1", values: { filedBox: "made" } }, { id: "U-2", values: {} }] as ActRecord[], loose: [{ id: "U-3", values: {} }] as ActRecord[] }, now: "N" };
   assert.deepEqual(firstOf(a, at), [
     { act: "label", id: "C-1", given: { why: "set aside", was: "A1" } },
@@ -805,7 +803,6 @@ test("revision 49: a find reads only what is beneath the record in hand; an act 
   const w = actWrites(a, at);
   assert.deepEqual(w.ok && w.also, [{ act: "file", id: "U-3", given: { why: "late" } }]);
   const text = printBundle(bundleOf(parsePackage(src)));
-  assert.match(text, /^ {4}inside -> all unit beneath record where filedBox = made$/m);
   assert.match(text, /^ {2}first:\n {4}label on record with why = "set aside", was = record\.containerLabel when no record\.containerSlot\n {4}bench\/file on inside when has inside\.filedBox$/m);
   assert.match(text, /^ {4}file on loose with why = late$/m);
   const b = bundleOf(parsePackage(src));
