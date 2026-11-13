@@ -49,8 +49,6 @@ export type ActFind = {
   take: "first" | "all";
   kind: string;
   where: ActPick[];
-  /** Revision 49: only the records beneath the record in hand (`beneath record`). */
-  beneath?: true;
   order?: { facet: string; dir: "after" | "before" };
   /** Revision 26: the record made when a `first` find answered nothing. */
   mint?: ActMint;
@@ -204,9 +202,9 @@ function readCount(text: string, line: number, routes: Set<string>, founds: Set<
 
 /** `box -> first container where containerState = open, containerStation = context.station order containerLabel` */
 function readFind(text: string, line: number, routes: Set<string>): ActFind {
-  const m = text.match(/^([\w-]+)\s*->\s*(first|all)\s+([\w-]+)(\s+beneath\s+record)?(?:\s+where\s+(.*?))?(?:\s+order\s+([\w:]+)(?:\s+(after|before))?)?$/);
-  if (!m) throw new CrubalError(`a find is "<name> -> first|all <kind> [beneath record] [where <facet> = <value>, …] [order <facet> [after|before]]": ${text}`, line);
-  return { name: m[1] as string, take: m[2] as "first" | "all", kind: m[3] as string, where: readPicks(m[5] ?? "", line, routes), ...(m[4] ? { beneath: true as const } : {}), ...(m[6] ? { order: { facet: m[6], dir: (m[7] as "after" | "before" | undefined) ?? "after" } } : {}), line };
+  const m = text.match(/^([\w-]+)\s*->\s*(first|all)\s+([\w-]+)(?:\s+where\s+(.*?))?(?:\s+order\s+([\w:]+)(?:\s+(after|before))?)?$/);
+  if (!m) throw new CrubalError(`a find is "<name> -> first|all <kind> [where <facet> = <value>, …] [order <facet> [after|before]]": ${text}`, line);
+  return { name: m[1] as string, take: m[2] as "first" | "all", kind: m[3] as string, where: readPicks(m[4] ?? "", line, routes), ...(m[5] ? { order: { facet: m[5], dir: (m[6] as "after" | "before" | undefined) ?? "after" } } : {}), line };
 }
 
 /** `slot -> row of context.station.slots by slotRule over record, record.of keep keep by unit where of = record.of, …` */
@@ -1245,7 +1243,6 @@ export function actJson(a: Act): JsonObject {
       take: f.take,
       kind: f.kind,
       where: f.where.map(pickJson),
-      ...(f.beneath ? { beneath: true } : {}),
       ...(f.order ? { order: { facet: f.order.facet, dir: f.order.dir } } : {}),
       ...(f.mint ? { mint: { kind: f.mint.kind, sets: f.mint.sets.map(setJson) } } : {}),
     })),
@@ -1337,7 +1334,7 @@ export function actText(a: JsonObject): string[] {
     for (const f of finds) {
       const where = ((f.where as JsonObject[] | undefined) ?? []).map(pickText);
       const order = f.order as JsonObject | undefined;
-      out.push(`    ${f.name} -> ${f.take} ${f.kind}${f.beneath ? " beneath record" : ""}${where.length ? ` where ${where.join(", ")}` : ""}${order ? ` order ${order.facet}${order.dir === "before" ? " before" : ""}` : ""}`);
+      out.push(`    ${f.name} -> ${f.take} ${f.kind}${where.length ? ` where ${where.join(", ")}` : ""}${order ? ` order ${order.facet}${order.dir === "before" ? " before" : ""}` : ""}`);
     }
     const mints = finds.filter((f) => f.mint && typeof f.mint === "object");
     if (mints.length) {
