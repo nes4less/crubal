@@ -212,8 +212,8 @@ rule: staleNo
   assert.throws(() => readRules("rule: x\n  when: said same\n  then: stale is \"yes\"\n  strength: must\n"), CrubalError);
 });
 
-test("a rollup's least and most are the value itself: money keeps its currency and places, a quantity its unit, a plain number stays as written", () => {
-  const d = readDefinitions("kind: item\n  levels: unit, offer\nprice#currency\nweight#kg\ncount#\nlow#currency\nhigh#currency\nlight#kg\nfew#\n");
+test("a rollup's least, most and sum keep what they are of: money keeps its currency and places, a quantity its unit, a plain number stays as written", () => {
+  const d = readDefinitions("kind: item\n  levels: unit, offer\nprice#currency\nweight#kg\ncount#\nlow#currency\nhigh#currency\nlight#kg\nfew#\ntotal#currency\nheavy#kg\nmany#\n");
   const rules = readRules(`rule: low
   for: unit::
   then: low is least of offer::price
@@ -230,6 +230,18 @@ rule: few
   for: unit::
   then: few is least of offer::count
   strength: should
+rule: total
+  for: unit::
+  then: total is sum of offer::price
+  strength: should
+rule: heavy
+  for: unit::
+  then: heavy is sum of offer::weight
+  strength: should
+rule: many
+  for: unit::
+  then: many is sum of offer::count
+  strength: should
 `);
   const unit = { id: "U-1", kind: "item", level: "unit", owner: "t", values: {} };
   const offer = (id: string, price: string, kg: string, n: string) => ({ id, kind: "item", level: "offer", owner: "t", of: "U-1", values: { price: { $money: price, currency: "USD" }, weight: { $qty: kg, unit: "kg" }, count: n } });
@@ -243,4 +255,8 @@ rule: few
   assert.deepEqual(got("high"), { $money: "12.50", currency: "USD" });
   assert.deepEqual(got("light"), { $qty: "2.0", unit: "kg" });
   assert.equal(got("few"), "4");
+  // A sum of money is money, of quantities a quantity, to the most places among them; plain numbers stay plain.
+  assert.deepEqual(got("total"), { $money: "21.50", currency: "USD" });
+  assert.deepEqual(got("heavy"), { $qty: "5.5", unit: "kg" });
+  assert.equal(got("many"), "11");
 });

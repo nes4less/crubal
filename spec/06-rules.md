@@ -88,7 +88,9 @@ aggregate = combine " of " address [ " where " condition ]      ; "worst of part
 - **Aggregates** use the combine rules (chapter 4.4), `count`, and `least` and `most` (the smallest and
   largest number, quantity, money or date; for ranked choices, use `best` and `worst`). The least and the most
   are the value itself: money keeps its currency and its decimal places, a quantity its unit (erratum,
-  0.3.102: a rollup answered the bare amount where a view answered the value). `over` and `under` on a ranked choice
+  0.3.102: a rollup answered the bare amount where a view answered the value). A sum of money in one
+  currency is money, of quantities in one unit a quantity, to the most decimal places among them; plain
+  numbers, or a mix, sum to a plain number. `over` and `under` on a ranked choice
   compare positions in the list: earlier is higher.
 
 ### 6.3.1 Empties in conditions
