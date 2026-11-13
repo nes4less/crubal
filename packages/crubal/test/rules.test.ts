@@ -211,3 +211,36 @@ rule: staleNo
   assert.equal(flag({ said: "5", says: "6", stale: "no" }), "yes");
   assert.throws(() => readRules("rule: x\n  when: said same\n  then: stale is \"yes\"\n  strength: must\n"), CrubalError);
 });
+
+test("a rollup's least and most are the value itself: money keeps its currency and places, a quantity its unit, a plain number stays as written", () => {
+  const d = readDefinitions("kind: item\n  levels: unit, offer\nprice#currency\nweight#kg\ncount#\nlow#currency\nhigh#currency\nlight#kg\nfew#\n");
+  const rules = readRules(`rule: low
+  for: unit::
+  then: low is least of offer::price
+  strength: should
+rule: high
+  for: unit::
+  then: high is most of offer::price
+  strength: should
+rule: light
+  for: unit::
+  then: light is least of offer::weight
+  strength: should
+rule: few
+  for: unit::
+  then: few is least of offer::count
+  strength: should
+`);
+  const unit = { id: "U-1", kind: "item", level: "unit", owner: "t", values: {} };
+  const offer = (id: string, price: string, kg: string, n: string) => ({ id, kind: "item", level: "offer", owner: "t", of: "U-1", values: { price: { $money: price, currency: "USD" }, weight: { $qty: kg, unit: "kg" }, count: n } });
+  const m = new MemoryRecords();
+  for (const r of [unit, offer("O-1", "12.50", "2.0", "7"), offer("O-2", "9.00", "3.5", "4")]) m.set(r.id, r as never);
+  const e = new Engine(d, rules, () => m);
+  for (const r of m.values()) e.put(r);
+  const out = e.write(unit as never);
+  const got = (k: string) => out.find((r) => r.address === k && r.result === "derived")?.value;
+  assert.deepEqual(got("low"), { $money: "9.00", currency: "USD" });
+  assert.deepEqual(got("high"), { $money: "12.50", currency: "USD" });
+  assert.deepEqual(got("light"), { $qty: "2.0", unit: "kg" });
+  assert.equal(got("few"), "4");
+});

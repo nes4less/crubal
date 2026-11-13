@@ -599,8 +599,14 @@ export class Engine {
     }
     const nums = items.map((v) => Number(isObj(v) ? (v.$qty ?? v.$money) : v));
     if (how === "sum") return String(nums.reduce((a, b) => a + b, 0));
-    if (how === "least" || how === "worst") return String(Math.min(...nums));
-    if (how === "most" || how === "best") return String(Math.max(...nums));
+    // The least and the most are the value itself, as a view answers them (12.5): money keeps its currency and
+    // its decimal places, a quantity its unit. Before 0.3.102 a rollup answered the bare amount.
+    const picked = (n: number): Json => {
+      const v = items[nums.indexOf(n)] as Json;
+      return typeof v === "number" ? String(v) : v;
+    };
+    if (how === "least" || how === "worst") return picked(Math.min(...nums));
+    if (how === "most" || how === "best") return picked(Math.max(...nums));
     if (how === "join") return items;
     return items.at(-1);
   }
