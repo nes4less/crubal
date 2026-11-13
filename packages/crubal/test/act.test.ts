@@ -842,6 +842,44 @@ test("revision 51: a need says what a value must be, or must not be; read, judge
   assert.throws(() => checkPackages(src.replace("containerLabel != A1", "nope != A1")), (e: unknown) => e instanceof CrubalError);
 });
 
+test("revision 52: a product keeps what one side is of, rounded to its places, and refuses two amounts; a first or an also may run its act on the place's authority; read, carried and printed back", () => {
+  const act = `act: recount /2026-11-22
+  utility: bench
+  on: container
+  find:
+    loose -> first unit where filedIn = record
+  first:
+    label on record as place with why = held
+  set:
+    containerLabel -> record.containerLabel * 0.9
+    containerSlot -> record.containerSlot * 3
+  then:
+    set record.containerCapacity = record.containerLabel * record.containerCapacity
+  also:
+    file on loose as place
+`;
+  const src = bench(file + label + act).replace("acts: file, label", "acts: file, label, recount");
+  checkPackages(src);
+  const a = readPackages(src)[0]?.acts.find((x) => x.name === "recount") as NonNullable<ReturnType<typeof readPackages>[number]["acts"][number]>;
+  const usd = (n: string) => ({ $money: n, currency: "USD" });
+  const at = (values: JsonObject) => ({ record: { id: "C-1", values }, context: {}, found: { loose: [{ id: "U-3", values: {} }] as ActRecord[] }, now: "N" });
+  const w = actWrites(a, at({ containerLabel: usd("12.49"), containerSlot: "4", containerCapacity: "2" }));
+  // 12.49 * 0.9 = 11.241, to the cent; 12.49 * 2 keeps the money.
+  assert.deepEqual(w.ok && w.record, { containerLabel: usd("11.24"), containerSlot: "12", containerCapacity: usd("24.98") });
+  assert.deepEqual(w.ok && w.also, [{ act: "file", id: "U-3", asPlace: true }]);
+  assert.deepEqual(firstOf(a, at({})), [{ act: "label", id: "C-1", asPlace: true, given: { why: "held" } }]);
+  // Half up: 0.05 * 0.9 = 0.045, which is 0.05 to the cent.
+  const half = actWrites(a, at({ containerLabel: usd("0.05"), containerSlot: "1", containerCapacity: "1" }));
+  assert.deepEqual(half.ok && half.record.containerLabel, usd("0.05"));
+  assert.deepEqual(actWrites(a, at({ containerLabel: usd("2.00"), containerSlot: "1", containerCapacity: usd("3.00") })), { ok: false, why: "record.containerLabel and record.containerCapacity are both amounts, and two amounts are not multiplied" });
+  const text = printBundle(bundleOf(parsePackage(src)));
+  assert.match(text, /^ {4}containerLabel -> record\.containerLabel \* 0\.9$/m);
+  assert.match(text, /^ {4}label on record as place with why = held$/m);
+  assert.match(text, /^ {4}file on loose as place$/m);
+  const b = bundleOf(parsePackage(src));
+  assert.equal(serialize(bundleOf(readBundle(b))), serialize(b));
+});
+
 const feed = (tail: string) => `package: feed /2026-11-12
   owner: shop.example
   crubal: 2
