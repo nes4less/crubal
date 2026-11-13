@@ -83,6 +83,10 @@ export type Lane = {
   /** Revision 32: one of the view's filters whose buckets group the row's cards, each a heading card with its cards tucked. */
   group?: string;
   label?: string;
+  /** Revision 55: the lane in one line, what it is; a surface shows it on the lane's own card. */
+  describe?: string;
+  /** Revision 55: the lane at length: why a thing is here and how it leaves; a surface shows it where the lane is opened. */
+  about?: string;
   utility?: string;
   view?: string;
   serve?: string;
@@ -347,6 +351,8 @@ function readLane(node: Node): Lane {
     if (!c.key) continue;
     const v = c.value.trim();
     if (c.key === "label") s.label = unquote(v);
+    else if (c.key === "describe") s.describe = unquote(v);
+    else if (c.key === "about") s.about = unquote(v);
     else if (c.key === "utility") s.utility = v;
     else if (c.key === "view") s.view = v;
     else if (c.key === "serve") s.serve = v;
@@ -419,7 +425,7 @@ function readLane(node: Node): Lane {
       s.after = splitList(v);
       for (const u of s.after) if (!/^[\w:-]+$/.test(u)) throw new CrubalError(`after names the view's marked filters: ${u}`, c.line);
       if (!s.after.length) throw new CrubalError("after names the view's marked filters", c.line);
-    } else throw new CrubalError(`a lane has label, utility, view, serve, pick, done, step, until, after, group, band, house, serves, home and card, not ${c.key}`, c.line);
+    } else throw new CrubalError(`a lane has label, describe, about, utility, view, serve, pick, done, step, until, after, group, band, house, serves, home and card, not ${c.key}`, c.line);
   }
   if (!s.view && !s.serve) throw new CrubalError(`the lane ${name} names no view and no serve`, node.line);
   if (s.view && s.serve) throw new CrubalError(`the lane ${name} names both a view and a serve`, node.line);

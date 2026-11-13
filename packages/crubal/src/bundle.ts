@@ -319,6 +319,8 @@ export function flowJson(f: Flow): JsonObject {
 export function laneJson(s: Lane): JsonObject {
   const o: JsonObject = { lane: s.name, version: s.version };
   if (s.label) o.label = s.label;
+  if (s.describe) o.describe = s.describe;
+  if (s.about) o.about = s.about;
   if (s.utility) o.utility = s.utility;
   if (s.view) o.view = s.view;
   if (s.serve) o.serve = s.serve;
@@ -711,7 +713,7 @@ function flowText(f: JsonObject): string[] {
 }
 
 function laneText(s: JsonObject): string[] {
-  const out = [`lane: ${s.lane} /${s.version}`, ...kv("  ", "label", s.label), ...kv("  ", "utility", s.utility), ...kv("  ", "view", s.view), ...kv("  ", "serve", s.serve)];
+  const out = [`lane: ${s.lane} /${s.version}`, ...kv("  ", "label", s.label), ...kv("  ", "describe", s.describe), ...kv("  ", "about", s.about), ...kv("  ", "utility", s.utility), ...kv("  ", "view", s.view), ...kv("  ", "serve", s.serve)];
   if (typeof s.step === "string") out.push(`  step: ${s.step}`);
   if (Array.isArray(s.until) && s.until.length) out.push(`  until: ${s.until.join(", ")}`);
   if (Array.isArray(s.after) && s.after.length) out.push(`  after: ${s.after.join(", ")}`);

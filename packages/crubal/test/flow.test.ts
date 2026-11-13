@@ -512,3 +512,11 @@ test("revision 54: a when tests a value against a word written there, `<ref> is 
   const flow = `flow: pick /2026-11-13\n  label: Pick\n  utility: fulfillment\n  stops:\n    toPick -> pack\n      asks odd: pack when record.state is not ready "Not ready. Pack it anyway?"\n`;
   assert.match(printBundle(bundleOf(parsePackage(shop(flow)))), /^ {6}asks odd: pack when record\.state is not ready "Not ready\. Pack it anyway\?"$/m);
 });
+
+test("revision 55: a lane says what it is, describe in one line and about at length; read, carried and printed back", () => {
+  const src = shop("").replace(/^(lane: \S+ \/\S+\n)/m, '$1  describe: "Orders waiting to be picked."\n  about: "An order stands here from the moment it is paid until its pick is done."\n');
+  assert.notEqual(src, shop(""));
+  const text = printBundle(bundleOf(parsePackage(src)));
+  assert.match(text, /^ {2}describe: "?Orders waiting to be picked\."?$/m);
+  assert.match(text, /^ {2}about: "?An order stands here from the moment it is paid until its pick is done\."?$/m);
+});
