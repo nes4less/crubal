@@ -2,6 +2,7 @@
 // `package:` line. The checks here are 11.1's prefixes, 11.3's trust entries and 11.4's rule that an
 // extending package may add to what it extends but never change it.
 
+import type { JsonObject } from "./model.ts";
 import { type Dictionary, emptyDictionary, type Facet, readDefinitions, unquote } from "./defs.ts";
 import { LANGUAGE } from "./read-text.ts";
 import { readContracts } from "./store.ts";
@@ -137,6 +138,17 @@ export type CasePress = { word: string; runs: { act: string; utility?: string; o
  * link to it. Each is a question with presses and one of three answers: ask, or yes or no without asking.
  */
 export type StopCase = { kind: "stranger" | "flag"; name?: string; answer: "ask" | "yes" | "no"; when?: { lane: string; facet: string }; yes: CasePress; no: CasePress; or: CasePress[]; line: number };
+
+/** Revision 51: an ask's words with each `{record.<facet>}` said as the record touched holds it: a number or a
+ * word as written, money and a quantity by their amount, nothing where it is not set. Pure. */
+export function askWords(words: string, record: { values: JsonObject }): string {
+  return words.replace(/\{record\.([\w:]+)\}/g, (_all, facet: string) => {
+    const v = record.values[facet.split("::").pop() as string];
+    if (typeof v === "string" || typeof v === "number") return String(v);
+    if (v && typeof v === "object" && !Array.isArray(v)) return typeof v.$money === "string" ? v.$money : typeof v.$qty === "string" ? v.$qty : "";
+    return "";
+  });
+}
 
 /** The press a case runs without asking, by its answer or the one given; undefined asks. Pure. */
 export function casePress(c: Pick<StopCase, "answer" | "yes" | "no">, answer: StopCase["answer"] = c.answer): CasePress | undefined {
@@ -867,6 +879,12 @@ function checkFlowList(flows: Flow[], env: FlowEnv): void {
           if (!("ref" in t)) continue;
           if (!("record" in t.ref) || !t.ref.record) throw new CrubalError(`${what}: a link's when reads record.<facet>, the record touched`, q.line);
           if (!dict.facets.get(t.ref.record.split("::").pop() as string) && strict) throw new CrubalError(`${what}: ${t.ref.record} isn't a facet ${here}`, q.line);
+        }
+        // Revision 51: an ask's words may say a value of the record touched, `{record.<facet>}`.
+        for (const m of ("words" in q && typeof q.words === "string" ? q.words : "").matchAll(/\{([^}]*)\}/g)) {
+          const f = (m[1] as string).match(/^record\.([\w:]+)$/);
+          if (!f) throw new CrubalError(`${what}: its words say {record.<facet>}, a value of the record touched, not {${m[1]}}`, q.line);
+          if (!dict.facets.get((f[1] as string).split("::").pop() as string) && strict) throw new CrubalError(`${what}: ${f[1]} isn't a facet ${here}`, q.line);
         }
       }
       // Revision 41: a case's flag names a lane and a link facet to the stop's records; its presses name acts of

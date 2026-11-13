@@ -512,7 +512,7 @@ test("revision 42: an act needs what the record in hand holds or lacks, refused 
   assert.deepEqual(at({}), { ok: false, why: "this box's station has no printer" }, "linked to nothing: it holds nothing");
   // Refused: a need of a facet nothing declares; a need that is no facet's name.
   assert.throws(() => checkPackages(src.replace("    containerLabel\n  find:", "    nothingHere\n  find:")), /needs nothingHere, which isn't a facet/);
-  assert.throws(() => readPackages(src.replace("    containerLabel\n  find:", "    containerLabel is set\n  find:")), /a need is "<facet>" or "no <facet>"/);
+  assert.throws(() => readPackages(src.replace("    containerLabel\n  find:", "    containerLabel is set\n  find:")), /a need is "<facet>", "no <facet>"/);
 });
 
 const given = `act: reprice /2026-11-15
@@ -812,6 +812,34 @@ test("revision 49: an act says the acts run first, before it lands, and gives an
   no("label on record with", "relabel on record with", /runs relabel, which isn't among bench's acts/);
   no("with why = late", "with why late", /a with is "<given> = <value>"/);
   no("  first:\n    label on record with why = \"set aside\", was = record.containerLabel when no record.containerSlot\n    bench/file on inside when has inside.filedBox\n", "  first:\n", /runs nothing first/);
+});
+
+test("revision 51: a need says what a value must be, or must not be; read, judged before any write, carried and printed back", () => {
+  const act = `act: recount /2026-11-21
+  utility: bench
+  on: container
+  needs:
+    containerState = full "the box is not full"
+    containerLabel != A1
+  set:
+    containerSlot -> 3
+`;
+  const src = bench(file + label + act).replace("acts: file, label", "acts: file, label, recount");
+  checkPackages(src);
+  const a = readPackages(src)[0]?.acts.find((x) => x.name === "recount") as NonNullable<ReturnType<typeof readPackages>[number]["acts"][number]>;
+  assert.deepEqual(a.needs?.map((n) => [n.facet, n.is?.op, n.is?.value, n.words]), [["containerState", "=", "full", "the box is not full"], ["containerLabel", "!=", "A1", undefined]]);
+  const run = (values: JsonObject) => actWrites(a, { record: { id: "C-1", values }, context: {}, found: {}, now: "N" });
+  assert.equal(run({ containerState: "full", containerLabel: "B2" }).ok, true);
+  assert.equal(run({ containerState: "full" }).ok, true, "a value not set is not A1");
+  assert.deepEqual(run({ containerState: "open" }), { ok: false, why: "the box is not full" });
+  assert.deepEqual(run({}), { ok: false, why: "the box is not full" });
+  assert.deepEqual(run({ containerState: "full", containerLabel: "A1" }), { ok: false, why: "containerLabel is A1" });
+  const b = bundleOf(parsePackage(src));
+  const text = printBundle(b);
+  assert.match(text, /^ {4}containerState = full "the box is not full"$/m);
+  assert.match(text, /^ {4}containerLabel != A1$/m);
+  assert.equal(serialize(bundleOf(readBundle(b))), serialize(b));
+  assert.throws(() => checkPackages(src.replace("containerLabel != A1", "nope != A1")), (e: unknown) => e instanceof CrubalError);
 });
 
 const feed = (tail: string) => `package: feed /2026-11-12
